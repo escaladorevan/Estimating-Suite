@@ -44,6 +44,29 @@ async function updateBidStage(bidId, stage) {
     .eq('id', bidId);
 }
 
+async function markBidWon(bid) {
+  const now = new Date().toISOString();
+  const { error: stageErr } = await window.sb.from('bids')
+    .update({ stage: 'Won', updated_at: now })
+    .eq('id', bid.id);
+  if (stageErr) return { data: null, error: stageErr };
+
+  const { data: existing, error: existingErr } = await getJobByBidId(bid.id);
+  if (existingErr) return { data: null, error: existingErr };
+  if (existing) return { data: existing, error: null };
+
+  const jobPayload = {
+    bid_id: bid.id,
+    number: bid.number ? bid.number.replace(/^B/, 'J') : `J-${String(Date.now()).slice(-6)}`,
+    name: bid.name || 'Untitled Job',
+    gc_name: bid.gc_name || null,
+    status: 'Ready',
+    contract_value: null,
+  };
+
+  return window.sb.from('jobs').insert(jobPayload).select().single();
+}
+
 async function updateBid(bidId, fields) {
   // General-purpose bid update — accepts any column subset.
   return window.sb.from('bids')
@@ -177,6 +200,22 @@ async function getJob(id) {
   return window.sb.from('jobs').select('*').eq('id', id).single();
 }
 
+async function getJobByBidId(bidId) {
+  return window.sb.from('jobs').select('*').eq('bid_id', bidId).maybeSingle();
+}
+
+async function updateJob(id, fields) {
+  return window.sb.from('jobs').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+}
+
+async function addChangeOrder({ job_id, description, amount, status = 'Submitted' }) {
+  return window.sb.from('change_orders').insert({ job_id, description, amount, status }).select().single();
+}
+
+async function updateChangeOrder(id, fields) {
+  return window.sb.from('change_orders').update(fields).eq('id', id).select().single();
+}
+
 // ── Contact helpers ───────────────────────────────────────────────────────────
 
 async function getContacts(role) {
@@ -222,7 +261,7 @@ async function deleteAlternate(id) {
 
 window.dbHelpers = {
   // Bids
-  getBids, getBid, addBid, updateBidStage, updateBid, updateBidInfo, updateBidTerms, STAGE_NEXT,
+  getBids, getBid, addBid, updateBidStage, markBidWon, updateBid, updateBidInfo, updateBidTerms, STAGE_NEXT,
   // Areas
   getAreas, addArea, updateArea, deleteArea,
   // Sections
@@ -232,7 +271,7 @@ window.dbHelpers = {
   // Library
   getLibraryItems, upsertLibraryItem,
   // Jobs
-  getJobs, getJob,
+  getJobs, getJob, getJobByBidId, updateJob, addChangeOrder, updateChangeOrder,
   // Contacts
   getContacts, addContact, updateContact,
   // Alternates

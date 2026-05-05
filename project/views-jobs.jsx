@@ -98,10 +98,32 @@ function JobsView() {
 // ── JOB DETAIL ─────────────────────────────────────────
 function JobView() {
   const job = window.__activeJob || {};
+  const [editing, setEditing] = uS_jobs(false);
+  const [savingJob, setSavingJob] = uS_jobs(false);
+  const [jobDraft, setJobDraft] = uS_jobs({
+    status: job.status || 'Ready',
+    gc_name: job.gc_name || '',
+    install_start: job.install_start || '',
+    install_end: job.install_end || '',
+    notes: job.notes || '',
+    contract_value: job.contract_value || ''
+  });
+
+  const [coDraft, setCoDraft] = uS_jobs({ description:'', amount:'', status:'Submitted' });
   const fmtV = n => n ? '$' + Number(n).toLocaleString(undefined, {maximumFractionDigits:0}) : '—';
   const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'}) : 'TBD';
 
   const [cos, setCos] = uS_jobs(null);
+  uE_jobs(() => {
+    setJobDraft({
+      status: job.status || 'Ready',
+      gc_name: job.gc_name || '',
+      install_start: job.install_start || '',
+      install_end: job.install_end || '',
+      notes: job.notes || '',
+      contract_value: job.contract_value || ''
+    });
+  }, [job.id]);
   uE_jobs(() => {
     if (!job.id) { setCos([]); return; }
     let cancelled = false;
@@ -119,6 +141,38 @@ function JobView() {
   const installWindow = job.install_start
     ? `${fmtDate(job.install_start)}${job.install_end ? ' → ' + fmtDate(job.install_end) : ''}`
     : 'TBD';
+
+
+
+  async function saveJob() {
+    setSavingJob(true);
+    const payload = { ...jobDraft, contract_value: jobDraft.contract_value === '' ? null : Number(jobDraft.contract_value) };
+    const { data, error } = await window.dbHelpers.updateJob(job.id, payload);
+    setSavingJob(false);
+    if (error) return alert('Failed to save job: ' + error.message);
+    window.__activeJob = data;
+    setEditing(false);
+  }
+
+  async function addCO(e) {
+    e.preventDefault();
+    if (!coDraft.description || coDraft.amount === '') return;
+    const { data, error } = await window.dbHelpers.addChangeOrder({
+      job_id: job.id,
+      description: coDraft.description,
+      amount: Number(coDraft.amount),
+      status: coDraft.status
+    });
+    if (error) return alert('Failed to add CO: ' + error.message);
+    setCos(prev => ([...(prev||[]), data]));
+    setCoDraft({ description:'', amount:'', status:'Submitted' });
+  }
+
+  async function setCOStatus(co, status) {
+    const { data, error } = await window.dbHelpers.updateChangeOrder(co.id, { status });
+    if (error) return alert('Failed to update CO: ' + error.message);
+    setCos(prev => (prev||[]).map(c => c.id === co.id ? data : c));
+  }
 
   if (!job.id) return (
     <div className="view active" style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}>
@@ -149,13 +203,21 @@ function JobView() {
 
       <div style={{padding:'18px 24px 40px'}}>
         <div className="card pad">
-          <h3 style={{margin:'0 0 10px',fontSize:13}}>Job details</h3>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14}}>
-            <div><div className="muted" style={{fontSize:11,textTransform:'uppercase'}}>Status</div><div style={{marginTop:4}}><span className={`chip ${({Shop:'warn',Installing:'accent',Held:'bad',Installed:'ok'})[job.status]||''}`}>{job.status}</span></div></div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><h3 style={{margin:0,fontSize:13}}>Job details</h3><button className='btn ghost sm' onClick={()=>setEditing(v=>!v)}>{editing?'Cancel':'Edit Job'}</button></div>
+          {!editing ? <><div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14}}>
+            <div><div className="muted" style={{fontSize:11,textTransform:'uppercase'}}>Status</div><div style={{marginTop:4}}><span className={`chip ${({Shop:'warn',Installing:'accent',Held:'bad',Installed:'ok',Ready:''})[job.status]||''}`}>{job.status}</span></div></div>
             <div><div className="muted" style={{fontSize:11,textTransform:'uppercase'}}>GC</div><div style={{marginTop:4}}>{job.gc_name || '—'}</div></div>
             <div><div className="muted" style={{fontSize:11,textTransform:'uppercase'}}>Install window</div><div style={{marginTop:4,fontSize:12}}>{installWindow}</div></div>
           </div>
-          {job.notes && <div style={{marginTop:12,fontSize:12,color:'var(--ink-2)'}}>{job.notes}</div>}
+          {job.notes && <div style={{marginTop:12,fontSize:12,color:'var(--ink-2)'}}>{job.notes}</div>}</> : <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <label className='muted' style={{fontSize:12}}>Status<select value={jobDraft.status} onChange={e=>setJobDraft(d=>({...d,status:e.target.value}))}><option>Ready</option><option>Shop</option><option>Installing</option><option>Held</option><option>Installed</option></select></label>
+            <label className='muted' style={{fontSize:12}}>GC<input value={jobDraft.gc_name} onChange={e=>setJobDraft(d=>({...d,gc_name:e.target.value}))}/></label>
+            <label className='muted' style={{fontSize:12}}>Install Start<input type='date' value={jobDraft.install_start||''} onChange={e=>setJobDraft(d=>({...d,install_start:e.target.value}))}/></label>
+            <label className='muted' style={{fontSize:12}}>Install End<input type='date' value={jobDraft.install_end||''} onChange={e=>setJobDraft(d=>({...d,install_end:e.target.value}))}/></label>
+            <label className='muted' style={{fontSize:12}}>Contract Value<input type='number' value={jobDraft.contract_value??''} onChange={e=>setJobDraft(d=>({...d,contract_value:e.target.value}))}/></label>
+            <label className='muted' style={{fontSize:12,gridColumn:'1 / span 2'}}>Notes<textarea value={jobDraft.notes||''} onChange={e=>setJobDraft(d=>({...d,notes:e.target.value}))}/></label>
+            <div><button className='btn accent sm' onClick={saveJob} disabled={savingJob}>{savingJob?'Saving…':'Save Job'}</button></div>
+          </div>}
         </div>
 
         {cos === null ? <window.Spinner /> : cos.length > 0 && (
@@ -171,7 +233,7 @@ function JobView() {
                 {cos.map(c => (
                   <tr key={c.id}>
                     <td style={{paddingLeft:16}}>{c.description || c.title || '—'}</td>
-                    <td><span className={`chip ${c.status==='APV'||c.status==='Approved'?'ok':'warn'}`}>{c.status}</span></td>
+                    <td><span className={`chip ${c.status==='APV'||c.status==='Approved'?'ok':'warn'}`}>{c.status}</span><div style={{marginTop:4,display:'flex',gap:4}}><button className='btn ghost sm' onClick={()=>setCOStatus(c,'Approved')}>Approve</button><button className='btn ghost sm' onClick={()=>setCOStatus(c,'Rejected')}>Reject</button></div></td>
                     <td className="num tnum" style={{paddingRight:16,color:Number(c.amount||0)>=0?'var(--ok)':'var(--bad)'}}>
                       {Number(c.amount||0)>=0?'+':''}{fmtV(c.amount)}
                     </td>

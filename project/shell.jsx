@@ -144,6 +144,19 @@ function AuthenticatedApp({ session }) {
     go('estimator');
   };
 
+  const openBidContext = async (bid) => {
+    if (!bid?.id) return;
+    if (bid.stage === 'Won') {
+      const { data: job, error } = await window.dbHelpers.getJobByBidId(bid.id);
+      if (!error && job) {
+        window.__activeJob = job;
+        go('job');
+        return;
+      }
+    }
+    openBid(bid.id, bid.name);
+  };
+
   // Derive initials from email (e.g. "evan.pruitt@fs.com" → "EP")
   const initials = useMemo(() => {
     const email = session?.user?.email || '';
@@ -213,7 +226,7 @@ function AuthenticatedApp({ session }) {
             switch (active) {
               case 'pipeline': {
                 const PV = window.Views.pipeline;
-                return PV ? <PV go={go} onOpenBid={openBid} /> : null;
+                return PV ? <PV go={go} onOpenBid={openBidContext} /> : null;
               }
               case 'estimator': {
                 const EV = window.Views.estimator;

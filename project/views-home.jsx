@@ -232,6 +232,17 @@ const PipelineView = ({ onOpenBid }) => {
   }
 
   async function handleTerminal(bid, stage) {
+    if (stage === 'Won') {
+      const { data: job, error: err } = await window.dbHelpers.markBidWon(bid);
+      if (err) { alert('Error: ' + err.message); return; }
+      setBids(prev => prev.map(b => b.id === bid.id ? { ...b, stage } : b));
+      if (job) {
+        window.__activeJob = job;
+        window.__go && window.__go('job');
+      }
+      return;
+    }
+
     const { error: err } = await window.dbHelpers.updateBidStage(bid.id, stage);
     if (err) { alert('Error: ' + err.message); return; }
     setBids(prev => prev.map(b => b.id === bid.id ? { ...b, stage } : b));
