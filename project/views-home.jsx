@@ -311,7 +311,7 @@ const PipelineView = ({ onOpenBid }) => {
                   {colBids.map((bid) => {
                     const nextStage = window.dbHelpers.STAGE_NEXT[bid.stage];
                     return (
-                      <div key={bid.id} className="card-lead" onClick={() => onOpenBid && onOpenBid(bid.id, bid.name)} style={{cursor:'pointer'}}>
+                      <div key={bid.id} className="card-lead" onClick={() => onOpenBid && onOpenBid(bid)} style={{cursor:'pointer'}}>
                         <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>{bid.name}</div>
                         <div className="meta" style={{fontSize:11.5,marginBottom:6}}>{bid.gc_name} · {bid.project_type || '—'}</div>
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:4}}>

@@ -24,9 +24,9 @@ const Icon = {
 
 const NAV = [
   { id:'home',     label:'Home',           group:'Work' },
-  { id:'pipeline', label:'Pipeline',       group:'Work', count:22 },
+  { id:'pipeline', label:'Pipeline',       group:'Work' },
   { id:'estimator',label:'Bid Workbook',   group:'Work' },
-  { id:'jobs',     label:'Jobs',           group:'Work', count:18 },
+  { id:'jobs',     label:'Jobs',           group:'Work' },
   { id:'job',      label:'Job · Ada Co.',  group:'Work', hidden:true },
   { id:'co',       label:'Change Orders',  group:'Work', hidden:true },
   { id:'calendar', label:'Calendar',       group:'Work' },
@@ -60,7 +60,7 @@ function EmptyState({ heading, body, action }) {
   );
 }
 
-function Rail({ active, onGo, railOpen, setRailOpen }) {
+function Rail({ active, onGo, railOpen, setRailOpen, navCounts }) {
   const groups = {};
   NAV.forEach(n => { (groups[n.group] ||= []).push(n); });
   const iconFor = (id) => {
@@ -77,7 +77,7 @@ function Rail({ active, onGo, railOpen, setRailOpen }) {
             <div key={it.id} className={`rail-item ${active === it.id ? 'active' : ''}`} onClick={() => onGo(it.id)}>
               {iconFor(it.id)}
               <span>{it.label}</span>
-              {it.count != null && <span className="count">{it.count}</span>}
+              {(navCounts?.[it.id] ?? it.count) != null && <span className="count">{navCounts?.[it.id] ?? it.count}</span>}
             </div>
           ))}
         </React.Fragment>
@@ -136,6 +136,22 @@ function AuthenticatedApp({ session }) {
   });
   const [activeBidName, setActiveBidName] = useState('');
   const [railOpen, setRailOpen] = useState(true);
+  const [navCounts, setNavCounts] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCounts() {
+      const counts = {};
+      const jobsRes = await window.dbHelpers.getJobs();
+      if (!jobsRes.error) counts.jobs = (jobsRes.data || []).length;
+      const bidsRes = await window.dbHelpers.getBids();
+      if (!bidsRes.error) counts.pipeline = (bidsRes.data || []).length;
+      if (!cancelled) setNavCounts(counts);
+    }
+    loadCounts();
+    const t = setInterval(loadCounts, 15000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
 
   const openBid = (bidId, bidName) => {
     setActiveBidId(bidId);
@@ -144,7 +160,8 @@ function AuthenticatedApp({ session }) {
     go('estimator');
   };
 
-  const openBidContext = async (bid) => {
+  const openBidContext = async (bidOrId, bidNameArg) => {
+    const bid = (typeof bidOrId === 'object' && bidOrId) ? bidOrId : { id: bidOrId, name: bidNameArg };
     if (!bid?.id) return;
     if (bid.stage === 'Won') {
       const { data: job, error } = await window.dbHelpers.getJobByBidId(bid.id);
@@ -219,7 +236,7 @@ function AuthenticatedApp({ session }) {
     <div id="app">
       <Topbar crumb={crumb} actions={actions} initials={initials} onLogout={handleLogout} />
       <div id="main" className={railOpen ? '' : 'rail-collapsed'}>
-        <Rail active={active} onGo={go} railOpen={railOpen} setRailOpen={setRailOpen} />
+        <Rail active={active} onGo={go} railOpen={railOpen} setRailOpen={setRailOpen} navCounts={navCounts} />
         <main id="content">
           {(() => {
             if (!window.Views) return <div style={{padding:40}}>Loading…</div>;
