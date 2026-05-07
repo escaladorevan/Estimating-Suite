@@ -257,6 +257,20 @@ async function deleteAlternate(id) {
   return window.sb.from('bid_alternates').delete().eq('id', id);
 }
 
+// ── Estimate data helpers (iframe bridge) ─────────────────────────────────────
+
+async function getEstimateData(bidId) {
+  const { data, error } = await window.sb.from('bids').select('estimate_data').eq('id', bidId).single();
+  return { data: data?.estimate_data, error };
+}
+
+async function saveEstimateData(bidId, estimateData) {
+  const { error } = await window.sb.from('bids')
+    .update({ estimate_data: estimateData, updated_at: new Date().toISOString() })
+    .eq('id', bidId);
+  return { error };
+}
+
 // ── Global export ─────────────────────────────────────────────────────────────
 
 window.dbHelpers = {
@@ -276,4 +290,6 @@ window.dbHelpers = {
   getContacts, addContact, updateContact,
   // Alternates
   getAlternates, addAlternate, updateAlternate, deleteAlternate,
+  // Estimate data (iframe bridge)
+  getEstimateData, saveEstimateData,
 };

@@ -269,3 +269,10 @@ ALTER TABLE bids ADD COLUMN IF NOT EXISTS warranty       jsonb DEFAULT '[]';
 ALTER TABLE bids ADD COLUMN IF NOT EXISTS finish_terms   jsonb DEFAULT '[]';
 ALTER TABLE bids ADD COLUMN IF NOT EXISTS hardware_terms jsonb DEFAULT '[]';
 ALTER TABLE bids ADD COLUMN IF NOT EXISTS fab_note       jsonb DEFAULT '[]';
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- IFRAME BRIDGE MIGRATION
+-- Stores the full V2 estimator state (ST object) as JSONB.
+-- The shell app writes this column via postMessage; V2 reads it on bid open.
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE bids ADD COLUMN IF NOT EXISTS estimate_data jsonb;
