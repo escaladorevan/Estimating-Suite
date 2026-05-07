@@ -1,6 +1,55 @@
 // Shell: topbar, left rail, and view router. Views registered on window.
 const { useState, useEffect, useMemo, useRef } = React;
 
+// ── Sample data seeding (call from console: window.seedSampleBid()) ────────────
+window.seedSampleBid = async function() {
+  console.log('Seeding sample bid...');
+  const { data: bid, error: bidErr } = await window.dbHelpers.addBid({
+    gc_name: 'Demo GC',
+    name: 'Sample Kitchen Remodel',
+    due_date: '2025-06-30',
+    project_type: 'Residential'
+  });
+  if (bidErr) { console.error('Failed to create bid:', bidErr); return; }
+  console.log('Created bid:', bid.id);
+
+  const { data: area1 } = await window.dbHelpers.addArea(bid.id, { name: 'Kitchen Cabinetry', qty: 1, sort_order: 0 });
+  const { data: sec1a } = await window.dbHelpers.addSection(area1.id, { name: 'Base Cabinets', sort_order: 0 });
+  const { data: sec1b } = await window.dbHelpers.addSection(area1.id, { name: 'Wall Cabinets', sort_order: 1 });
+  const { data: sec1c } = await window.dbHelpers.addSection(area1.id, { name: 'Island', sort_order: 2 });
+
+  const { data: area2 } = await window.dbHelpers.addArea(bid.id, { name: 'Countertops', qty: 1, sort_order: 1 });
+  const { data: sec2a } = await window.dbHelpers.addSection(area2.id, { name: 'Quartz Counters', sort_order: 0 });
+
+  const { data: area3 } = await window.dbHelpers.addArea(bid.id, { name: 'Hardware & Finishing', qty: 1, sort_order: 2 });
+  const { data: sec3a } = await window.dbHelpers.addSection(area3.id, { name: 'Hardware & Hinges', sort_order: 0 });
+
+  const items = [
+    { area_id: area1.id, section_id: sec1a.id, description: '3/4" Maple 5-piece base doors (36"w)', qty: 4, unit: 'EA', unit_cost: 320 },
+    { area_id: area1.id, section_id: sec1a.id, description: '3/4" Maple 5-piece base doors (48"w)', qty: 2, unit: 'EA', unit_cost: 420 },
+    { area_id: area1.id, section_id: sec1a.id, description: 'Base cabinet boxes (36"w)', qty: 4, unit: 'EA', unit_cost: 280 },
+    { area_id: area1.id, section_id: sec1b.id, description: '3/4" Maple 5-piece wall doors (30"w)', qty: 5, unit: 'EA', unit_cost: 240 },
+    { area_id: area1.id, section_id: sec1b.id, description: '3/4" Maple 5-piece wall doors (36"w)', qty: 3, unit: 'EA', unit_cost: 280 },
+    { area_id: area1.id, section_id: sec1b.id, description: 'Wall cabinet boxes (30"w)', qty: 5, unit: 'EA', unit_cost: 180 },
+    { area_id: area1.id, section_id: sec1c.id, description: 'Island base cabinet box (72"w)', qty: 1, unit: 'EA', unit_cost: 450 },
+    { area_id: area1.id, section_id: sec1c.id, description: 'Island countertop support frame', qty: 1, unit: 'LS', unit_cost: 200 },
+    { area_id: area2.id, section_id: sec2a.id, description: 'Quartz countertop (LF)', qty: 28, unit: 'LF', unit_cost: 95 },
+    { area_id: area2.id, section_id: sec2a.id, description: 'Island quartz top (LF)', qty: 8, unit: 'LF', unit_cost: 105 },
+    { area_id: area3.id, section_id: sec3a.id, description: 'Blum 125° concealed hinges (per cabinet)', qty: 14, unit: 'EA', unit_cost: 22 },
+    { area_id: area3.id, section_id: sec3a.id, description: 'Brushed chrome knobs/pulls', qty: 32, unit: 'EA', unit_cost: 8.50 },
+  ];
+
+  for (const item of items) {
+    await window.dbHelpers.addLineItem({
+      bid_id: bid.id, area_id: item.area_id, section_id: item.section_id,
+      description: item.description, qty: item.qty, unit: item.unit, unit_cost: item.unit_cost,
+      sort_order: 0
+    });
+  }
+  console.log('Sample bid seeded:', bid.id);
+  window.location.reload();
+};
+
 const Icon = {
   pipeline: () => <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h4"/></svg>,
   bids:     () => <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M5.5 5h5M5.5 8h5M5.5 11h3"/></svg>,
