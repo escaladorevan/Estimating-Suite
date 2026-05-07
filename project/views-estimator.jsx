@@ -85,33 +85,69 @@ function calcAlt(alt, bid) {
 }
 
 // ── ZZTakeoff parser ──────────────────────────────────────────────────────────
+// Handles the ZZTakeoff CSV/XLSX export format where each item appears twice
+// (2-space indent with Units1, 4-space indent with Units). We use the row where
+// the "Units" column (col index for "units") is non-empty AND cost is present.
 function parseZZTakeoff(rows) {
-  let hdrIdx = -1, cols = {};
-  for (let i = 0; i < Math.min(10, rows.length); i++) {
-    const r = rows[i].map(c => String(c).toLowerCase());
-    if (r.some(c => c === 'name' || c === 'group')) { hdrIdx = i; break; }
+  // Find header row by looking for "name" or "group" in col 0
+  let hdrIdx = -1;
+  for (let i = 0; i < Math.min(15, rows.length); i++) {
+    const cell = String(rows[i][0] || '').toLowerCase().trim();
+    if (cell === 'name' || cell === 'group') { hdrIdx = i; break; }
   }
   if (hdrIdx < 0) return null;
-  const hdr = rows[hdrIdx].map(c => String(c).toLowerCase());
-  cols.name = hdr.findIndex(c => c === 'name' || c === 'group');
-  cols.qty  = hdr.findIndex(c => c === 'qty' || c === 'measurement 1');
-  cols.unit = hdr.findIndex(c => c === 'unit' || c === 'units 1');
-  cols.cost = hdr.findIndex(c => c === 'cost each' || c === 'unit cost');
-  const isFormatA = cols.cost >= 0;
+
+  const hdr = rows[hdrIdx].map(c => String(c).toLowerCase().trim());
+  const colIdx = name => hdr.findIndex(h => h === name);
+
+  const iName     = colIdx('name') >= 0 ? colIdx('name') : colIdx('group');
+  const iMeas1    = colIdx('measurement 1');
+  const iUnits1   = colIdx('units 1');
+  const iQty      = colIdx('qty');
+  const iUnits    = colIdx('units');
+  const iCostEach = colIdx('cost each');
+
+  if (iName < 0) return null;
+
   const areas = [];
   let cur = null;
+
   for (let i = hdrIdx + 1; i < rows.length; i++) {
     const r = rows[i];
-    const name = String(r[cols.name] || '').trim();
-    if (!name) continue;
-    const unitVal = cols.unit >= 0 ? String(r[cols.unit] || '').trim() : '';
-    const costVal = cols.cost >= 0 ? parseFloat(r[cols.cost]) : NaN;
-    const isArea  = isFormatA ? isNaN(costVal) : !unitVal;
-    if (isArea) { cur = { name, checked: true, items: [] }; areas.push(cur); }
-    else if (cur) {
-      cur.items.push({ desc: name, checked: true, qty: parseFloat(r[cols.qty]) || 1, unit: unitVal || 'EA', unitCost: isNaN(costVal) ? 0 : costVal });
+    const rawName = String(r[iName] || '').trim();
+    if (!rawName) continue;
+
+    const costEach = iCostEach >= 0 ? parseFloat(String(r[iCostEach]).replace(/[$,]/g, '')) : NaN;
+    const units    = iUnits    >= 0 ? String(r[iUnits]    || '').trim() : '';
+    const units1   = iUnits1   >= 0 ? String(r[iUnits1]   || '').trim() : '';
+    const hasCost  = !isNaN(costEach) && costEach >= 0;
+
+    // Area row: has no cost and no units
+    if (!hasCost && !units && !units1) {
+      cur = { name: rawName, checked: true, items: [] };
+      areas.push(cur);
+      continue;
     }
+
+    // Item row: must have cost. Use the row with non-empty `units` (the 4-space
+    // duplicate row). If `units` is empty but `units1` is filled, skip this
+    // duplicate — the matching row with `units` will appear next.
+    if (hasCost && units) {
+      if (!cur) { cur = { name: 'General', checked: true, items: [] }; areas.push(cur); }
+      const qty = iQty >= 0 ? (parseFloat(r[iQty]) || 1) : (iMeas1 >= 0 ? parseFloat(r[iMeas1]) || 1 : 1);
+      cur.items.push({ desc: rawName, checked: true, qty, unit: units, unitCost: costEach });
+      continue;
+    }
+
+    // Standalone item: has cost AND units1 (only appears once, no duplicate)
+    if (hasCost && !units && units1) {
+      if (!cur) { cur = { name: 'General', checked: true, items: [] }; areas.push(cur); }
+      const qty = iMeas1 >= 0 ? (parseFloat(r[iMeas1]) || 1) : 1;
+      cur.items.push({ desc: rawName, checked: true, qty, unit: units1, unitCost: costEach });
+    }
+    // else: sub-group row with no cost → skip
   }
+
   return areas.length ? areas : null;
 }
 
@@ -471,31 +507,85 @@ function EstimatorView({ activeBidId }) {
     if (!window.showOpenFilePicker) { alert('File import requires Chrome or Edge.'); return; }
     try {
       const [fh] = await window.showOpenFilePicker({
-        types: [{ description: 'Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx', '.xls'] } }],
+        types: [{
+          description: 'ZZTakeoff Export',
+          accept: {
+            'text/csv': ['.csv'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+            'application/vnd.ms-excel': ['.xls'],
+          },
+        }],
       });
       const file = await fh.getFile();
-      const ab   = await file.arrayBuffer();
-      const wb   = window.XLSX.read(ab, { type: 'array' });
-      const ws   = wb.Sheets[wb.SheetNames[0]];
-      const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      const isCsv = file.name.toLowerCase().endsWith('.csv');
+      let rows;
+      if (isCsv) {
+        const text = await file.text();
+        const wb   = window.XLSX.read(text, { type: 'string' });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      } else {
+        const ab = await file.arrayBuffer();
+        const wb = window.XLSX.read(ab, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      }
       const parsed = parseZZTakeoff(rows);
-      if (!parsed) { alert('Could not parse ZZTakeoff format.'); return; }
+      if (!parsed) { alert('Could not parse ZZTakeoff format. Make sure this is a ZZTakeoff export file.'); return; }
       setZZPreview(parsed);
     } catch (e) { if (e.name !== 'AbortError') console.error('ZZTakeoff import error:', e); }
   }
 
   async function doZZImport(areas) {
     setZZImporting(true);
-    for (const area of areas.filter(a => a.checked && a.items.some(it => it.checked))) {
-      const { data: areaRow } = await window.dbHelpers.addArea(activeBidId, { name: area.name, qty: 1, sort_order: (tree || []).length });
-      if (!areaRow) continue;
-      const { data: secRow } = await window.dbHelpers.addSection(areaRow.id, { name: 'Casework', sort_order: 0 });
-      if (!secRow) continue;
-      for (const [idx, it] of area.items.filter(i => i.checked).entries()) {
-        await window.dbHelpers.addLineItem({ bid_id: activeBidId, area_id: areaRow.id, section_id: secRow.id, description: it.desc, qty: it.qty, unit: it.unit, unit_cost: it.unitCost, sort_order: idx });
-      }
+    const checkedAreas = areas.filter(a => a.checked && a.items.some(it => it.checked));
+    const baseOrder = (tree || []).length;
+
+    // Build the in-memory tree nodes immediately so the UI updates without waiting for DB
+    const newTreeNodes = [];
+
+    for (const [aIdx, area] of checkedAreas.entries()) {
+      const checkedItems = area.items.filter(it => it.checked);
+      const areaId  = crypto.randomUUID();
+      const secId   = crypto.randomUUID();
+      const itemNodes = checkedItems.map((it, idx) => ({
+        id: crypto.randomUUID(), desc: it.desc, description: it.desc,
+        qty: it.qty, unit: it.unit, unit_cost: it.unitCost,
+        drawing_ref: '', ignore: false, no_print: false, sort_order: idx,
+        section_id: secId, area_id: areaId, bid_id: activeBidId,
+      }));
+      const secNode  = { id: secId, name: 'Casework', area_id: areaId, sort_order: 0, ignore: false, items: itemNodes };
+      const areaNode = { id: areaId, name: area.name, bid_id: activeBidId, qty: 1, sort_order: baseOrder + aIdx, sections: [secNode] };
+      newTreeNodes.push(areaNode);
     }
-    setZZPreview(null); setZZImporting(false); setTree(null); setActiveAreaId(null); setActiveSectionId(null);
+
+    // Update UI immediately (memory-first)
+    setTree(prev => [...(prev || []), ...newTreeNodes]);
+    if (newTreeNodes.length > 0) {
+      setActiveAreaId(newTreeNodes[0].id);
+      setActiveSectionId(newTreeNodes[0].sections[0]?.id || null);
+    }
+    setZZPreview(null);
+    setZZImporting(false);
+
+    // Sync to DB in background — don't block the UI
+    (async () => {
+      for (const node of newTreeNodes) {
+        const { data: areaRow } = await window.dbHelpers.addArea(activeBidId, { name: node.name, qty: 1, sort_order: node.sort_order });
+        if (!areaRow) continue;
+        const { data: secRow } = await window.dbHelpers.addSection(areaRow.id, { name: 'Casework', sort_order: 0 });
+        if (!secRow) continue;
+        const sec = node.sections[0];
+        await Promise.all(sec.items.map((it, idx) =>
+          window.dbHelpers.addLineItem({ bid_id: activeBidId, area_id: areaRow.id, section_id: secRow.id, description: it.description, qty: it.qty, unit: it.unit, unit_cost: it.unit_cost, sort_order: idx })
+        ));
+        // Patch the in-memory node IDs to match the real DB IDs so future edits work
+        setTree(prev => (prev || []).map(a => a.id === node.id
+          ? { ...a, id: areaRow.id, sections: a.sections.map(s => s.id === sec.id ? { ...s, id: secRow.id, area_id: areaRow.id, items: s.items.map(it => ({ ...it, area_id: areaRow.id, section_id: secRow.id })) } : s) }
+          : a
+        ));
+      }
+    })();
   }
 
   // ── ACTIVE ALT ────────────────────────────────────────────────────────────
