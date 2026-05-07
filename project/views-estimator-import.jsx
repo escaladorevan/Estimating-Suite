@@ -228,16 +228,16 @@ function ZZImportModal({ bidId, onClose, onImported }) {
                     return (
                       <React.Fragment key={area.name}>
                         {/* Area header row */}
-                        <tr style={{background:'#22201B'}}>
+                        <tr style={{background:'var(--panel-alt)',borderLeft:'3px solid var(--accent)',borderBottom:'1px solid var(--line)'}}>
                           <td style={{padding:'6px 8px',textAlign:'center'}}>
                             <input type="checkbox" checked={areaChecked}
                               onChange={e=>toggleArea(area.name, e.target.checked)}
                               style={{cursor:'pointer'}} />
                           </td>
-                          <td colSpan={2} style={{padding:'6px 8px',color:'#fff',fontWeight:700,fontSize:12}}>
-                            📁 {area.name}
+                          <td colSpan={2} style={{padding:'6px 8px',color:'var(--ink)',fontWeight:700,fontSize:12}}>
+                            {area.name}
                           </td>
-                          <td style={{padding:'6px 8px',color:'#A09080',fontSize:11,textAlign:'right'}}>
+                          <td style={{padding:'6px 8px',color:'var(--mute)',fontSize:11,textAlign:'right'}}>
                             {selInArea}/{areaItems.length}
                           </td>
                         </tr>
