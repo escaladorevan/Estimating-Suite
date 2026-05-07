@@ -1,7 +1,7 @@
 // Home + Pipeline views
 const { useState: uS_home, useEffect: uE_home, useMemo: uM_home } = React;
 
-const HomeView = () => {
+const HomeView = ({ onOpenDetail }) => {
   const [jobs, setJobs] = uS_home(null);
   const [bids, setBids] = uS_home(null);
 
@@ -100,7 +100,7 @@ const HomeView = () => {
                     const isOverdue = due && due < today;
                     const isDueSoon = due && due >= today && due <= nextWeek;
                     return (
-                      <tr key={bid.id} style={{cursor:'pointer'}} onClick={()=>window.__go('estimator')}>
+                      <tr key={bid.id} style={{cursor:'pointer'}} onClick={()=>onOpenDetail && onOpenDetail(bid)}>
                         <td style={{paddingLeft:16}}>
                           <div style={{fontWeight:600}}>{bid.name}</div>
                           <div className="muted" style={{fontSize:11.5}}>{bid.gc_name||'—'}</div>
@@ -172,7 +172,7 @@ const STAGE_COLS = [
   { id:'Lost',            label:'Lost' },
 ];
 
-const PipelineView = ({ onOpenBid }) => {
+const PipelineView = ({ onOpenDetail }) => {
   const [bids, setBids]             = uS_home(null);
   const [error, setError]           = uS_home(null);
   const [showCreate, setShowCreate] = uS_home(false);
@@ -300,7 +300,7 @@ const PipelineView = ({ onOpenBid }) => {
                   {colBids.map((bid) => {
                     const nextStage = window.dbHelpers.STAGE_NEXT[bid.stage];
                     return (
-                      <div key={bid.id} className="card-lead" onClick={() => onOpenBid && onOpenBid(bid)} style={{cursor:'pointer'}}>
+                      <div key={bid.id} className="card-lead" onClick={() => onOpenDetail && onOpenDetail(bid)} style={{cursor:'pointer'}}>
                         <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>{bid.name}</div>
                         <div className="meta" style={{fontSize:11.5,marginBottom:6}}>{bid.gc_name} · {bid.project_type || '—'}</div>
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:4}}>

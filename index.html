@@ -24,6 +24,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/3.0.3/jspdf.umd.min.js" crossorigin="anonymous"></script>
 <script src="project/logo.js"></script>
 
+<!-- Shared estimate calculation engine (used by iframe bridge + future native estimator) -->
+<script src="project/estimate-engine.js"></script>
+
+<!-- Pricing library import utility (call window.importLibrary() from console) -->
+<script src="project/import-library.js"></script>
+
 <!-- Core shell + registered views -->
 <script type="text/babel" src="project/shell.jsx"></script>
 <script type="text/babel" src="project/views-auth.jsx"></script>
@@ -31,6 +37,7 @@
 <script type="text/babel" src="project/views-estimator.jsx"></script>
 <script type="text/babel" src="project/views-jobs.jsx"></script>
 <script type="text/babel" src="project/views-secondary.jsx"></script>
+<script type="text/babel" src="project/modal-bid-detail.jsx"></script>
 <script type="text/babel" src="project/views-bidhistory.jsx"></script>
 
 <!-- Mount -->
