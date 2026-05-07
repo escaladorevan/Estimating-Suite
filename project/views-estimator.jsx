@@ -243,14 +243,31 @@ function EstimatorView({ activeBidId }) {
 
   // ── AREA CRUD ─────────────────────────────────────────────────────────────
   async function handleAddArea() {
-    const { data: areaData } = await window.dbHelpers.addArea(activeBidId, { name: 'New Area', qty: 1, sort_order: (tree || []).length });
+    const tempAreaId = crypto.randomUUID();
+    const tempSecId  = crypto.randomUUID();
+    const newArea = {
+      id: tempAreaId, bid_id: activeBidId, name: 'New Area', qty: 1,
+      sort_order: (tree || []).length, ignore: false, no_print: false,
+      sections: [{ id: tempSecId, area_id: tempAreaId, name: 'Casework', sort_order: 0, ignore: false, no_print: false, items: [] }],
+    };
+    setTree(prev => [...(prev || []), newArea]);
+    setActiveAreaId(tempAreaId);
+    setActiveSectionId(tempSecId);
+    setCenterView('grid');
+    // Sync to DB — area and section must exist before items can be committed
+    const { data: areaData } = await window.dbHelpers.addArea(activeBidId, { name: 'New Area', qty: 1, sort_order: newArea.sort_order });
     if (!areaData) return;
     const { data: secData } = await window.dbHelpers.addSection(areaData.id, { name: 'Casework', sort_order: 0 });
-    const newArea = { ...areaData, sections: secData ? [{ ...secData, items: [] }] : [] };
-    setTree(prev => [...(prev || []), newArea]);
-    setActiveAreaId(areaData.id);
-    if (secData) setActiveSectionId(secData.id);
-    setCenterView('grid');
+    if (!secData) return;
+    // Patch temp UUIDs to real DB IDs so future item commits target correct rows
+    setTree(prev => prev.map(a => a.id === tempAreaId
+      ? { ...a, id: areaData.id, bid_id: areaData.bid_id,
+          sections: a.sections.map(s => s.id === tempSecId
+            ? { ...s, id: secData.id, area_id: areaData.id }
+            : s) }
+      : a));
+    setActiveAreaId(prev => prev === tempAreaId ? areaData.id : prev);
+    setActiveSectionId(prev => prev === tempSecId ? secData.id : prev);
   }
 
   async function handleAddSection(areaId) {
@@ -982,9 +999,10 @@ function EstimatorView({ activeBidId }) {
         <PDFPreviewModal
           bid={bid}
           tree={tree}
+          alts={alts}
           onClose={() => setShowPDFPreview(false)}
           onExport={() => {
-            const doc = generateProposalPDF(tree, bid, activeBidId);
+            const doc = generateProposalPDF(tree, bid, alts);
             doc.save((bid?.name || 'Proposal') + '.pdf');
             setShowPDFPreview(false);
           }}
@@ -1582,7 +1600,7 @@ function InfoPanel({ bid, setBid, activeBidId, alts, handlePctChange, setCenterV
 // PDF EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
 
-function generateProposalPDF(tree, bid) {
+function generateProposalPDF(tree, bid, alts) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
 
@@ -1736,23 +1754,41 @@ function generateProposalPDF(tree, bid) {
   txt(cPrice, y, $(bidCalc.total), { bold: true, size: 10, align: 'right' });
   y += 6; hline(y, LM, RM, 0.8); y += 6;
 
+  // Alternates
+  const printAlts = (alts || []).filter(a => !a.ignore && !a.no_print);
+  if (printAlts.length > 0) {
+    checkY(10);
+    txt(cDesc, y, 'ALTERNATES', { bold: true, size: 8.5 }); y += 5;
+    for (const alt of printAlts) {
+      checkY(6);
+      const ac = calcAlt(alt, bid);
+      txt(cDesc,  y, alt.description || 'Alternate', { size: 8.5 });
+      txt(cQty,   y, '1', { size: 8.5, align: 'right' });
+      txt(cUnit,  y, 'lump sum', { size: 8.5 });
+      txt(cPrice, y, $(ac.total), { size: 8.5, align: 'right' });
+      y += 5;
+    }
+    y += 3;
+  }
+
   // Page 2 — Terms
   newPage();
   txt(LM, y, 'Form and Structure, Inc.  ' + (I.doc_type || 'Proposal'), { bold: true, size: 9.5 }); y += 4.5;
   txt(LM, y, (I.number ? I.number + ' - ' : '') + (I.name || ''), { size: 8.5 });
   txt(RM, y, 'Page No. 2', { size: 8.5, align: 'right' }); y += 4.5;
-  txt(LM, y, I.client || '', { size: 8.5 }); y += 3.5;
+  txt(LM, y, I.gc_name || '', { size: 8.5 }); y += 3.5;
   hline(y, LM, RM, 0.5); y += 5.5;
 
   function section(title, lines) {
+    if (!lines.length) return;
     checkY(8);
     txt(LM, y, title, { bold: true, size: 8.5 }); y += 4.5;
     lines.forEach(line => { checkY(4); txt(LM + 3, y, line, { size: 7.5 }); y += 3.8; });
     y += 3;
   }
 
-  section('EXCLUSIONS:', (I.exclusions || DEFAULT_EXCLUSIONS).filter(e => e.active).map(e => e.text));
-  section('CLARIFICATIONS:', (I.clarifications || DEFAULT_CLARIFICATIONS).filter(e => e.active).map(e => e.text));
+  section('EXCLUSIONS:',     migrateTerms(I.exclusions,     DEFAULT_EXCLUSIONS).filter(e => e.active).map(e => e.text));
+  section('CLARIFICATIONS:', migrateTerms(I.clarifications, DEFAULT_CLARIFICATIONS).filter(e => e.active).map(e => e.text));
   if ((I.general_terms  || []).some(e => e.active)) section('GENERAL TERMS:',           (I.general_terms  || []).filter(e => e.active).map(e => e.text));
   if ((I.warranty       || []).some(e => e.active)) section('WARRANTY AND FABRICATION:', (I.warranty       || []).filter(e => e.active).map(e => e.text));
   if ((I.finish_terms   || []).some(e => e.active)) section('FINISH MATERIALS:',         (I.finish_terms   || []).filter(e => e.active).map(e => e.text));
@@ -1767,12 +1803,12 @@ function generateProposalPDF(tree, bid) {
   return doc;
 }
 
-function PDFPreviewModal({ bid, tree, onClose, onExport }) {
+function PDFPreviewModal({ bid, tree, alts, onClose, onExport }) {
   const [pdfUrl, setPdfUrl] = uS_est(null);
 
   uE_est(() => {
     try {
-      const doc = generateProposalPDF(tree, bid);
+      const doc = generateProposalPDF(tree, bid, alts);
       const url = doc.output('bloburi') || doc.output('datauristring');
       setPdfUrl(url);
     } catch (e) {
