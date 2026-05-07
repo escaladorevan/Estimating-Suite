@@ -57,7 +57,9 @@
   // All accept plain data objects — no global state dependency.
 
   function itemTotal(it) {
-    return it.ignore ? 0 : pct(it.qty) * pct(it.unitCost);
+    // Handle both snake_case (Supabase) and camelCase (V2 iframe) field names
+    var cost = it.unit_cost !== undefined ? it.unit_cost : it.unitCost;
+    return it.ignore ? 0 : pct(it.qty) * pct(cost);
   }
 
   function sectionTotal(sec) {
