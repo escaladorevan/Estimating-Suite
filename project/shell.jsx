@@ -251,8 +251,8 @@ function AuthenticatedApp({ session }) {
       case 'home':
       case 'pipeline':
         return <>
-          <button className="btn ghost" onClick={()=>go('pipeline')}>Ingest ITB</button>
-          <button className="btn primary" onClick={()=>go('estimator')}><Icon.plus /> New bid</button>
+          <button className="btn ghost" onClick={() => { window.__openIngestITB = true; go('pipeline'); }}>Ingest ITB</button>
+          <button className="btn primary" onClick={() => { window.__openIngestITB = true; window.__openIngestITBToEstimate = true; go('pipeline'); }}><Icon.plus /> New bid</button>
         </>;
       case 'estimator':
         return <>
@@ -299,7 +299,7 @@ function AuthenticatedApp({ session }) {
             switch (active) {
               case 'pipeline': {
                 const PV = window.Views.pipeline;
-                return PV ? <PV go={go} onOpenDetail={openDetail} /> : null;
+                return PV ? <PV go={go} onOpenDetail={openDetail} onOpenEstimate={(bid) => openBid(bid.id, bid.name)} /> : null;
               }
               case 'estimator': {
                 const EV = window.Views.estimator;
