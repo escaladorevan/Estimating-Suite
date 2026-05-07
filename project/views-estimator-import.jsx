@@ -42,7 +42,7 @@ function parseZZTakeoff(rawRows) {
     }
     if (units) {
       parsed.push({ _idx: parsed.length, area: currentArea, section: currentSection,
-        description: name, qty, unit: units, selected: true });
+        description: name, qty, unit: units, unit_cost: costEach, selected: true });
     }
   }
   return parsed;
@@ -154,7 +154,7 @@ function ZZImportModal({ bidId, onClose, onImported }) {
             const { error: iErr } = await window.dbHelpers.addLineItem({
               bid_id: bidId, area_id: aData.id, section_id: sData.id,
               description: item.description, qty: item.qty, unit: item.unit,
-              unit_cost: 0, sort_order: iIdx,
+              unit_cost: item.unit_cost || 0, sort_order: iIdx,
             });
             if (iErr) throw new Error('Item: ' + iErr.message);
             done++; setPct(Math.round((done / total) * 100));
