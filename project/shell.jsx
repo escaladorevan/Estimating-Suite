@@ -185,6 +185,7 @@ function AuthenticatedApp({ session }) {
   });
   const [activeBidName, setActiveBidName] = useState('');
   const [railOpen, setRailOpen] = useState(true);
+  const [detailBid, setDetailBid] = useState(null);
   const [navCounts, setNavCounts] = useState({});
 
   useEffect(() => {
@@ -208,6 +209,8 @@ function AuthenticatedApp({ session }) {
     try { localStorage.setItem('fs-active-bid', bidId); } catch {}
     go('estimator');
   };
+
+  const openDetail = (bid) => setDetailBid(bid);
 
   const openBidContext = async (bidOrId, bidNameArg) => {
     const bid = (typeof bidOrId === 'object' && bidOrId) ? bidOrId : { id: bidOrId, name: bidNameArg };
@@ -281,6 +284,10 @@ function AuthenticatedApp({ session }) {
     await window.sb.auth.signOut();
   }
 
+  const handleBidUpdate = (updatedBid) => {
+    setDetailBid(updatedBid);
+  };
+
   return (
     <div id="app">
       <Topbar crumb={crumb} actions={actions} initials={initials} onLogout={handleLogout} />
@@ -292,7 +299,7 @@ function AuthenticatedApp({ session }) {
             switch (active) {
               case 'pipeline': {
                 const PV = window.Views.pipeline;
-                return PV ? <PV go={go} onOpenBid={openBidContext} /> : null;
+                return PV ? <PV go={go} onOpenDetail={openDetail} /> : null;
               }
               case 'estimator': {
                 const EV = window.Views.estimator;
@@ -300,12 +307,25 @@ function AuthenticatedApp({ session }) {
               }
               default: {
                 const V = window.Views[active] || window.Views.home;
-                return V ? <V go={go} /> : <div style={{padding:40}}>Loading…</div>;
+                return V ? <V go={go} onOpenDetail={openDetail} /> : <div style={{padding:40}}>Loading…</div>;
               }
             }
           })()}
         </main>
       </div>
+      {detailBid && window.BidDetailModal && (
+        <window.BidDetailModal
+          bid={detailBid}
+          onClose={() => setDetailBid(null)}
+          onOpenEstimate={(bid) => { setDetailBid(null); openBid(bid.id, bid.name); }}
+          onOpenJob={async (bid) => {
+            setDetailBid(null);
+            const { data: job } = await window.dbHelpers.getJobByBidId(bid.id);
+            if (job) { window.__activeJob = job; go('job'); }
+          }}
+          onBidUpdate={handleBidUpdate}
+        />
+      )}
     </div>
   );
 }
