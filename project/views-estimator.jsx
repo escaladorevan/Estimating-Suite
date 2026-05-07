@@ -1,6 +1,8 @@
+// Estimator view — routes between iframe (default) and native React (?native=1)
 const { useEffect, useRef, useCallback } = React;
 
-function EstimatorView({ activeBidId }) {
+// ── Iframe bridge (V2 original) ────────────────────────────────────────────────
+function IframeEstimatorView({ activeBidId }) {
   const iframeRef    = useRef(null);
   const loadedBidRef = useRef(null);
 
@@ -40,11 +42,8 @@ function EstimatorView({ activeBidId }) {
 
   if (!activeBidId) {
     return (
-      <div style={{
-        padding: 48, textAlign: 'center', background: '#f6f1e6',
-        color: '#7a6a5a', fontFamily: 'Inter, sans-serif', minHeight: '100vh',
-      }}>
-        No bid selected. Open a bid from the Bid Board.
+      <div style={{ padding: 48, textAlign: 'center', background: '#f6f1e6', color: '#7a6a5a', fontFamily: 'Inter, sans-serif', minHeight: '100vh' }}>
+        No bid selected. Open a bid from the Pipeline.
       </div>
     );
   }
@@ -57,6 +56,17 @@ function EstimatorView({ activeBidId }) {
       title="F&S Estimator"
     />
   );
+}
+
+// ── Router — ?native=1 activates the native React build ────────────────────────
+function EstimatorView({ activeBidId }) {
+  const isNative = window.location.search.includes('native=1');
+  if (isNative) {
+    return window.EstimatorNative
+      ? <window.EstimatorNative bidId={activeBidId} />
+      : <window.Spinner />;
+  }
+  return <IframeEstimatorView activeBidId={activeBidId} />;
 }
 
 window.Views = Object.assign(window.Views || {}, { estimator: EstimatorView });
