@@ -1419,15 +1419,21 @@ function InfoPanel({ bid, setBid, activeBidId, alts, handlePctChange, setCenterV
           {(alts || []).length} Alternate{(alts || []).length !== 1 ? 's' : ''} →
         </button>
       </div>
+      {/* Bid number (read-only) */}
+      {bid?.number && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 3 }}>Bid Number</div>
+          <div style={{ padding: '5px 8px', background: 'var(--panel-alt)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm,4px)', fontSize: 13, fontFamily: 'var(--mono)', color: 'var(--ink-2)' }}>{bid.number}</div>
+        </div>
+      )}
       {/* Metadata fields */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {[
           ['doc_type',       'Document Type',    'select', ['Proposal', 'Quote', 'Bid', 'Budget', 'Change Order']],
           ['pricing_mode',   'Pricing Mode',     'select', ['By Area', 'Lump Sum', 'Itemized']],
-          ['project_id',     'Project ID',       'text',   null],
-          ['bid_date',       'Bid Date',         'date',   null],
           ['gc_name',        'General Contractor','text',  null],
           ['architect',      'Architect',        'text',   null],
+          ['due_date',       'Bid Due Date',     'date',   null],
           ['bid_docs',       'Bid Documents',    'text',   null],
           ['drawings_dated', 'Drawings Dated',   'date',   null],
           ['estimator',      'Estimator',        'text',   null],
@@ -1529,11 +1535,7 @@ function generateProposalPDF(tree, bid) {
 
   txt(LM, y, 'To:', { bold: true, size: 9 });
   const tx = LM + 7;
-  txt(tx, y, I.client || 'Client', { bold: true, size: 9 });
-  y += 4.5;
-  if (I.address) {
-    (I.address || '').split(',').forEach(p => { txt(tx, y, p.trim(), { size: 9 }); y += 4.5; });
-  }
+  txt(tx, y, I.gc_name || '', { bold: true, size: 9 });
   y += 2; hline(y, LM, RM, 0.25, true); y += 4.5;
 
   const c1l = LM, c1v = LM + 23, c2l = LM + CW / 2, c2v = LM + CW / 2 + 23;
