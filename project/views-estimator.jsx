@@ -85,33 +85,69 @@ function calcAlt(alt, bid) {
 }
 
 // ── ZZTakeoff parser ──────────────────────────────────────────────────────────
+// Handles the ZZTakeoff CSV/XLSX export format where each item appears twice
+// (2-space indent with Units1, 4-space indent with Units). We use the row where
+// the "Units" column (col index for "units") is non-empty AND cost is present.
 function parseZZTakeoff(rows) {
-  let hdrIdx = -1, cols = {};
-  for (let i = 0; i < Math.min(10, rows.length); i++) {
-    const r = rows[i].map(c => String(c).toLowerCase());
-    if (r.some(c => c === 'name' || c === 'group')) { hdrIdx = i; break; }
+  // Find header row by looking for "name" or "group" in col 0
+  let hdrIdx = -1;
+  for (let i = 0; i < Math.min(15, rows.length); i++) {
+    const cell = String(rows[i][0] || '').toLowerCase().trim();
+    if (cell === 'name' || cell === 'group') { hdrIdx = i; break; }
   }
   if (hdrIdx < 0) return null;
-  const hdr = rows[hdrIdx].map(c => String(c).toLowerCase());
-  cols.name = hdr.findIndex(c => c === 'name' || c === 'group');
-  cols.qty  = hdr.findIndex(c => c === 'qty' || c === 'measurement 1');
-  cols.unit = hdr.findIndex(c => c === 'unit' || c === 'units 1');
-  cols.cost = hdr.findIndex(c => c === 'cost each' || c === 'unit cost');
-  const isFormatA = cols.cost >= 0;
+
+  const hdr = rows[hdrIdx].map(c => String(c).toLowerCase().trim());
+  const colIdx = name => hdr.findIndex(h => h === name);
+
+  const iName     = colIdx('name') >= 0 ? colIdx('name') : colIdx('group');
+  const iMeas1    = colIdx('measurement 1');
+  const iUnits1   = colIdx('units 1');
+  const iQty      = colIdx('qty');
+  const iUnits    = colIdx('units');
+  const iCostEach = colIdx('cost each');
+
+  if (iName < 0) return null;
+
   const areas = [];
   let cur = null;
+
   for (let i = hdrIdx + 1; i < rows.length; i++) {
     const r = rows[i];
-    const name = String(r[cols.name] || '').trim();
-    if (!name) continue;
-    const unitVal = cols.unit >= 0 ? String(r[cols.unit] || '').trim() : '';
-    const costVal = cols.cost >= 0 ? parseFloat(r[cols.cost]) : NaN;
-    const isArea  = isFormatA ? isNaN(costVal) : !unitVal;
-    if (isArea) { cur = { name, checked: true, items: [] }; areas.push(cur); }
-    else if (cur) {
-      cur.items.push({ desc: name, checked: true, qty: parseFloat(r[cols.qty]) || 1, unit: unitVal || 'EA', unitCost: isNaN(costVal) ? 0 : costVal });
+    const rawName = String(r[iName] || '').trim();
+    if (!rawName) continue;
+
+    const costEach = iCostEach >= 0 ? parseFloat(String(r[iCostEach]).replace(/[$,]/g, '')) : NaN;
+    const units    = iUnits    >= 0 ? String(r[iUnits]    || '').trim() : '';
+    const units1   = iUnits1   >= 0 ? String(r[iUnits1]   || '').trim() : '';
+    const hasCost  = !isNaN(costEach) && costEach >= 0;
+
+    // Area row: has no cost and no units
+    if (!hasCost && !units && !units1) {
+      cur = { name: rawName, checked: true, items: [] };
+      areas.push(cur);
+      continue;
     }
+
+    // Item row: must have cost. Use the row with non-empty `units` (the 4-space
+    // duplicate row). If `units` is empty but `units1` is filled, skip this
+    // duplicate — the matching row with `units` will appear next.
+    if (hasCost && units) {
+      if (!cur) { cur = { name: 'General', checked: true, items: [] }; areas.push(cur); }
+      const qty = iQty >= 0 ? (parseFloat(r[iQty]) || 1) : (iMeas1 >= 0 ? parseFloat(r[iMeas1]) || 1 : 1);
+      cur.items.push({ desc: rawName, checked: true, qty, unit: units, unitCost: costEach });
+      continue;
+    }
+
+    // Standalone item: has cost AND units1 (only appears once, no duplicate)
+    if (hasCost && !units && units1) {
+      if (!cur) { cur = { name: 'General', checked: true, items: [] }; areas.push(cur); }
+      const qty = iMeas1 >= 0 ? (parseFloat(r[iMeas1]) || 1) : 1;
+      cur.items.push({ desc: rawName, checked: true, qty, unit: units1, unitCost: costEach });
+    }
+    // else: sub-group row with no cost → skip
   }
+
   return areas.length ? areas : null;
 }
 
@@ -207,14 +243,31 @@ function EstimatorView({ activeBidId }) {
 
   // ── AREA CRUD ─────────────────────────────────────────────────────────────
   async function handleAddArea() {
-    const { data: areaData } = await window.dbHelpers.addArea(activeBidId, { name: 'New Area', qty: 1, sort_order: (tree || []).length });
+    const tempAreaId = crypto.randomUUID();
+    const tempSecId  = crypto.randomUUID();
+    const newArea = {
+      id: tempAreaId, bid_id: activeBidId, name: 'New Area', qty: 1,
+      sort_order: (tree || []).length, ignore: false, no_print: false,
+      sections: [{ id: tempSecId, area_id: tempAreaId, name: 'Casework', sort_order: 0, ignore: false, no_print: false, items: [] }],
+    };
+    setTree(prev => [...(prev || []), newArea]);
+    setActiveAreaId(tempAreaId);
+    setActiveSectionId(tempSecId);
+    setCenterView('grid');
+    // Sync to DB — area and section must exist before items can be committed
+    const { data: areaData } = await window.dbHelpers.addArea(activeBidId, { name: 'New Area', qty: 1, sort_order: newArea.sort_order });
     if (!areaData) return;
     const { data: secData } = await window.dbHelpers.addSection(areaData.id, { name: 'Casework', sort_order: 0 });
-    const newArea = { ...areaData, sections: secData ? [{ ...secData, items: [] }] : [] };
-    setTree(prev => [...(prev || []), newArea]);
-    setActiveAreaId(areaData.id);
-    if (secData) setActiveSectionId(secData.id);
-    setCenterView('grid');
+    if (!secData) return;
+    // Patch temp UUIDs to real DB IDs so future item commits target correct rows
+    setTree(prev => prev.map(a => a.id === tempAreaId
+      ? { ...a, id: areaData.id, bid_id: areaData.bid_id,
+          sections: a.sections.map(s => s.id === tempSecId
+            ? { ...s, id: secData.id, area_id: areaData.id }
+            : s) }
+      : a));
+    setActiveAreaId(prev => prev === tempAreaId ? areaData.id : prev);
+    setActiveSectionId(prev => prev === tempSecId ? secData.id : prev);
   }
 
   async function handleAddSection(areaId) {
@@ -319,24 +372,40 @@ function EstimatorView({ activeBidId }) {
     const d = getDraft(sectionId);
     if (!d.desc.trim()) return;
     const sec = (tree || []).flatMap(a => a.sections).find(s => s.id === sectionId);
-    const { data, error } = await window.dbHelpers.addLineItem({
-      bid_id: activeBidId, area_id: areaId, section_id: sectionId,
+    const tempId = crypto.randomUUID();
+    const newItem = {
+      id: tempId, bid_id: activeBidId, area_id: areaId, section_id: sectionId,
       description: d.desc.trim(), qty: d.qty || 1, unit: d.unit || 'EA',
       unit_cost: d.unitCost || 0, drawing_ref: d.drawingRef || '',
-      sort_order: (sec?.items || []).length,
+      ignore: false, no_print: false, sort_order: (sec?.items || []).length,
+    };
+    // Update UI immediately — calcBid recalculates via useMemo
+    setTree(prev => prev.map(a => a.id === areaId ? {
+      ...a, sections: a.sections.map(s => s.id === sectionId ? { ...s, items: [...s.items, newItem] } : s)
+    } : a));
+    setDrafts(prev => ({ ...prev, [sectionId]: null }));
+    // Background DB sync
+    const { data, error } = await window.dbHelpers.addLineItem({
+      bid_id: activeBidId, area_id: areaId, section_id: sectionId,
+      description: newItem.description, qty: newItem.qty, unit: newItem.unit,
+      unit_cost: newItem.unit_cost, drawing_ref: newItem.drawing_ref,
+      sort_order: newItem.sort_order,
     });
     if (error) { console.error('addLineItem failed:', error); return; }
-    if (data) {
+    if (data?.id && data.id !== tempId) {
       setTree(prev => prev.map(a => a.id === areaId ? {
-        ...a, sections: a.sections.map(s => s.id === sectionId ? { ...s, items: [...s.items, data] } : s)
+        ...a, sections: a.sections.map(s => s.id === sectionId ? {
+          ...s, items: s.items.map(it => it.id === tempId ? { ...it, id: data.id } : it)
+        } : s)
       } : a));
-      setDrafts(prev => ({ ...prev, [sectionId]: null }));
     }
   }
 
   function handleAddItemClick(areaId, sectionId) {
-    const input = document.querySelector(`[data-draft-desc="${sectionId}"]`);
-    if (input) input.focus();
+    setTimeout(() => {
+      const input = document.querySelector(`[data-draft-desc="${sectionId}"]`);
+      if (input) input.focus();
+    }, 0);
   }
 
   // ── MARKUP % ──────────────────────────────────────────────────────────────
@@ -471,31 +540,85 @@ function EstimatorView({ activeBidId }) {
     if (!window.showOpenFilePicker) { alert('File import requires Chrome or Edge.'); return; }
     try {
       const [fh] = await window.showOpenFilePicker({
-        types: [{ description: 'Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx', '.xls'] } }],
+        types: [{
+          description: 'ZZTakeoff Export',
+          accept: {
+            'text/csv': ['.csv'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+            'application/vnd.ms-excel': ['.xls'],
+          },
+        }],
       });
       const file = await fh.getFile();
-      const ab   = await file.arrayBuffer();
-      const wb   = window.XLSX.read(ab, { type: 'array' });
-      const ws   = wb.Sheets[wb.SheetNames[0]];
-      const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      const isCsv = file.name.toLowerCase().endsWith('.csv');
+      let rows;
+      if (isCsv) {
+        const text = await file.text();
+        const wb   = window.XLSX.read(text, { type: 'string' });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      } else {
+        const ab = await file.arrayBuffer();
+        const wb = window.XLSX.read(ab, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      }
       const parsed = parseZZTakeoff(rows);
-      if (!parsed) { alert('Could not parse ZZTakeoff format.'); return; }
+      if (!parsed) { alert('Could not parse ZZTakeoff format. Make sure this is a ZZTakeoff export file.'); return; }
       setZZPreview(parsed);
     } catch (e) { if (e.name !== 'AbortError') console.error('ZZTakeoff import error:', e); }
   }
 
   async function doZZImport(areas) {
     setZZImporting(true);
-    for (const area of areas.filter(a => a.checked && a.items.some(it => it.checked))) {
-      const { data: areaRow } = await window.dbHelpers.addArea(activeBidId, { name: area.name, qty: 1, sort_order: (tree || []).length });
-      if (!areaRow) continue;
-      const { data: secRow } = await window.dbHelpers.addSection(areaRow.id, { name: 'Casework', sort_order: 0 });
-      if (!secRow) continue;
-      for (const [idx, it] of area.items.filter(i => i.checked).entries()) {
-        await window.dbHelpers.addLineItem({ bid_id: activeBidId, area_id: areaRow.id, section_id: secRow.id, description: it.desc, qty: it.qty, unit: it.unit, unit_cost: it.unitCost, sort_order: idx });
-      }
+    const checkedAreas = areas.filter(a => a.checked && a.items.some(it => it.checked));
+    const baseOrder = (tree || []).length;
+
+    // Build the in-memory tree nodes immediately so the UI updates without waiting for DB
+    const newTreeNodes = [];
+
+    for (const [aIdx, area] of checkedAreas.entries()) {
+      const checkedItems = area.items.filter(it => it.checked);
+      const areaId  = crypto.randomUUID();
+      const secId   = crypto.randomUUID();
+      const itemNodes = checkedItems.map((it, idx) => ({
+        id: crypto.randomUUID(), desc: it.desc, description: it.desc,
+        qty: it.qty, unit: it.unit, unit_cost: it.unitCost,
+        drawing_ref: '', ignore: false, no_print: false, sort_order: idx,
+        section_id: secId, area_id: areaId, bid_id: activeBidId,
+      }));
+      const secNode  = { id: secId, name: 'Casework', area_id: areaId, sort_order: 0, ignore: false, items: itemNodes };
+      const areaNode = { id: areaId, name: area.name, bid_id: activeBidId, qty: 1, sort_order: baseOrder + aIdx, sections: [secNode] };
+      newTreeNodes.push(areaNode);
     }
-    setZZPreview(null); setZZImporting(false); setTree(null); setActiveAreaId(null); setActiveSectionId(null);
+
+    // Update UI immediately (memory-first)
+    setTree(prev => [...(prev || []), ...newTreeNodes]);
+    if (newTreeNodes.length > 0) {
+      setActiveAreaId(newTreeNodes[0].id);
+      setActiveSectionId(newTreeNodes[0].sections[0]?.id || null);
+    }
+    setZZPreview(null);
+    setZZImporting(false);
+
+    // Sync to DB in background — don't block the UI
+    (async () => {
+      for (const node of newTreeNodes) {
+        const { data: areaRow } = await window.dbHelpers.addArea(activeBidId, { name: node.name, qty: 1, sort_order: node.sort_order });
+        if (!areaRow) continue;
+        const { data: secRow } = await window.dbHelpers.addSection(areaRow.id, { name: 'Casework', sort_order: 0 });
+        if (!secRow) continue;
+        const sec = node.sections[0];
+        await Promise.all(sec.items.map((it, idx) =>
+          window.dbHelpers.addLineItem({ bid_id: activeBidId, area_id: areaRow.id, section_id: secRow.id, description: it.description, qty: it.qty, unit: it.unit, unit_cost: it.unit_cost, sort_order: idx })
+        ));
+        // Patch the in-memory node IDs to match the real DB IDs so future edits work
+        setTree(prev => (prev || []).map(a => a.id === node.id
+          ? { ...a, id: areaRow.id, sections: a.sections.map(s => s.id === sec.id ? { ...s, id: secRow.id, area_id: areaRow.id, items: s.items.map(it => ({ ...it, area_id: areaRow.id, section_id: secRow.id })) } : s) }
+          : a
+        ));
+      }
+    })();
   }
 
   // ── ACTIVE ALT ────────────────────────────────────────────────────────────
@@ -876,9 +999,10 @@ function EstimatorView({ activeBidId }) {
         <PDFPreviewModal
           bid={bid}
           tree={tree}
+          alts={alts}
           onClose={() => setShowPDFPreview(false)}
           onExport={() => {
-            const doc = generateProposalPDF(tree, bid, activeBidId);
+            const doc = generateProposalPDF(tree, bid, alts);
             doc.save((bid?.name || 'Proposal') + '.pdf');
             setShowPDFPreview(false);
           }}
@@ -1476,7 +1600,7 @@ function InfoPanel({ bid, setBid, activeBidId, alts, handlePctChange, setCenterV
 // PDF EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
 
-function generateProposalPDF(tree, bid) {
+function generateProposalPDF(tree, bid, alts) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
 
@@ -1526,6 +1650,13 @@ function generateProposalPDF(tree, bid) {
 
   function newPage() { doc.addPage(); y = 15; }
 
+  // Logo
+  if (window.FS_LOGO_B64) {
+    const logoW = 56, logoH = logoW * (219 / 800);
+    doc.addImage('data:image/jpeg;base64,' + window.FS_LOGO_B64, 'JPEG', LM, y, logoW, logoH);
+    y += logoH + 3;
+  }
+
   // Page 1 header
   const ax = RM, ay = y + 1;
   [{ t: 'Form and Structure, Inc.', b: true }, { t: '10708 NE 2nd Ave' },
@@ -1561,31 +1692,58 @@ function generateProposalPDF(tree, bid) {
     .forEach(c => txt(c.x, y, c.t, { bold: true, size: 7.5, align: c.a }));
   y += 5.2; hline(y, LM, RM, 0.4); y += 3;
 
-  for (const area of (tree || [])) {
-    if (area.ignore) continue;
-    checkY(8);
-    const aT = (area.sections || []).reduce((s, sec) =>
-      s + (sec.items || []).filter(it => !it.ignore).reduce((s2, it) =>
-        s2 + (it.qty || 0) * (it.unit_cost || 0), 0), 0) * ohFactor;
-    const aQty = area.qty || 1;
-    txt(cDesc, y, area.name || 'Area', { bold: true, size: 8.5 });
-    txt(cQty, y, String(aQty), { size: 8.5, align: 'right' });
-    txt(cUnit, y, aQty > 1 ? 'rooms' : 'lump sum', { size: 8.5 });
-    txt(cPrice, y, '$' + aT.toLocaleString(undefined, { maximumFractionDigits: 0 }), { size: 8.5, align: 'right' });
+  const $ = n => '$' + (n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const mode = (I.pricing_mode || 'byarea').toLowerCase().replace(/\s+/g, '');
+
+  function areaMatTotal(area) {
+    if (area.ignore) return 0;
+    return (area.sections || []).reduce((s, sec) => {
+      if (sec.ignore) return s;
+      return s + (sec.items || []).reduce((s2, it) =>
+        s2 + (it.ignore ? 0 : (it.qty || 0) * (it.unit_cost || 0)), 0);
+    }, 0) * (area.qty || 1);
+  }
+
+  if (mode === 'lumpsum') {
+    checkY(6);
+    txt(cDesc,  y, I.name || 'Base Scope of Work', { size: 8.5 });
+    txt(cQty,   y, '1', { size: 8.5, align: 'right' });
+    txt(cUnit,  y, 'lump sum', { size: 8.5 });
+    txt(cPrice, y, $(bidCalc.total), { size: 8.5, align: 'right' });
     y += 5;
-    for (const sec of (area.sections || [])) {
-      if (sec.ignore) continue;
-      for (const item of (sec.items || [])) {
-        if (item.ignore) continue;
-        checkY(5);
-        const iTotal = (item.qty || 0) * (item.unit_cost || 0) * ohFactor;
-        txt(cDesc, y, '  ' + (item.desc || item.description || '—'), { size: 7.5, maxWidth: 90 });
-        if (item.drawing_ref) txt(cRef, y, item.drawing_ref, { size: 7.5, maxWidth: 28 });
-        txt(cQty, y, String(item.qty || 1), { size: 7.5, align: 'right' });
-        txt(cUnit, y, item.unit || '', { size: 7.5 });
-        txt(cPrice, y, '$' + iTotal.toLocaleString(undefined, { maximumFractionDigits: 0 }), { size: 7.5, align: 'right' });
-        y += 4.2;
+  } else if (mode === 'byarea') {
+    for (const area of (tree || [])) {
+      if (area.ignore || area.no_print) continue;
+      checkY(8);
+      const aQty = area.qty || 1;
+      txt(cDesc,  y, area.name || 'Area', { bold: true, size: 8.5 });
+      txt(cQty,   y, String(aQty), { size: 8.5, align: 'right' });
+      txt(cUnit,  y, aQty > 1 ? 'rooms' : 'lump sum', { size: 8.5 });
+      txt(cPrice, y, $(areaMatTotal(area) * ohFactor), { size: 8.5, align: 'right' });
+      y += 5;
+    }
+  } else {
+    // Itemized: area header + all items + area subtotal
+    for (const area of (tree || [])) {
+      if (area.ignore || area.no_print) continue;
+      checkY(10);
+      txt(cDesc, y, area.name || 'Area', { bold: true, size: 8.5 }); y += 4.5;
+      for (const sec of (area.sections || [])) {
+        if (sec.ignore || sec.no_print) continue;
+        for (const it of (sec.items || [])) {
+          if (it.ignore || it.no_print) continue;
+          checkY(5);
+          txt(cDesc,  y, '  ' + (it.description || it.desc || '—'), { size: 7.5, maxWidth: 90 });
+          if (it.drawing_ref) txt(cRef, y, it.drawing_ref, { size: 7.5, maxWidth: 28 });
+          txt(cQty,   y, String(it.qty || 1), { size: 7.5, align: 'right' });
+          txt(cUnit,  y, it.unit || '', { size: 7.5 });
+          txt(cPrice, y, $((it.qty || 0) * (it.unit_cost || 0) * ohFactor), { size: 7.5, align: 'right' });
+          y += 4.2;
+        }
       }
+      txt(cDesc,  y, '  ' + (area.name || 'Area') + ' Subtotal', { italic: true, size: 7.5 });
+      txt(cPrice, y, $(areaMatTotal(area) * ohFactor), { italic: true, size: 7.5, align: 'right' });
+      y += 4.2; y += 2;
     }
   }
 
@@ -1593,26 +1751,49 @@ function generateProposalPDF(tree, bid) {
   txt(cDesc, y, 'Base Bid', { bold: true, size: 10 });
   txt(cQty, y, '1', { bold: true, size: 10, align: 'right' });
   txt(cUnit, y, '$', { bold: true, size: 10 });
-  txt(cPrice, y, '$' + bidCalc.total.toLocaleString(undefined, { maximumFractionDigits: 0 }), { bold: true, size: 10, align: 'right' });
+  txt(cPrice, y, $(bidCalc.total), { bold: true, size: 10, align: 'right' });
   y += 6; hline(y, LM, RM, 0.8); y += 6;
+
+  // Alternates
+  const printAlts = (alts || []).filter(a => !a.ignore && !a.no_print);
+  if (printAlts.length > 0) {
+    checkY(10);
+    txt(cDesc, y, 'ALTERNATES', { bold: true, size: 8.5 }); y += 5;
+    for (const alt of printAlts) {
+      checkY(6);
+      const ac = calcAlt(alt, bid);
+      txt(cDesc,  y, alt.description || 'Alternate', { size: 8.5 });
+      txt(cQty,   y, '1', { size: 8.5, align: 'right' });
+      txt(cUnit,  y, 'lump sum', { size: 8.5 });
+      txt(cPrice, y, $(ac.total), { size: 8.5, align: 'right' });
+      y += 5;
+    }
+    y += 3;
+  }
 
   // Page 2 — Terms
   newPage();
   txt(LM, y, 'Form and Structure, Inc.  ' + (I.doc_type || 'Proposal'), { bold: true, size: 9.5 }); y += 4.5;
   txt(LM, y, (I.number ? I.number + ' - ' : '') + (I.name || ''), { size: 8.5 });
-  txt(RM, y, 'Page No. 2 of 2 Pages', { size: 8.5, align: 'right' }); y += 4.5;
-  txt(LM, y, I.client || '', { size: 8.5 }); y += 3.5;
+  txt(RM, y, 'Page No. 2', { size: 8.5, align: 'right' }); y += 4.5;
+  txt(LM, y, I.gc_name || '', { size: 8.5 }); y += 3.5;
   hline(y, LM, RM, 0.5); y += 5.5;
 
   function section(title, lines) {
+    if (!lines.length) return;
     checkY(8);
     txt(LM, y, title, { bold: true, size: 8.5 }); y += 4.5;
     lines.forEach(line => { checkY(4); txt(LM + 3, y, line, { size: 7.5 }); y += 3.8; });
     y += 3;
   }
 
-  section('EXCLUSIONS:', (I.exclusions || DEFAULT_EXCLUSIONS).filter(e => e.active).map(e => e.text));
-  section('CLARIFICATIONS:', (I.clarifications || DEFAULT_CLARIFICATIONS).filter(e => e.active).map(e => e.text));
+  section('EXCLUSIONS:',     migrateTerms(I.exclusions,     DEFAULT_EXCLUSIONS).filter(e => e.active).map(e => e.text));
+  section('CLARIFICATIONS:', migrateTerms(I.clarifications, DEFAULT_CLARIFICATIONS).filter(e => e.active).map(e => e.text));
+  if ((I.general_terms  || []).some(e => e.active)) section('GENERAL TERMS:',           (I.general_terms  || []).filter(e => e.active).map(e => e.text));
+  if ((I.warranty       || []).some(e => e.active)) section('WARRANTY AND FABRICATION:', (I.warranty       || []).filter(e => e.active).map(e => e.text));
+  if ((I.finish_terms   || []).some(e => e.active)) section('FINISH MATERIALS:',         (I.finish_terms   || []).filter(e => e.active).map(e => e.text));
+  if ((I.hardware_terms || []).some(e => e.active)) section('HARDWARE ASSUMPTIONS:',     (I.hardware_terms || []).filter(e => e.active).map(e => e.text));
+  if ((I.fab_note       || []).some(e => e.active)) section('FABRICATION NOTE:',         (I.fab_note       || []).filter(e => e.active).map(e => e.text));
 
   y += 4;
   txt(LM, y, 'Please Note: Prices valid for 30 days.', { italic: true, size: 7.5 });
@@ -1622,12 +1803,12 @@ function generateProposalPDF(tree, bid) {
   return doc;
 }
 
-function PDFPreviewModal({ bid, tree, onClose, onExport }) {
+function PDFPreviewModal({ bid, tree, alts, onClose, onExport }) {
   const [pdfUrl, setPdfUrl] = uS_est(null);
 
   uE_est(() => {
     try {
-      const doc = generateProposalPDF(tree, bid);
+      const doc = generateProposalPDF(tree, bid, alts);
       const url = doc.output('bloburi') || doc.output('datauristring');
       setPdfUrl(url);
     } catch (e) {
