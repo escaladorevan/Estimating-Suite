@@ -1,0 +1,16 @@
+{
+  "name": "fs-estimating-suite",
+  "version": "1.0.0",
+  "private": true,
+  "description": "F&S Estimating Suite – dev tooling",
+  "main": "tools/electron-main.js",
+  "scripts": {
+    "tools-dev": "node tools/cli.js"
+  },
+  "dependencies": {
+    "electron": "^35.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
