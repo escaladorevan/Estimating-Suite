@@ -131,6 +131,7 @@ function EstimatorView({ activeBidId }) {
   const [termsTab,        setTermsTab]        = uS_est('general_terms');
   const [zzPreview,       setZZPreview]       = uS_est(null);
   const [zzImporting,     setZZImporting]     = uS_est(false);
+  const [showPDFPreview,  setShowPDFPreview]  = uS_est(false);
   const [drafts,          setDrafts]          = uS_est({});   // { [sectionId]: {desc,qty,unit,unitCost,drawingRef} }
   const [altDrafts,       setAltDrafts]       = uS_est({});  // { [sectionId]: draft } for alt sections
   const saveTimer                             = uR_est(null);
@@ -332,6 +333,11 @@ function EstimatorView({ activeBidId }) {
     }
   }
 
+  function handleAddItemClick(areaId, sectionId) {
+    const input = document.querySelector(`[data-draft-desc="${sectionId}"]`);
+    if (input) input.focus();
+  }
+
   // ── MARKUP % ──────────────────────────────────────────────────────────────
   function handlePctChange(field, value) {
     const n = Math.max(0, Math.min(100, parseFloat(value) || 0));
@@ -505,6 +511,77 @@ function EstimatorView({ activeBidId }) {
     return null;
   }, [tree, activeSectionId, centerView, activeAlt, activeAltSecId]);
 
+  // ── Section totals helper ─────────────────────────────────────────────────
+  const getSecTotal = (sec, areaQty) => {
+    if (sec.ignore) return 0;
+    return (sec.items || []).reduce((s, it) => {
+      if (it.ignore) return s;
+      return s + (it.qty || 0) * (it.unit_cost || 0) * areaQty;
+    }, 0);
+  };
+
+  // ── Seed sample data for current bid ─────────────────────────────────────
+  async function seedCurrentBid() {
+    if (!activeBidId || !tree) return;
+    const items = [
+      { name: 'Kitchen Cabinetry', sections: [
+        { name: 'Base Cabinets', items: [
+          { description: '3/4" Maple 5-piece base doors (36"w)', qty: 4, unit: 'EA', unit_cost: 320 },
+          { description: '3/4" Maple 5-piece base doors (48"w)', qty: 2, unit: 'EA', unit_cost: 420 },
+          { description: 'Base cabinet boxes (36"w)', qty: 4, unit: 'EA', unit_cost: 280 },
+        ]},
+        { name: 'Wall Cabinets', items: [
+          { description: '3/4" Maple 5-piece wall doors (30"w)', qty: 5, unit: 'EA', unit_cost: 240 },
+          { description: '3/4" Maple 5-piece wall doors (36"w)', qty: 3, unit: 'EA', unit_cost: 280 },
+        ]},
+      ]},
+      { name: 'Countertops', sections: [
+        { name: 'Quartz Counters', items: [
+          { description: 'Quartz countertop (LF)', qty: 28, unit: 'LF', unit_cost: 95 },
+          { description: 'Island quartz top (LF)', qty: 8, unit: 'LF', unit_cost: 105 },
+        ]},
+      ]},
+      { name: 'Hardware', sections: [
+        { name: 'Hardware & Hinges', items: [
+          { description: 'Blum 125° concealed hinges (per cabinet)', qty: 14, unit: 'EA', unit_cost: 22 },
+          { description: 'Brushed chrome knobs/pulls', qty: 32, unit: 'EA', unit_cost: 8.50 },
+        ]},
+      ]},
+    ];
+    for (const areaSpec of items) {
+      let area = tree.find(a => a.name === areaSpec.name);
+      if (!area) {
+        const { data: newArea } = await window.dbHelpers.addArea(activeBidId, { name: areaSpec.name, qty: 1, sort_order: (tree || []).length });
+        if (!newArea) continue;
+        area = { ...newArea, sections: [] };
+        setTree(prev => [...(prev || []), area]);
+      }
+      for (const secSpec of areaSpec.sections) {
+        let section = (area.sections || []).find(s => s.name === secSpec.name);
+        if (!section) {
+          const { data: secData } = await window.dbHelpers.addSection(area.id, { name: secSpec.name, sort_order: (area.sections || []).length });
+          if (!secData) continue;
+          section = { ...secData, items: [] };
+          setTree(prev => prev.map(a => a.id === area.id ? { ...a, sections: [...a.sections, section] } : a));
+          area = { ...area, sections: [...(area.sections || []), section] };
+        }
+        for (const it of secSpec.items) {
+          const { data } = await window.dbHelpers.addLineItem({
+            bid_id: activeBidId, area_id: area.id, section_id: section.id,
+            description: it.description, qty: it.qty, unit: it.unit, unit_cost: it.unit_cost,
+            sort_order: (section.items || []).length,
+          });
+          if (data) {
+            setTree(prev => prev.map(a => a.id === area.id ? {
+              ...a, sections: a.sections.map(s => s.id === section.id ? { ...s, items: [...s.items, data] } : s)
+            } : a));
+            section = { ...section, items: [...(section.items || []), data] };
+          }
+        }
+      }
+    }
+  }
+
   // ── RENDER ────────────────────────────────────────────────────────────────
   if (!activeBidId) return (
     <div className="view active" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
@@ -525,7 +602,9 @@ function EstimatorView({ activeBidId }) {
       {/* Cost topbar */}
       <div style={{ padding: '8px 20px', borderBottom: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', marginRight: 6 }}>{bid?.name || '…'}</div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}>
+        {(tree || []).length === 0 && <button className="btn sm" onClick={seedCurrentBid}>Seed sample data</button>}
+        <button className="btn sm accent" onClick={() => setShowPDFPreview(true)} style={{ marginLeft: 'auto' }}>Build proposal →</button>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           {[
             { label: 'Material', val: costs.mat },
             { label: 'OH',       val: costs.oh },
@@ -709,6 +788,7 @@ function EstimatorView({ activeBidId }) {
               handleDeleteItem={handleDeleteItem}
               getDraft={getDraft} setDraft={setDraft} handleCommitDraft={handleCommitDraft}
               handleZZImport={handleZZImport}
+              handleAddItemClick={handleAddItemClick} getSecTotal={getSecTotal}
             />
           )}
           {centerView === 'grid' && (tree || []).length === 0 && (
@@ -788,7 +868,72 @@ function EstimatorView({ activeBidId }) {
         </div>
       )}
 
+      {showPDFPreview && (
+        <PDFPreviewModal
+          bid={bid}
+          tree={tree}
+          onClose={() => setShowPDFPreview(false)}
+          onExport={() => {
+            const doc = generateProposalPDF(tree, bid, activeBidId);
+            doc.save((bid?.name || 'Proposal') + '.pdf');
+            setShowPDFPreview(false);
+          }}
+        />
+      )}
+
     </div>
+  );
+}
+
+// ── ItemRow — local state for optimistic updates, syncs to tree on blur ──────
+function ItemRow({ it, area, sec, handleUpdateItem, handleToggleItemFlag, handleDeleteItem, UNITS }) {
+  const [qty, setQty] = uS_est(it.qty || 0);
+  const [unitCost, setUnitCost] = uS_est(it.unit_cost || 0);
+  const [desc, setDesc] = uS_est(it.description || '');
+
+  uE_est(() => { setQty(it.qty || 0); }, [it.qty]);
+  uE_est(() => { setUnitCost(it.unit_cost || 0); }, [it.unit_cost]);
+  uE_est(() => { setDesc(it.description || ''); }, [it.description]);
+
+  const ext = qty * unitCost * (area.qty || 1);
+
+  return (
+    <tr style={{ opacity: it.ignore ? .45 : 1 }}
+      onMouseEnter={e => { const b = e.currentTarget.querySelector('.del-btn'); if (b) b.style.opacity = '1'; }}
+      onMouseLeave={e => { const b = e.currentTarget.querySelector('.del-btn'); if (b) b.style.opacity = '0'; }}>
+      <td className="ctr"><input type="checkbox" checked={!!it.ignore} onChange={() => handleToggleItemFlag(area.id, sec.id, it.id, 'ignore')} title="Ignore" /></td>
+      <td className="ctr"><input type="checkbox" checked={!!it.no_print} onChange={() => handleToggleItemFlag(area.id, sec.id, it.id, 'no_print')} title="No print" /></td>
+      <td style={{ paddingLeft: 6 }}>
+        <input className="inline-inp" value={desc}
+          style={{ textDecoration: it.ignore ? 'line-through' : 'none' }}
+          onChange={e => setDesc(e.target.value)}
+          onBlur={e => handleUpdateItem(area.id, sec.id, it.id, 'description', e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+      </td>
+      <td className="num">
+        <input className="inline-inp num tnum" value={qty} type="number" min="0"
+          onChange={e => { const v = parseFloat(e.target.value) || 0; setQty(v); handleUpdateItem(area.id, sec.id, it.id, 'qty', v); }}
+          onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+      </td>
+      <td className="ctr">
+        <select value={it.unit || 'EA'} onChange={e => handleUpdateItem(area.id, sec.id, it.id, 'unit', e.target.value)}
+          style={{ background: 'transparent', border: 'none', fontSize: 11, fontFamily: 'var(--mono)', cursor: 'pointer' }}>
+          {UNITS.map(u => <option key={u}>{u}</option>)}
+        </select>
+      </td>
+      <td className="num">
+        <input className="inline-inp num tnum" value={unitCost} type="number" min="0" step="0.01"
+          onChange={e => { const v = parseFloat(e.target.value) || 0; setUnitCost(v); handleUpdateItem(area.id, sec.id, it.id, 'unit_cost', v); }}
+          onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+      </td>
+      <td className="num tnum" style={{ fontWeight: 600, color: it.ignore ? 'var(--ink-3)' : 'var(--ink)' }}>
+        {ext > 0 ? '$' + Math.round(ext).toLocaleString() : '—'}
+      </td>
+      <td className="ctr">
+        <button className="del-btn btn ghost xs" style={{ opacity: 0, color: 'var(--bad)', transition: 'opacity .15s' }}
+          onClick={() => handleDeleteItem(area.id, sec.id, it.id)}>×</button>
+      </td>
+    </tr>
   );
 }
 
@@ -796,7 +941,7 @@ function EstimatorView({ activeBidId }) {
 function AreaGridPanel({ tree, activeAreaId, activeSectionId, setActiveSectionId,
   handleAddSection, handleDeleteSection, handleUpdateAreaField, handleUpdateSectionName,
   handleUpdateItem, handleToggleItemFlag, handleDeleteItem,
-  getDraft, setDraft, handleCommitDraft, handleZZImport }) {
+  getDraft, setDraft, handleCommitDraft, handleZZImport, handleAddItemClick, getSecTotal }) {
 
   const areas = (tree || []).filter(a => !activeAreaId || a.id === activeAreaId);
   const UNITS = ['EA', 'LF', 'SF', 'SY', 'CY', 'LS', 'HR', 'TON'];
@@ -824,10 +969,21 @@ function AreaGridPanel({ tree, activeAreaId, activeSectionId, setActiveSectionId
 
           {/* Sections */}
           {(area.sections || []).map(sec => {
-            const secTotal = (sec.items || []).reduce((s, it) => s + (it.ignore ? 0 : (it.qty || 0) * (it.unit_cost || 0) * (area.qty || 1)), 0);
+            const secTotal = getSecTotal(sec, area.qty || 1);
             const d = getDraft(sec.id);
             return (
               <div key={sec.id}>
+                {/* Area context + drawing ref header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', background: 'var(--panel-alt)', borderBottom: '1px solid var(--line)', marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--mute)', width: 60, flexShrink: 0 }}>Area:</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', flex: 1 }}>{area.name}</span>
+                  <span style={{ fontSize: 10, color: 'var(--mute)', flexShrink: 0 }}>Dwg Ref:</span>
+                  <input className="inline-inp mono" defaultValue={area.drawing_ref || ''} placeholder="—"
+                    style={{ width: 120, flexShrink: 0 }}
+                    onBlur={e => handleUpdateAreaField(area.id, 'drawing_ref', e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+                </div>
+
                 {/* Section header row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: 'var(--panel)', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}
                   onClick={() => setActiveSectionId(sec.id)}>
@@ -848,69 +1004,44 @@ function AreaGridPanel({ tree, activeAreaId, activeSectionId, setActiveSectionId
                 {/* Items table */}
                 <table className="wf" style={{ tableLayout: 'fixed' }}>
                   <colgroup>
-                    <col style={{ width: 28 }} /><col style={{ width: 28 }} /><col />
-                    <col style={{ width: 72 }} /><col style={{ width: 60 }} /><col style={{ width: 58 }} />
-                    <col style={{ width: 80 }} /><col style={{ width: 88 }} /><col style={{ width: 28 }} />
+                    <col style={{ width: 28 }} />
+                    <col style={{ width: 28 }} />
+                    <col />
+                    <col style={{ width: 60 }} />
+                    <col style={{ width: 50 }} />
+                    <col style={{ width: 70 }} />
+                    <col style={{ width: 80 }} />
+                    <col style={{ width: 28 }} />
                   </colgroup>
                   <thead>
                     <tr>
                       <th className="ctr" title="Ignore">Ign</th><th className="ctr" title="No Print">NP</th>
-                      <th>Description</th><th>Dwg Ref</th><th className="num">Qty</th>
+                      <th>Description</th><th className="num">Qty</th>
                       <th className="ctr">Unit</th><th className="num">Unit $</th><th className="num">Total</th><th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(sec.items || []).map(it => {
-                      const ext = (it.qty || 0) * (it.unit_cost || 0) * (area.qty || 1);
-                      return (
-                        <tr key={it.id} style={{ opacity: it.ignore ? .45 : 1 }}
-                          onMouseEnter={e => { const b = e.currentTarget.querySelector('.del-btn'); if (b) b.style.opacity = '1'; }}
-                          onMouseLeave={e => { const b = e.currentTarget.querySelector('.del-btn'); if (b) b.style.opacity = '0'; }}>
-                          <td className="ctr"><input type="checkbox" checked={!!it.ignore} onChange={() => handleToggleItemFlag(area.id, sec.id, it.id, 'ignore')} title="Ignore" /></td>
-                          <td className="ctr"><input type="checkbox" checked={!!it.no_print} onChange={() => handleToggleItemFlag(area.id, sec.id, it.id, 'no_print')} title="No print" /></td>
-                          <td style={{ paddingLeft: 6 }}>
-                            <input className="inline-inp" defaultValue={it.description} style={{ textDecoration: it.ignore ? 'line-through' : 'none' }}
-                              onBlur={e => handleUpdateItem(area.id, sec.id, it.id, 'description', e.target.value)}
-                              onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
-                          </td>
-                          <td><input className="inline-inp mono" defaultValue={it.drawing_ref || ''} placeholder="—"
-                            onBlur={e => handleUpdateItem(area.id, sec.id, it.id, 'drawing_ref', e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && e.target.blur()} /></td>
-                          <td className="num"><input className="inline-inp num tnum" defaultValue={it.qty}
-                            onBlur={e => handleUpdateItem(area.id, sec.id, it.id, 'qty', e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && e.target.blur()} /></td>
-                          <td className="ctr">
-                            <select value={it.unit || 'EA'} onChange={e => handleUpdateItem(area.id, sec.id, it.id, 'unit', e.target.value)}
-                              style={{ background: 'transparent', border: 'none', fontSize: 11, fontFamily: 'var(--mono)', cursor: 'pointer' }}>
-                              {UNITS.map(u => <option key={u}>{u}</option>)}
-                            </select>
-                          </td>
-                          <td className="num"><input className="inline-inp num tnum" defaultValue={it.unit_cost}
-                            onBlur={e => handleUpdateItem(area.id, sec.id, it.id, 'unit_cost', e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && e.target.blur()} /></td>
-                          <td className="num tnum" style={{ fontWeight: 600, color: it.ignore ? 'var(--ink-3)' : 'var(--ink)' }}>{ext ? '$' + Math.round(ext).toLocaleString() : '—'}</td>
-                          <td className="ctr">
-                            <button className="del-btn btn ghost xs" style={{ opacity: 0, color: 'var(--bad)', transition: 'opacity .15s' }}
-                              onClick={() => handleDeleteItem(area.id, sec.id, it.id)}>×</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {/* Notion-style draft row */}
+                    {(sec.items || []).map(it => (
+                      <ItemRow key={it.id} it={it} area={area} sec={sec}
+                        handleUpdateItem={handleUpdateItem}
+                        handleToggleItemFlag={handleToggleItemFlag}
+                        handleDeleteItem={handleDeleteItem}
+                        UNITS={UNITS} />
+                    ))}
+                    {/* Draft row — press Enter to commit */}
                     <tr style={{ background: 'var(--bg)' }}>
                       <td className="ctr"><input type="checkbox" disabled /></td>
                       <td className="ctr"><input type="checkbox" disabled /></td>
                       <td style={{ paddingLeft: 6 }}>
                         <input className="inline-inp" value={d.desc} placeholder="+ add item…"
+                          data-draft-desc={sec.id}
                           style={{ color: 'var(--ink-3)' }}
                           onChange={e => setDraft(sec.id, { desc: e.target.value })}
-                          onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleCommitDraft(area.id, sec.id); } }}
-                          onBlur={() => handleCommitDraft(area.id, sec.id)} />
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCommitDraft(area.id, sec.id); } }} />
                       </td>
-                      <td><input className="inline-inp mono" value={d.drawingRef || ''} placeholder="—"
-                        onChange={e => setDraft(sec.id, { drawingRef: e.target.value })} /></td>
                       <td className="num"><input className="inline-inp num tnum" value={d.qty}
-                        onChange={e => setDraft(sec.id, { qty: parseFloat(e.target.value) || 1 })} /></td>
+                        onChange={e => setDraft(sec.id, { qty: parseFloat(e.target.value) || 1 })}
+                        onKeyDown={e => e.key === 'Enter' && handleCommitDraft(area.id, sec.id)} /></td>
                       <td className="ctr">
                         <select value={d.unit || 'EA'} onChange={e => setDraft(sec.id, { unit: e.target.value })}
                           style={{ background: 'transparent', border: 'none', fontSize: 11, fontFamily: 'var(--mono)' }}>
@@ -918,9 +1049,24 @@ function AreaGridPanel({ tree, activeAreaId, activeSectionId, setActiveSectionId
                         </select>
                       </td>
                       <td className="num"><input className="inline-inp num tnum" value={d.unitCost}
-                        onChange={e => setDraft(sec.id, { unitCost: parseFloat(e.target.value) || 0 })} /></td>
-                      <td className="num tnum" style={{ color: 'var(--ink-3)' }}>—</td>
-                      <td></td>
+                        onChange={e => setDraft(sec.id, { unitCost: parseFloat(e.target.value) || 0 })}
+                        onKeyDown={e => e.key === 'Enter' && handleCommitDraft(area.id, sec.id)} /></td>
+                      <td className="num tnum" style={{ color: 'var(--ink-3)' }}>
+                        {d.qty && d.unitCost ? '$' + Math.round(d.qty * d.unitCost * (area.qty || 1)).toLocaleString() : '—'}
+                      </td>
+                      <td className="ctr">
+                        <button className="btn ghost xs" style={{ fontSize: 13, color: 'var(--ok)' }}
+                          onMouseDown={e => { e.preventDefault(); handleCommitDraft(area.id, sec.id); }}>✓</button>
+                      </td>
+                    </tr>
+                    {/* + Add Item button */}
+                    <tr>
+                      <td colSpan={8} style={{ padding: '2px 6px 6px' }}>
+                        <button className="btn ghost xs" style={{ fontSize: 11, color: 'var(--accent)', padding: '4px 8px' }}
+                          onMouseDown={e => { e.preventDefault(); handleAddItemClick(area.id, sec.id); }}>
+                          + Add Item
+                        </button>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -1312,6 +1458,196 @@ function InfoPanel({ bid, setBid, activeBidId, alts, handlePctChange, setCenterV
           onBlur={e => { setBid(p => ({ ...p, notes: e.target.value })); window.dbHelpers.updateBidInfo(activeBidId, { notes: e.target.value }); }}
           style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 'var(--r-sm,4px)', padding: '6px 8px', fontSize: 12.5, background: 'var(--bg)', resize: 'vertical' }} />
       </label>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PDF EXPORT
+// ─────────────────────────────────────────────────────────────────────────────
+
+function generateProposalPDF(tree, bid) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
+
+  const I = bid || {};
+  const bidCalc = calcBid(tree, bid);
+  const ohFactor = 1 + (bid?.oh_pct ?? 15) / 100;
+
+  const LM = 19, RM = 192, CW = RM - LM, BM = 275;
+  const cDesc = LM, cRef = LM + 96, cQty = LM + 124, cUnit = LM + 135, cPrice = RM;
+  let y = 15;
+
+  function txt(x, yy, str, opts = {}) {
+    if (!str && str !== 0) return;
+    doc.setFontSize(opts.size || 8.5);
+    doc.setFont('helvetica', opts.bold && opts.italic ? 'bolditalic' : opts.bold ? 'bold' : opts.italic ? 'italic' : 'normal');
+    doc.setTextColor(...(opts.color || [0, 0, 0]));
+    if (opts.align === 'right') doc.text(String(str), x, yy, { align: 'right' });
+    else doc.text(String(str), x, yy, { maxWidth: opts.maxWidth || undefined });
+  }
+
+  function hline(yy, x0, x1, lw, gray) {
+    doc.setDrawColor(gray ? 153 : 0);
+    doc.setLineWidth(lw || 0.3);
+    doc.line(x0 || LM, yy, x1 || RM, yy);
+  }
+
+  function fillRect(x, yy, w, h, r, g, b) {
+    doc.setFillColor(r || 217, g || 217, b || 217);
+    doc.rect(x, yy, w, h, 'F');
+  }
+
+  function checkY(space) {
+    if (y + space > BM) {
+      doc.addPage();
+      y = 15;
+      txt(LM, y, 'Form and Structure, Inc.  ' + (I.doc_type || 'Proposal'), { bold: true, size: 9.5 });
+      y += 4.5;
+      txt(LM, y, (I.number ? I.number + ' - ' : '') + (I.name || ''), { size: 8.5 });
+      txt(RM, y, 'Continued…', { size: 8.5, align: 'right' });
+      y += 4.5;
+      txt(LM, y, I.client || '', { size: 8.5 });
+      y += 3.5;
+      hline(y, LM, RM, 0.5);
+      y += 5.5;
+    }
+  }
+
+  function newPage() { doc.addPage(); y = 15; }
+
+  // Page 1 header
+  const ax = RM, ay = y + 1;
+  [{ t: 'Form and Structure, Inc.', b: true }, { t: '10708 NE 2nd Ave' },
+   { t: 'Portland, OR 97211' }, { t: 'Tel: (503) 289-9204' }, { t: 'CCB# 52938' }]
+    .forEach((l, i) => txt(ax, ay + i * 3.8, l.t, { size: 7.5, bold: l.b, align: 'right' }));
+  y += 21;
+
+  txt(LM, y, I.doc_type || 'Proposal', { size: 16, bold: true });
+  txt(RM, y, 'Date  ' + (I.delivery_date || ''), { size: 9, align: 'right' });
+  y += 5; hline(y, LM, RM, 0.5); y += 5;
+
+  txt(LM, y, 'To:', { bold: true, size: 9 });
+  const tx = LM + 7;
+  txt(tx, y, I.client || 'Client', { bold: true, size: 9 });
+  y += 4.5;
+  if (I.address) {
+    (I.address || '').split(',').forEach(p => { txt(tx, y, p.trim(), { size: 9 }); y += 4.5; });
+  }
+  y += 2; hline(y, LM, RM, 0.25, true); y += 4.5;
+
+  const c1l = LM, c1v = LM + 23, c2l = LM + CW / 2, c2v = LM + CW / 2 + 23;
+  [
+    ['Attention :', I.attention || '', 'Project Id :', I.number || ''],
+    ['Project Desc.:', I.name || '', 'Ship Via :', 'Truck'],
+    ['Terms :', I.terms || 'Net 30', 'P.O. Number :', I.po_number || 'n/a'],
+    ['Delivery Date:', I.delivery_date || '', 'Estimator :', I.estimator || 'Evan Ramsey'],
+  ].forEach(([l1, v1, l2, v2]) => {
+    txt(c1l, y, l1, { bold: true, size: 7.5 }); txt(c1v, y, v1, { size: 7.5 });
+    txt(c2l, y, l2, { bold: true, size: 7.5 }); txt(c2v, y, v2, { size: 7.5 });
+    y += 4.5;
+  });
+  y += 2; hline(y, LM, RM, 0.5); y += 5;
+
+  fillRect(LM, y - 3.2, CW, 5.2);
+  [{ x: cDesc, t: 'Description', a: 'left' }, { x: cRef, t: 'Drawing Ref', a: 'left' },
+   { x: cQty, t: 'Qty', a: 'right' }, { x: cUnit, t: 'Unit', a: 'left' }, { x: cPrice, t: 'Price', a: 'right' }]
+    .forEach(c => txt(c.x, y, c.t, { bold: true, size: 7.5, align: c.a }));
+  y += 5.2; hline(y, LM, RM, 0.4); y += 3;
+
+  for (const area of (tree || [])) {
+    if (area.ignore) continue;
+    checkY(8);
+    const aT = (area.sections || []).reduce((s, sec) =>
+      s + (sec.items || []).filter(it => !it.ignore).reduce((s2, it) =>
+        s2 + (it.qty || 0) * (it.unit_cost || 0), 0), 0) * ohFactor;
+    const aQty = area.qty || 1;
+    txt(cDesc, y, area.name || 'Area', { bold: true, size: 8.5 });
+    txt(cQty, y, String(aQty), { size: 8.5, align: 'right' });
+    txt(cUnit, y, aQty > 1 ? 'rooms' : 'lump sum', { size: 8.5 });
+    txt(cPrice, y, '$' + aT.toLocaleString(undefined, { maximumFractionDigits: 0 }), { size: 8.5, align: 'right' });
+    y += 5;
+    for (const sec of (area.sections || [])) {
+      if (sec.ignore) continue;
+      for (const item of (sec.items || [])) {
+        if (item.ignore) continue;
+        checkY(5);
+        const iTotal = (item.qty || 0) * (item.unit_cost || 0) * ohFactor;
+        txt(cDesc, y, '  ' + (item.desc || item.description || '—'), { size: 7.5, maxWidth: 90 });
+        if (item.drawing_ref) txt(cRef, y, item.drawing_ref, { size: 7.5, maxWidth: 28 });
+        txt(cQty, y, String(item.qty || 1), { size: 7.5, align: 'right' });
+        txt(cUnit, y, item.unit || '', { size: 7.5 });
+        txt(cPrice, y, '$' + iTotal.toLocaleString(undefined, { maximumFractionDigits: 0 }), { size: 7.5, align: 'right' });
+        y += 4.2;
+      }
+    }
+  }
+
+  hline(y, LM, RM, 0.25, true); y += 4.5;
+  txt(cDesc, y, 'Base Bid', { bold: true, size: 10 });
+  txt(cQty, y, '1', { bold: true, size: 10, align: 'right' });
+  txt(cUnit, y, '$', { bold: true, size: 10 });
+  txt(cPrice, y, '$' + bidCalc.total.toLocaleString(undefined, { maximumFractionDigits: 0 }), { bold: true, size: 10, align: 'right' });
+  y += 6; hline(y, LM, RM, 0.8); y += 6;
+
+  // Page 2 — Terms
+  newPage();
+  txt(LM, y, 'Form and Structure, Inc.  ' + (I.doc_type || 'Proposal'), { bold: true, size: 9.5 }); y += 4.5;
+  txt(LM, y, (I.number ? I.number + ' - ' : '') + (I.name || ''), { size: 8.5 });
+  txt(RM, y, 'Page No. 2 of 2 Pages', { size: 8.5, align: 'right' }); y += 4.5;
+  txt(LM, y, I.client || '', { size: 8.5 }); y += 3.5;
+  hline(y, LM, RM, 0.5); y += 5.5;
+
+  function section(title, lines) {
+    checkY(8);
+    txt(LM, y, title, { bold: true, size: 8.5 }); y += 4.5;
+    lines.forEach(line => { checkY(4); txt(LM + 3, y, line, { size: 7.5 }); y += 3.8; });
+    y += 3;
+  }
+
+  section('EXCLUSIONS:', (I.exclusions || DEFAULT_EXCLUSIONS).filter(e => e.active).map(e => e.text));
+  section('CLARIFICATIONS:', (I.clarifications || DEFAULT_CLARIFICATIONS).filter(e => e.active).map(e => e.text));
+
+  y += 4;
+  txt(LM, y, 'Please Note: Prices valid for 30 days.', { italic: true, size: 7.5 });
+  y += 7; hline(y, LM, LM + 64, 0.4); y += 4;
+  txt(LM, y, 'Authorized Signature', { size: 7.5 });
+
+  return doc;
+}
+
+function PDFPreviewModal({ bid, tree, onClose, onExport }) {
+  const [pdfUrl, setPdfUrl] = uS_est(null);
+
+  uE_est(() => {
+    try {
+      const doc = generateProposalPDF(tree, bid);
+      const url = doc.output('bloburi') || doc.output('datauristring');
+      setPdfUrl(url);
+    } catch (e) {
+      console.error('PDF generation error:', e);
+    }
+  }, [bid, tree]);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center'
+    }} onClick={onClose}>
+      <div style={{
+        background: '#fff', borderRadius: 8, width: '90%', maxWidth: 900, height: '85vh',
+        display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>PDF Preview</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#666' }}>✕</button>
+        </div>
+        <iframe src={pdfUrl} style={{ flex: 1, border: 'none', width: '100%' }} />
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #ddd', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', background: '#f5f5f5' }}>Cancel</button>
+          <button onClick={onExport} style={{ padding: '8px 16px', border: 'none', borderRadius: 4, cursor: 'pointer', background: '#2D6A8F', color: '#fff', fontWeight: 600 }}>Download PDF</button>
+        </div>
+      </div>
     </div>
   );
 }
