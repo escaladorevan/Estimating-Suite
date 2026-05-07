@@ -319,12 +319,13 @@ function EstimatorView({ activeBidId }) {
     const d = getDraft(sectionId);
     if (!d.desc.trim()) return;
     const sec = (tree || []).flatMap(a => a.sections).find(s => s.id === sectionId);
-    const { data } = await window.dbHelpers.addLineItem({
+    const { data, error } = await window.dbHelpers.addLineItem({
       bid_id: activeBidId, area_id: areaId, section_id: sectionId,
       description: d.desc.trim(), qty: d.qty || 1, unit: d.unit || 'EA',
       unit_cost: d.unitCost || 0, drawing_ref: d.drawingRef || '',
       sort_order: (sec?.items || []).length,
     });
+    if (error) { console.error('addLineItem failed:', error); return; }
     if (data) {
       setTree(prev => prev.map(a => a.id === areaId ? {
         ...a, sections: a.sections.map(s => s.id === sectionId ? { ...s, items: [...s.items, data] } : s)
@@ -566,11 +567,12 @@ function EstimatorView({ activeBidId }) {
           area = { ...area, sections: [...(area.sections || []), section] };
         }
         for (const it of secSpec.items) {
-          const { data } = await window.dbHelpers.addLineItem({
+          const { data, error: itErr } = await window.dbHelpers.addLineItem({
             bid_id: activeBidId, area_id: area.id, section_id: section.id,
             description: it.description, qty: it.qty, unit: it.unit, unit_cost: it.unit_cost,
             sort_order: (section.items || []).length,
           });
+          if (itErr) { console.error('seedCurrentBid addLineItem failed:', itErr); continue; }
           if (data) {
             setTree(prev => prev.map(a => a.id === area.id ? {
               ...a, sections: a.sections.map(s => s.id === section.id ? { ...s, items: [...s.items, data] } : s)
@@ -602,7 +604,9 @@ function EstimatorView({ activeBidId }) {
       {/* Cost topbar */}
       <div style={{ padding: '8px 20px', borderBottom: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', marginRight: 6 }}>{bid?.name || '…'}</div>
-        {(tree || []).length === 0 && <button className="btn sm" onClick={seedCurrentBid}>Seed sample data</button>}
+        {!(tree || []).some(a => (a.sections || []).some(s => (s.items || []).length > 0)) && (
+          <button className="btn sm" onClick={seedCurrentBid}>Seed sample data</button>
+        )}
         <button className="btn sm accent" onClick={() => setShowPDFPreview(true)} style={{ marginLeft: 'auto' }}>Build proposal →</button>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           {[
