@@ -98,16 +98,20 @@ function ZZImportModal({ bidId, onClose, onImported }) {
     let done = 0;
 
     try {
-      for (const area of areas) {
-        const { data: aData, error: aErr } = await window.dbHelpers.addArea(bidId, { name: area.name, qty: 1 });
+      for (let aIdx = 0; aIdx < areas.length; aIdx++) {
+        const area = areas[aIdx];
+        const { data: aData, error: aErr } = await window.dbHelpers.addArea(bidId, { name: area.name, qty: 1, sort_order: aIdx });
         if (aErr) throw new Error('Area: ' + aErr.message);
-        for (const sec of area.sections) {
-          const { data: sData, error: sErr } = await window.dbHelpers.addSection(aData.id, { name: sec.name });
+        for (let sIdx = 0; sIdx < area.sections.length; sIdx++) {
+          const sec = area.sections[sIdx];
+          const { data: sData, error: sErr } = await window.dbHelpers.addSection(aData.id, { name: sec.name, sort_order: sIdx });
           if (sErr) throw new Error('Section: ' + sErr.message);
-          for (const item of sec.items) {
+          for (let iIdx = 0; iIdx < sec.items.length; iIdx++) {
+            const item = sec.items[iIdx];
             const { error: iErr } = await window.dbHelpers.addLineItem({
               bid_id: bidId, area_id: aData.id, section_id: sData.id,
               description: item.description, qty: item.qty, unit: item.unit, unit_cost: 0,
+              sort_order: iIdx,
             });
             if (iErr) throw new Error('Item: ' + iErr.message);
             done++;

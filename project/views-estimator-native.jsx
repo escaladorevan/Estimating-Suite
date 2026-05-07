@@ -88,14 +88,16 @@ function EstimatorNative({ bidId }) {
     const { data: na, error: e1 } = await window.dbHelpers.addArea(bidId, { name:area.name+' (copy)', qty:area.qty||1, sort_order:tree.areas.length });
     if (e1) { alert(e1.message); return; }
     const newSecs = [];
-    for (const sec of area.sections) {
-      const { data: ns } = await window.dbHelpers.addSection(na.id, { name:sec.name });
+    for (let si = 0; si < area.sections.length; si++) {
+      const sec = area.sections[si];
+      const { data: ns } = await window.dbHelpers.addSection(na.id, { name:sec.name, sort_order:si });
       if (!ns) continue;
       const newItems = [];
-      for (const item of sec.items) {
+      for (let ii = 0; ii < sec.items.length; ii++) {
+        const item = sec.items[ii];
         const { data: ni } = await window.dbHelpers.addLineItem({ bid_id:bidId, area_id:na.id, section_id:ns.id,
           description:item.description, qty:item.qty, unit:item.unit, unit_cost:item.unit_cost,
-          drawing_ref:item.drawing_ref, ignore:item.ignore, no_print:item.no_print });
+          drawing_ref:item.drawing_ref, ignore:item.ignore, no_print:item.no_print, sort_order:ii });
         if (ni) newItems.push(ni);
       }
       newSecs.push({...ns, items:newItems});
@@ -127,10 +129,11 @@ function EstimatorNative({ bidId }) {
     const { data: ns, error: e1 } = await window.dbHelpers.addSection(areaId, { name:sec.name+' (copy)', sort_order:area.sections.length });
     if (e1) { alert(e1.message); return; }
     const newItems = [];
-    for (const item of sec.items) {
+    for (let ii = 0; ii < sec.items.length; ii++) {
+      const item = sec.items[ii];
       const { data: ni } = await window.dbHelpers.addLineItem({ bid_id:bidId, area_id:areaId, section_id:ns.id,
         description:item.description, qty:item.qty, unit:item.unit, unit_cost:item.unit_cost,
-        drawing_ref:item.drawing_ref, ignore:item.ignore, no_print:item.no_print });
+        drawing_ref:item.drawing_ref, ignore:item.ignore, no_print:item.no_print, sort_order:ii });
       if (ni) newItems.push(ni);
     }
     setTree(t=>({areas:t.areas.map(a=>a.id!==areaId?a:{...a,sections:[...a.sections,{...ns,items:newItems}]})}));
@@ -145,7 +148,8 @@ function EstimatorNative({ bidId }) {
   }
   async function updateItem(itemId, fields) {
     setTree(t=>({areas:t.areas.map(a=>({...a,sections:a.sections.map(s=>({...s,items:s.items.map(i=>i.id===itemId?{...i,...fields}:i)}))}))}) );
-    window.dbHelpers.updateLineItem(itemId, fields);
+    const { error } = await window.dbHelpers.updateLineItem(itemId, fields);
+    if (error) console.error('Item update failed:', error);
   }
   async function deleteItem(itemId) {
     setTree(t=>({areas:t.areas.map(a=>({...a,sections:a.sections.map(s=>({...s,items:s.items.filter(i=>i.id!==itemId)}))}))}) );
@@ -183,9 +187,9 @@ function EstimatorNative({ bidId }) {
       description:libItem.description||libItem.desc||'', qty:1,
       unit:libItem.unit||libItem.uom||'EA', unit_cost:libItem.unit_cost||libItem.cost||0, sort_order:0,
     }).then(({data,error})=>{
-      if(error){alert(error.message);return;}
+      if(error){ alert('Failed to insert item: ' + error.message); return; }
       setTree(t=>({areas:updSec(t.areas,selAreaId,selSecId,s=>({...s,items:[...s.items,data]}))}));
-    });
+    }).catch(e=>alert('Network error: ' + e.message));
   }
 
   // ── Center view ─────────────────────────────────────────────────────────────

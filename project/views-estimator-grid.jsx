@@ -182,13 +182,14 @@ function LibrarySidebar({ onInsert }) {
   const [cats, setCats]   = uSg([]);
 
   uEg(() => {
-    window.dbHelpers.getLibraryItems().then(({ data }) => {
-      if (!data) return;
+    window.dbHelpers.getLibraryItems().then(({ data, error }) => {
+      if (error) { console.error('Library load failed:', error); setItems([]); return; }
+      if (!data) { setItems([]); return; }
       setItems(data);
       setCats([...new Set(data.map(i=>i.category||'').filter(Boolean))].sort());
       if (typeof window.Fuse === 'function')
         setFuse(new window.Fuse(data, { keys:['description','category'], threshold:0.35 }));
-    });
+    }).catch(e=>{ console.error('Library network error:', e); setItems([]); });
   }, []);
 
   const results = uMg(() => {
@@ -216,7 +217,7 @@ function LibrarySidebar({ onInsert }) {
         )}
       </div>
       <div style={{overflowY:'auto',flex:1}}>
-        {!items && <div style={{padding:12,fontSize:12,color:'var(--mute)'}}>Loading…</div>}
+        {items === null && <div style={{padding:12,fontSize:12,color:'var(--mute)'}}>Loading…</div>}
         {items && results.length===0 && (query||cat) && <div style={{padding:12,fontSize:12,color:'var(--mute)'}}>No results.</div>}
         {results.map((item,i) => (
           <div key={item.id||i} onClick={()=>onInsert&&onInsert(item)}

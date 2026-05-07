@@ -12,15 +12,16 @@ function ProposalPreviewModal({ bid, areas, alts, onClose }) {
   const [loading, setLoading] = uSpv(true);
 
   uEpv(() => {
+    let url = null;
     try {
-      const url = window.generateProposalPDF(bid, areas, alts, { download: false });
+      url = window.generateProposalPDF(bid, areas, alts, { download: false });
       setBlobUrl(url);
     } catch(ex) {
       setErr(ex.message);
     } finally {
       setLoading(false);
     }
-    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl); };
+    return () => { if (url) URL.revokeObjectURL(url); };
   }, []);
 
   function download() {
