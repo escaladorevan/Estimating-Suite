@@ -1,6 +1,12 @@
-// ZZTakeoff import modal — parses an Excel takeoff sheet into areas/sections/items.
-// Expected columns (case-insensitive, flexible): Area | Section/Division | Description | Qty | Unit
-// window.ZZImportModal = ZZImportModal
+// ZZTakeoff import modal — parses a ZZTakeoff CSV (or generic Excel) into areas/sections/items.
+//
+// ZZTakeoff CSV structure (hierarchy via leading spaces in the Name column):
+//   0 spaces + no Units + no Cost Each  → Area header
+//   N spaces + no Units + no Cost Each  → Section / sub-group header
+//   N spaces + Units filled             → Priced line item  ← only these are imported
+//   Each item appears twice; the priced copy has col 4 (Units) non-empty.
+//
+// Columns (0-based): 0=Name, 1=Measurement1, 2=Units1, 3=Qty, 4=Units, 7=Cost Each
 
 const { useState: uSi, useMemo: uMi } = React;
 
@@ -9,6 +15,52 @@ const OVERLAY = {position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:90
 const MODAL = {background:'var(--paper)',borderRadius:'var(--r)',width:900,maxWidth:'100%',
   boxShadow:'0 8px 40px rgba(0,0,0,.35)',display:'flex',flexDirection:'column',maxHeight:'85vh'};
 
+// ── ZZTakeoff hierarchical parser ─────────────────────────────────────────────
+function parseZZTakeoff(rawRows) {
+  const parsed = [];
+  let currentArea = 'General';
+  let currentSection = 'General';
+
+  for (const row of rawRows) {
+    const rawName = String(row[0] || '');
+    const leading  = rawName.length - rawName.trimStart().length;
+    const name     = rawName.trim();
+    if (!name) continue;
+
+    const qty      = parseFloat(row[3]) || 1;
+    const units    = String(row[4] || '').trim();   // "Units" col — only set on priced rows
+    const costEach = parseFloat(row[7]) || 0;       // "Cost Each"
+
+    // Area header: no indent, no units, no cost
+    if (leading === 0 && !units && !costEach) {
+      currentArea    = name;
+      currentSection = 'General';
+      continue;
+    }
+
+    // Section/group header: indented, no units, no cost
+    if (leading > 0 && !units && !costEach) {
+      currentSection = name;
+      continue;
+    }
+
+    // Priced line item: units column is filled (measurement-only duplicates have empty Units)
+    if (units) {
+      parsed.push({
+        _idx:        parsed.length,
+        area:        currentArea,
+        section:     currentSection,
+        description: name,
+        qty,
+        unit:        units,
+        selected:    true,
+      });
+    }
+  }
+  return parsed;
+}
+
+// ── Generic column-based parser (fallback for non-ZZTakeoff files) ────────────
 function matchCol(headers, ...targets) {
   for (const t of targets) {
     const i = headers.findIndex(h => h.toLowerCase().includes(t.toLowerCase()));
@@ -17,37 +69,42 @@ function matchCol(headers, ...targets) {
   return -1;
 }
 
-function parseSheet(sheet) {
-  const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-  if (!rows.length) return { headers: [], rows: [] };
-  const headerRow = rows[0].map(h => String(h).trim());
-  const data = rows.slice(1).filter(r => r.some(c => c !== ''));
-
+function parseGeneric(headerRow, dataRows) {
   const iArea = matchCol(headerRow, 'area', 'location', 'room');
   const iSec  = matchCol(headerRow, 'section', 'division', 'category', 'type');
   const iDesc = matchCol(headerRow, 'description', 'item', 'desc', 'name');
   const iQty  = matchCol(headerRow, 'qty', 'quantity', 'count');
   const iUnit = matchCol(headerRow, 'unit', 'uom', 'measure');
-  const iNote = matchCol(headerRow, 'note', 'comment', 'remarks');
 
-  const parsed = data.map((row, idx) => ({
-    _idx: idx,
+  return dataRows.map((row, idx) => ({
+    _idx:        idx,
     area:        String(row[iArea] ?? '').trim() || 'General',
-    section:     String(row[iSec]  ?? '').trim() || 'Scope',
+    section:     String(row[iSec]  ?? '').trim() || 'General',
     description: String(row[iDesc] ?? '').trim(),
     qty:         parseFloat(row[iQty]) || 1,
     unit:        String(row[iUnit] ?? '').trim() || 'EA',
-    note:        String(row[iNote] ?? '').trim(),
     selected:    true,
   })).filter(r => r.description);
-
-  return { headers: headerRow, rows: parsed, colMap: { iArea, iSec, iDesc, iQty, iUnit, iNote } };
 }
 
+// ── Sheet parser — detects format and delegates ───────────────────────────────
+function parseSheet(sheet) {
+  const allRows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  if (!allRows.length) return { rows: [] };
+
+  const headerRow = allRows[0].map(h => String(h).trim());
+  const dataRows  = allRows.slice(1).filter(r => r.some(c => c !== ''));
+
+  // ZZTakeoff detection: first column is "Name", has "Layer" column
+  const isZZ = headerRow[0] === 'Name' && headerRow.includes('Layer');
+  const rows = isZZ ? parseZZTakeoff(dataRows) : parseGeneric(headerRow, dataRows);
+  return { rows };
+}
+
+// ── Modal component ───────────────────────────────────────────────────────────
 function ZZImportModal({ bidId, onClose, onImported }) {
-  const [step,     setStep]     = uSi('pick');   // 'pick' | 'review' | 'importing'
+  const [step,     setStep]     = uSi('pick');
   const [rows,     setRows]     = uSi([]);
-  const [headers,  setHeaders]  = uSi([]);
   const [fileName, setFileName] = uSi('');
   const [error,    setError]    = uSi('');
   const [pct,      setPct]      = uSi(0);
@@ -56,11 +113,10 @@ function ZZImportModal({ bidId, onClose, onImported }) {
     const sel = rows.filter(r => r.selected);
     const map = {};
     sel.forEach(r => {
-      const ak = r.area;
-      if (!map[ak]) map[ak] = { name: ak, sections: {} };
+      if (!map[r.area]) map[r.area] = { name: r.area, sections: {} };
       const sk = r.section;
-      if (!map[ak].sections[sk]) map[ak].sections[sk] = { name: sk, items: [] };
-      map[ak].sections[sk].items.push(r);
+      if (!map[r.area].sections[sk]) map[r.area].sections[sk] = { name: sk, items: [] };
+      map[r.area].sections[sk].items.push(r);
     });
     return Object.values(map).map(a => ({ ...a, sections: Object.values(a.sections) }));
   }, [rows]);
@@ -74,10 +130,9 @@ function ZZImportModal({ bidId, onClose, onImported }) {
     reader.onload = e => {
       try {
         const wb = window.XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-        const sheetName = wb.SheetNames[0];
-        const { rows: parsed, headers: hdrs } = parseSheet(wb.Sheets[sheetName]);
-        if (!parsed.length) { setError('No data rows found. Check that the first row contains column headers.'); return; }
-        setHeaders(hdrs); setRows(parsed); setStep('review');
+        const { rows: parsed } = parseSheet(wb.Sheets[wb.SheetNames[0]]);
+        if (!parsed.length) { setError('No importable rows found. Ensure the file is a ZZTakeoff CSV export.'); return; }
+        setRows(parsed); setStep('review');
       } catch(ex) { setError('Could not parse file: ' + ex.message); }
     };
     reader.readAsArrayBuffer(file);
@@ -86,8 +141,7 @@ function ZZImportModal({ bidId, onClose, onImported }) {
   function toggleRow(idx) {
     setRows(rs => rs.map(r => r._idx === idx ? { ...r, selected: !r.selected } : r));
   }
-
-  function editRowField(idx, field, val) {
+  function editField(idx, field, val) {
     setRows(rs => rs.map(r => r._idx === idx ? { ...r, [field]: val } : r));
   }
 
@@ -96,7 +150,6 @@ function ZZImportModal({ bidId, onClose, onImported }) {
     const areas = grouped;
     const total = areas.reduce((s, a) => s + a.sections.reduce((ss, s2) => ss + s2.items.length, 0), 0);
     let done = 0;
-
     try {
       for (let aIdx = 0; aIdx < areas.length; aIdx++) {
         const area = areas[aIdx];
@@ -110,8 +163,8 @@ function ZZImportModal({ bidId, onClose, onImported }) {
             const item = sec.items[iIdx];
             const { error: iErr } = await window.dbHelpers.addLineItem({
               bid_id: bidId, area_id: aData.id, section_id: sData.id,
-              description: item.description, qty: item.qty, unit: item.unit, unit_cost: 0,
-              sort_order: iIdx,
+              description: item.description, qty: item.qty, unit: item.unit,
+              unit_cost: 0, sort_order: iIdx,
             });
             if (iErr) throw new Error('Item: ' + iErr.message);
             done++;
@@ -120,15 +173,16 @@ function ZZImportModal({ bidId, onClose, onImported }) {
         }
       }
       onImported();
-    } catch(ex) {
-      setError(ex.message); setStep('review');
-    }
+    } catch(ex) { setError(ex.message); setStep('review'); }
   }
 
-  const hdr = { padding:'14px 20px', borderBottom:'1px solid var(--line)', display:'flex',
-    alignItems:'center', gap:10, flexShrink:0 };
-  const footer = { padding:'12px 20px', borderTop:'1px solid var(--line)', display:'flex',
-    alignItems:'center', gap:10, justifyContent:'flex-end', flexShrink:0 };
+  const hdr    = {padding:'14px 20px',borderBottom:'1px solid var(--line)',display:'flex',alignItems:'center',gap:10,flexShrink:0};
+  const footer = {padding:'12px 20px',borderTop:'1px solid var(--line)',display:'flex',alignItems:'center',gap:10,justifyContent:'flex-end',flexShrink:0};
+  const cellInp = (val, onChange, width) => (
+    <input value={val} onChange={e=>onChange(e.target.value)}
+      style={{font:'inherit',fontSize:11.5,border:'none',background:'transparent',
+        width:width||'100%',padding:'1px 3px'}} />
+  );
 
   return (
     <div style={OVERLAY} onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -142,30 +196,32 @@ function ZZImportModal({ bidId, onClose, onImported }) {
             onClick={onClose}>×</button>
         </div>
 
-        {/* PICK step */}
         {step === 'pick' && (
           <div style={{padding:'32px 24px',textAlign:'center'}}>
             <div style={{fontSize:13,color:'var(--ink-2)',marginBottom:20}}>
-              Select an Excel file (.xlsx) exported from ZZTakeoff.<br/>
-              Expected columns: <strong>Area, Section, Description, Qty, Unit</strong>
+              Select the CSV exported from ZZTakeoff.<br/>
+              Areas, sections, and items are detected automatically from the indentation hierarchy.
             </div>
             <label style={{display:'inline-block',background:'var(--accent)',color:'#fff',
               borderRadius:'var(--r)',padding:'10px 24px',cursor:'pointer',fontWeight:600,fontSize:13}}>
               Choose File…
-              <input type="file" accept=".xlsx,.xls,.csv" style={{display:'none'}}
+              <input type="file" accept=".csv,.xlsx,.xls" style={{display:'none'}}
                 onChange={e=>handleFile(e.target.files[0])} />
             </label>
             {error && <div style={{marginTop:16,color:'var(--bad)',fontSize:12}}>{error}</div>}
           </div>
         )}
 
-        {/* REVIEW step */}
         {step === 'review' && (
           <>
-            <div style={{padding:'10px 20px',borderBottom:'1px solid var(--line)',display:'flex',alignItems:'center',gap:16,flexShrink:0}}>
+            <div style={{padding:'8px 20px',borderBottom:'1px solid var(--line)',display:'flex',
+              alignItems:'center',gap:16,flexShrink:0,flexWrap:'wrap'}}>
               <span style={{fontSize:12,color:'var(--mute)'}}>{selCount} of {rows.length} rows selected</span>
               <button className="btn ghost sm" onClick={()=>setRows(rs=>rs.map(r=>({...r,selected:true})))}>Select all</button>
               <button className="btn ghost sm" onClick={()=>setRows(rs=>rs.map(r=>({...r,selected:false})))}>Deselect all</button>
+              <span style={{fontSize:11,color:'var(--mute)',marginLeft:'auto'}}>
+                {grouped.length} area{grouped.length!==1?'s':''} · {grouped.reduce((s,a)=>s+a.sections.length,0)} sections
+              </span>
             </div>
             <div style={{overflowY:'auto',flex:1}}>
               {error && <div style={{padding:'8px 20px',color:'var(--bad)',fontSize:12,background:'#fff5f5'}}>{error}</div>}
@@ -181,40 +237,23 @@ function ZZImportModal({ bidId, onClose, onImported }) {
                 </thead>
                 <tbody>
                   {rows.map(row => (
-                    <tr key={row._idx} style={{borderBottom:'1px solid var(--line)',opacity:row.selected?1:0.4,
-                      background:row.selected?'transparent':'rgba(0,0,0,.02)'}}>
+                    <tr key={row._idx} style={{borderBottom:'1px solid var(--line)',
+                      opacity:row.selected?1:0.35,background:row.selected?'transparent':'rgba(0,0,0,.02)'}}>
                       <td style={{padding:'3px 8px'}}>
                         <input type="checkbox" checked={row.selected} onChange={()=>toggleRow(row._idx)} style={{cursor:'pointer'}} />
                       </td>
-                      <td style={{padding:'3px 6px'}}>
-                        <input value={row.area} onChange={e=>editRowField(row._idx,'area',e.target.value)}
-                          style={{font:'inherit',fontSize:11.5,border:'none',background:'transparent',width:'100%',padding:'1px 3px'}} />
-                      </td>
-                      <td style={{padding:'3px 6px'}}>
-                        <input value={row.section} onChange={e=>editRowField(row._idx,'section',e.target.value)}
-                          style={{font:'inherit',fontSize:11.5,border:'none',background:'transparent',width:'100%',padding:'1px 3px'}} />
-                      </td>
-                      <td style={{padding:'3px 6px',minWidth:200}}>
-                        <input value={row.description} onChange={e=>editRowField(row._idx,'description',e.target.value)}
-                          style={{font:'inherit',fontSize:11.5,border:'none',background:'transparent',width:'100%',padding:'1px 3px'}} />
-                      </td>
-                      <td style={{padding:'3px 6px'}}>
-                        <input type="number" value={row.qty} onChange={e=>editRowField(row._idx,'qty',+e.target.value||1)}
-                          style={{font:'inherit',fontSize:11.5,border:'none',background:'transparent',width:50,textAlign:'right',padding:'1px 3px'}} />
-                      </td>
-                      <td style={{padding:'3px 6px'}}>
-                        <input value={row.unit} onChange={e=>editRowField(row._idx,'unit',e.target.value)}
-                          style={{font:'inherit',fontSize:11.5,border:'none',background:'transparent',width:52,padding:'1px 3px'}} />
-                      </td>
+                      <td style={{padding:'3px 6px',minWidth:110}}>{cellInp(row.area,    v=>editField(row._idx,'area',v))}</td>
+                      <td style={{padding:'3px 6px',minWidth:110}}>{cellInp(row.section, v=>editField(row._idx,'section',v))}</td>
+                      <td style={{padding:'3px 6px',minWidth:200}}>{cellInp(row.description, v=>editField(row._idx,'description',v))}</td>
+                      <td style={{padding:'3px 6px'}}>{cellInp(row.qty,  v=>editField(row._idx,'qty',+v||1), 50)}</td>
+                      <td style={{padding:'3px 6px'}}>{cellInp(row.unit, v=>editField(row._idx,'unit',v),   52)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div style={footer}>
-              <span style={{fontSize:11,color:'var(--mute)',flex:1}}>
-                {grouped.length} area{grouped.length!==1?'s':''} · prices will be set to $0 (apply from library after import)
-              </span>
+              <span style={{fontSize:11,color:'var(--mute)',flex:1}}>Unit costs import as $0 — apply pricing from library after import</span>
               <button className="btn ghost" onClick={onClose}>Cancel</button>
               <button className="btn accent" disabled={selCount===0} onClick={doImport}>
                 Import {selCount} item{selCount!==1?'s':''}
@@ -223,7 +262,6 @@ function ZZImportModal({ bidId, onClose, onImported }) {
           </>
         )}
 
-        {/* IMPORTING step */}
         {step === 'importing' && (
           <div style={{padding:'40px 24px',textAlign:'center'}}>
             <div style={{fontWeight:600,fontSize:13,marginBottom:12}}>Importing… {pct}%</div>
