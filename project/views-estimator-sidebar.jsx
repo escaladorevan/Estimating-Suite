@@ -7,7 +7,7 @@ const { useState: uSsb, useRef: uRsb } = React;
 
 // ── Single area row ────────────────────────────────────────────────────────────
 function AreaTreeItem({ area, selAreaId, selSecId, collapsed, onToggle, onSelectArea,
-                        onSelectSection, onRename, onSetQty, onAddSection, onDeleteArea, onDeleteSection }) {
+                        onSelectSection, onRename, onSetQty, onAddSection, onDeleteArea, onDeleteSection, onDuplicateArea }) {
   const [editName, setEditName] = uSsb(false);
   const [addSec,   setAddSec]   = uSsb(false);
   const [newSec,   setNewSec]   = uSsb('');
@@ -59,6 +59,10 @@ function AreaTreeItem({ area, selAreaId, selSecId, collapsed, onToggle, onSelect
           style={{width:32,font:'inherit',fontSize:11,textAlign:'center',
             background:'rgba(176,80,40,.08)',border:'1px solid rgba(176,80,40,.25)',borderRadius:3,
             padding:'1px 3px',color:'var(--accent)',fontWeight:700,flexShrink:0}} />
+        {onDuplicateArea && (
+          <button title="Duplicate area" style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'var(--mute)',padding:'0 2px',lineHeight:1,flexShrink:0}}
+            onClick={e=>{e.stopPropagation();onDuplicateArea(area.id);}}>⧉</button>
+        )}
         <button style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'var(--mute)',padding:'0 2px',lineHeight:1,flexShrink:0}}
           onClick={e=>{e.stopPropagation();onDeleteArea(area.id);}}>×</button>
       </div>
@@ -106,7 +110,7 @@ function AreaTreeItem({ area, selAreaId, selSecId, collapsed, onToggle, onSelect
 function EstimatorSidebar({
   tree, bid, alts, selView, selAreaId, selSecId, collapsed, selAltIdx,
   onView, onSelectArea, onSelectSection, onToggleCollapse,
-  onAddArea, onDeleteArea, onRenameArea, onAreaQty,
+  onAddArea, onDeleteArea, onDuplicateArea, onRenameArea, onAreaQty,
   onAddSection, onDeleteSection, onSelectAlt, onAddAlt,
 }) {
   const [addingArea, setAddingArea] = uSsb(false);
@@ -174,7 +178,8 @@ function EstimatorSidebar({
           onSetQty={onAreaQty}
           onAddSection={onAddSection}
           onDeleteArea={onDeleteArea}
-          onDeleteSection={onDeleteSection} />
+          onDeleteSection={onDeleteSection}
+          onDuplicateArea={onDuplicateArea} />
       ))}
 
       {addingArea ? (

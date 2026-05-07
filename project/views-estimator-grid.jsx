@@ -7,7 +7,8 @@ const UNITS = ['EA','LF','SF','SY','CY','LS','HR','TON','BF','MBF','lin. ft','sq
 
 // ── ItemsGrid ─────────────────────────────────────────────────────────────────
 function ItemsGrid({ section, areaId, onAddItem, onUpdateItem, onDeleteItem,
-                     onRenameSection, onDeleteSection, isActive, onClickSection }) {
+                     onRenameSection, onDeleteSection, onDuplicateSection,
+                     isActive, onClickSection }) {
   const [drafts, setDrafts] = uSg({});
   const [editSec, setEditSec] = uSg(false);
 
@@ -61,6 +62,7 @@ function ItemsGrid({ section, areaId, onAddItem, onUpdateItem, onDeleteItem,
     boxSizing:'border-box', outline:'none' };
   const focusBorder = e => { e.target.style.borderColor='var(--accent)'; e.target.style.background='var(--paper)'; };
   const blurBorder  = e => { e.target.style.borderColor='transparent'; e.target.style.background='transparent'; };
+  const cbStyle = { cursor:'pointer', margin:'0 auto', display:'block' };
 
   return (
     <div onClick={onClickSection}
@@ -82,18 +84,26 @@ function ItemsGrid({ section, areaId, onAddItem, onUpdateItem, onDeleteItem,
         <span style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'var(--accent)',marginLeft:8}}>
           ${Math.round(secTotal).toLocaleString()}
         </span>
+        {onDuplicateSection && (
+          <button title="Duplicate section"
+            style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'var(--mute)',padding:'0 0 0 6px',lineHeight:1}}
+            onClick={e=>{e.stopPropagation(); onDuplicateSection(section.id);}}>⧉</button>
+        )}
         {onDeleteSection && (
-          <button style={{background:'none',border:'none',cursor:'pointer',fontSize:15,color:'var(--mute)',padding:'0 0 0 8px',lineHeight:1}}
+          <button style={{background:'none',border:'none',cursor:'pointer',fontSize:15,color:'var(--mute)',padding:'0 0 0 4px',lineHeight:1}}
             onClick={e=>{e.stopPropagation(); onDeleteSection(section.id);}}>×</button>
         )}
       </div>
       {/* Items table */}
       <table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5,tableLayout:'fixed'}}>
-        <colgroup><col/><col style={{width:64}}/><col style={{width:78}}/><col style={{width:96}}/><col style={{width:92}}/><col style={{width:28}}/></colgroup>
+        <colgroup>
+          <col/><col style={{width:58}}/><col style={{width:72}}/><col style={{width:90}}/><col style={{width:86}}/>
+          <col style={{width:26}}/><col style={{width:26}}/><col style={{width:24}}/>
+        </colgroup>
         <thead>
           <tr style={{background:'var(--panel-alt)'}}>
-            {['Description','Qty','Unit','Unit Cost','Total',''].map((h,i)=>(
-              <th key={i} style={{padding:'3px '+(i===0?'16px':'8px'),textAlign:i<2?'left':i===2?'center':'right',
+            {['Description','Qty','Unit','Unit Cost','Total','Ign','NP',''].map((h,i)=>(
+              <th key={i} style={{padding:'3px '+(i===0?'16px':'4px'),textAlign:i<2?'left':i===2?'center':'right',
                 fontSize:10,fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',color:'var(--mute)'}}>{h}</th>
             ))}
           </tr>
@@ -102,37 +112,48 @@ function ItemsGrid({ section, areaId, onAddItem, onUpdateItem, onDeleteItem,
           {(section.items||[]).map(item => {
             const rt = (+(item.qty)||0)*(+(item.unit_cost)||0);
             return (
-              <tr key={item.id} style={{borderBottom:'1px solid var(--line)',opacity:item.ignore?0.4:1}}>
+              <tr key={item.id} style={{borderBottom:'1px solid var(--line)',opacity:item.ignore?0.4:1,
+                background:item.no_print?'rgba(0,0,0,.025)':'transparent'}}>
                 <td style={{padding:'2px 16px 2px 8px'}}>
                   <input id={cid(item.id,'description')} style={inp} value={get(item,'description')||''}
                     placeholder="Description…" onChange={e=>draft(item.id,'description',e.target.value)}
                     onFocus={focusBorder} onBlur={e=>{blurBorder(e);flush(item,'description');}}
                     onKeyDown={e=>nav(e,item,'description')} />
                 </td>
-                <td style={{padding:'2px 8px'}}>
+                <td style={{padding:'2px 4px'}}>
                   <input id={cid(item.id,'qty')} type="number" step="any" style={{...inp,textAlign:'right'}}
                     value={get(item,'qty')??1} onChange={e=>draft(item.id,'qty',e.target.value)}
                     onFocus={focusBorder} onBlur={e=>{blurBorder(e);flush(item,'qty');}}
                     onKeyDown={e=>nav(e,item,'qty')} />
                 </td>
-                <td style={{padding:'2px 8px'}}>
+                <td style={{padding:'2px 4px'}}>
                   <select id={cid(item.id,'unit')} style={{...inp,padding:'3px 2px'}} value={get(item,'unit')||'EA'}
                     onChange={e=>onUpdateItem(item.id,{unit:e.target.value})}
                     onFocus={focusBorder} onBlur={blurBorder} onKeyDown={e=>nav(e,item,'unit')}>
                     {UNITS.map(u=><option key={u}>{u}</option>)}
                   </select>
                 </td>
-                <td style={{padding:'2px 8px'}}>
+                <td style={{padding:'2px 4px'}}>
                   <input id={cid(item.id,'unit_cost')} type="number" step="any" style={{...inp,textAlign:'right'}}
                     value={get(item,'unit_cost')??0} onChange={e=>draft(item.id,'unit_cost',e.target.value)}
                     onFocus={focusBorder} onBlur={e=>{blurBorder(e);flush(item,'unit_cost');}}
                     onKeyDown={e=>nav(e,item,'unit_cost')} />
                 </td>
-                <td style={{padding:'2px 8px',textAlign:'right',fontFamily:'var(--mono)',fontWeight:600,
+                <td style={{padding:'2px 4px',textAlign:'right',fontFamily:'var(--mono)',fontWeight:600,
                   color:item.ignore?'var(--mute)':'var(--ink)',whiteSpace:'nowrap'}}>
                   {item.ignore ? '—' : fmt$(rt)}
                 </td>
                 <td style={{padding:'2px 4px',textAlign:'center'}}>
+                  <input type="checkbox" style={cbStyle} checked={!!item.ignore}
+                    title="Ignore (exclude from total)"
+                    onChange={()=>onUpdateItem(item.id,{ignore:!item.ignore})} />
+                </td>
+                <td style={{padding:'2px 4px',textAlign:'center'}}>
+                  <input type="checkbox" style={cbStyle} checked={!!item.no_print}
+                    title="No-print (hide from PDF)"
+                    onChange={()=>onUpdateItem(item.id,{no_print:!item.no_print})} />
+                </td>
+                <td style={{padding:'2px 2px',textAlign:'center'}}>
                   <button style={{background:'none',border:'none',cursor:'pointer',fontSize:17,color:'var(--mute)',lineHeight:1,padding:0}}
                     onClick={()=>onDeleteItem(item.id)}>×</button>
                 </td>
@@ -142,10 +163,11 @@ function ItemsGrid({ section, areaId, onAddItem, onUpdateItem, onDeleteItem,
         </tbody>
       </table>
       {(section.items||[]).length===0 && (
-        <div style={{padding:'12px 16px',fontSize:12,color:'var(--mute)'}}>No items — add below or insert from the library →</div>
+        <div style={{padding:'12px 16px',fontSize:12,color:'var(--mute)'}}>No items — add below or insert from library →</div>
       )}
-      <div style={{padding:'6px 16px 12px'}}>
+      <div style={{padding:'4px 16px 10px',display:'flex',alignItems:'center',gap:12}}>
         <button className="btn ghost sm" onClick={e=>{e.stopPropagation();onAddItem();}}>+ Add item</button>
+        <span style={{fontSize:10,color:'var(--mute)'}}>Ign = exclude from total · NP = hide from PDF</span>
       </div>
     </div>
   );
@@ -160,13 +182,14 @@ function LibrarySidebar({ onInsert }) {
   const [cats, setCats]   = uSg([]);
 
   uEg(() => {
-    window.dbHelpers.getLibraryItems().then(({ data }) => {
-      if (!data) return;
+    window.dbHelpers.getLibraryItems().then(({ data, error }) => {
+      if (error) { console.error('Library load failed:', error); setItems([]); return; }
+      if (!data) { setItems([]); return; }
       setItems(data);
       setCats([...new Set(data.map(i=>i.category||'').filter(Boolean))].sort());
       if (typeof window.Fuse === 'function')
         setFuse(new window.Fuse(data, { keys:['description','category'], threshold:0.35 }));
-    });
+    }).catch(e=>{ console.error('Library network error:', e); setItems([]); });
   }, []);
 
   const results = uMg(() => {
@@ -194,7 +217,7 @@ function LibrarySidebar({ onInsert }) {
         )}
       </div>
       <div style={{overflowY:'auto',flex:1}}>
-        {!items && <div style={{padding:12,fontSize:12,color:'var(--mute)'}}>Loading…</div>}
+        {items === null && <div style={{padding:12,fontSize:12,color:'var(--mute)'}}>Loading…</div>}
         {items && results.length===0 && (query||cat) && <div style={{padding:12,fontSize:12,color:'var(--mute)'}}>No results.</div>}
         {results.map((item,i) => (
           <div key={item.id||i} onClick={()=>onInsert&&onInsert(item)}
