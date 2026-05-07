@@ -79,7 +79,8 @@ async function updateBidInfo(bidId, fields) {
   // oh_pct, del_pct, ins_pct, doc_type, attention, po_number, terms,
   // drawings_dated, bid_docs, estimator, exclusions, clarifications,
   // general_terms, warranty, finish_terms, hardware_terms, fab_note,
-  // pricing_mode, delivery_date, specs_dated, addendums
+  // pricing_mode, delivery_date, specs_dated, addendums,
+  // address, ship_via
   return window.sb.from('bids')
     .update({ ...fields, updated_at: new Date().toISOString() })
     .eq('id', bidId);

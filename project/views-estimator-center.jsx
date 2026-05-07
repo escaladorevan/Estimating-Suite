@@ -185,40 +185,110 @@ function TermsListView({ title, items, onChange }) {
 }
 
 // ── InfoView ───────────────────────────────────────────────────────────────────
+// Full proposal-header form. All fields write directly to the bids table via onSave.
+const SHIP_VIA_OPTIONS = ['Installed by F&S', 'Client Pick-up', 'Delivery to jobsite'];
+const DOC_TYPES        = ['Proposal', 'Quote', 'Bid', 'Budget', 'Change Order'];
+const PRICING_MODES    = [
+  { value: 'byarea',   label: 'By Area (one line per area)' },
+  { value: 'lumpsum',  label: 'Lump Sum (single line)' },
+  { value: 'itemized', label: 'Itemized (all sections & items)' },
+];
+
 function InfoView({ bid, onSave }) {
   const [f, setF] = uSc({});
-  const get = k => f[k] !== undefined ? f[k] : (bid?.[k]||'');
-  const save = k => { if (f[k]!==undefined && f[k]!==bid?.[k]) onSave({[k]:f[k]}); };
+  const get  = k => f[k] !== undefined ? f[k] : (bid?.[k] ?? '');
+  const save = k => { const v = f[k]; if (v !== undefined && v !== (bid?.[k] ?? '')) onSave({ [k]: v }); };
+
   const inpS = { width:'100%', font:'inherit', fontSize:13, border:'1px solid var(--line)',
-    borderRadius:4, padding:'6px 10px', boxSizing:'border-box' };
-  const fld = (label, key, type='text', placeholder='') => (
+    borderRadius:4, padding:'6px 10px', boxSizing:'border-box', background:'#fff' };
+  const lblS = { fontSize:11, fontWeight:600, color:'#555', textTransform:'uppercase',
+    letterSpacing:'.4px', display:'block', marginBottom:4 };
+
+  const fld = (label, key, placeholder='') => (
     <div style={{display:'flex',flexDirection:'column',gap:4}}>
-      <label style={{fontSize:11,fontWeight:600,color:'#555',textTransform:'uppercase',letterSpacing:'.4px'}}>{label}</label>
-      <input type={type} style={inpS} value={get(key)} placeholder={placeholder}
+      <label style={lblS}>{label}</label>
+      <input style={inpS} value={get(key)} placeholder={placeholder}
         onChange={e=>setF(p=>({...p,[key]:e.target.value}))}
         onBlur={()=>save(key)} />
     </div>
   );
+
+  const sel = (label, key, options) => (
+    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+      <label style={lblS}>{label}</label>
+      <select style={{...inpS,padding:'6px 8px'}} value={get(key)}
+        onChange={e=>{ setF(p=>({...p,[key]:e.target.value})); onSave({[key]:e.target.value}); }}>
+        {options.map(o => typeof o === 'string'
+          ? <option key={o} value={o}>{o}</option>
+          : <option key={o.value} value={o.value}>{o.label}</option>
+        )}
+      </select>
+    </div>
+  );
+
+  const row = (...cols) => (
+    <div style={{display:'grid',gridTemplateColumns:cols.map(()=>'1fr').join(' '),gap:14,marginBottom:14}}>
+      {cols}
+    </div>
+  );
+
+  const divider = label => (
+    <div style={{fontSize:10,fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',
+      color:'var(--mute)',borderTop:'1px solid var(--line)',paddingTop:12,marginBottom:12,marginTop:4}}>
+      {label}
+    </div>
+  );
+
   return (
-    <div style={{padding:16,maxWidth:700,overflowY:'auto'}}>
-      <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:'var(--ink)'}}>Project Information</div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
-        {fld('Document Type', 'doc_type')}
-        {fld('Estimator','estimator',undefined,'Evan Ramsey')}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
-        {fld('Attention To','attention')}
-        {fld('Payment Terms','terms',undefined,'Net 30')}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginBottom:14}}>
-        {fld('Bid Docs','bid_docs')}
-        {fld('Drawings Dated','drawings_dated')}
-        {fld('Specs Dated','specs_dated')}
-      </div>
+    <div style={{padding:16,maxWidth:720,overflowY:'auto',paddingBottom:48}}>
+      <div style={{fontWeight:700,fontSize:14,marginBottom:16,color:'var(--ink)'}}>Project Information</div>
+
+      {divider('Proposal Header')}
+      {row(
+        sel('Document Type', 'doc_type', DOC_TYPES),
+        sel('Pricing Mode',  'pricing_mode', PRICING_MODES),
+      )}
+      {row(
+        fld('Attention To', 'attention'),
+        fld('Estimator',    'estimator', 'Evan Ramsey'),
+      )}
+
+      {divider('Project Address')}
       <div style={{marginBottom:14}}>
-        <label style={{fontSize:11,fontWeight:600,color:'#555',textTransform:'uppercase',letterSpacing:'.4px',display:'block',marginBottom:4}}>Scope / Notes</label>
-        <textarea style={{...inpS,minHeight:80,resize:'vertical'}} value={get('scope')} placeholder="Scope of work…"
-          onChange={e=>setF(p=>({...p,scope:e.target.value}))} onBlur={()=>save('scope')} />
+        <label style={lblS}>Project / Jobsite Address</label>
+        <textarea style={{...inpS,minHeight:56,resize:'vertical'}} value={get('address')} placeholder="123 Main St&#10;Portland, OR 97201"
+          onChange={e=>setF(p=>({...p,address:e.target.value}))} onBlur={()=>save('address')} />
+      </div>
+
+      {divider('Delivery & Payment')}
+      {row(
+        sel('Ship Via', 'ship_via', SHIP_VIA_OPTIONS),
+        fld('Delivery Date', 'delivery_date', 'MM/DD/YYYY'),
+        fld('P.O. Number',   'po_number', 'n/a'),
+      )}
+      {row(
+        fld('Payment Terms', 'terms', 'Net 30'),
+        fld('Architect',     'architect'),
+      )}
+
+      {divider('Bid Documents')}
+      {row(
+        fld('Bid Documents',    'bid_docs'),
+        fld('Drawings Dated',   'drawings_dated'),
+        fld('Specs Dated',      'specs_dated'),
+      )}
+      <div style={{marginBottom:14}}>
+        <label style={lblS}>Addendums Acknowledged</label>
+        <input style={inpS} value={get('addendums')} placeholder="e.g. Addendum No. 1 dated 04/10/2026, Addendum No. 2 dated 04/18/2026"
+          onChange={e=>setF(p=>({...p,addendums:e.target.value}))} onBlur={()=>save('addendums')} />
+        <div style={{fontSize:11,color:'var(--mute)',marginTop:3}}>Printed on proposal: "The following addendums have been received and acknowledged."</div>
+      </div>
+
+      {divider('Notes')}
+      <div style={{marginBottom:14}}>
+        <label style={lblS}>Scope / Notes (internal)</label>
+        <textarea style={{...inpS,minHeight:72,resize:'vertical'}} value={get('notes')} placeholder="Internal notes — not printed on proposal…"
+          onChange={e=>setF(p=>({...p,notes:e.target.value}))} onBlur={()=>save('notes')} />
       </div>
     </div>
   );
