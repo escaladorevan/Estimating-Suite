@@ -355,24 +355,40 @@ function EstimatorView({ activeBidId }) {
     const d = getDraft(sectionId);
     if (!d.desc.trim()) return;
     const sec = (tree || []).flatMap(a => a.sections).find(s => s.id === sectionId);
-    const { data, error } = await window.dbHelpers.addLineItem({
-      bid_id: activeBidId, area_id: areaId, section_id: sectionId,
+    const tempId = crypto.randomUUID();
+    const newItem = {
+      id: tempId, bid_id: activeBidId, area_id: areaId, section_id: sectionId,
       description: d.desc.trim(), qty: d.qty || 1, unit: d.unit || 'EA',
       unit_cost: d.unitCost || 0, drawing_ref: d.drawingRef || '',
-      sort_order: (sec?.items || []).length,
+      ignore: false, no_print: false, sort_order: (sec?.items || []).length,
+    };
+    // Update UI immediately — calcBid recalculates via useMemo
+    setTree(prev => prev.map(a => a.id === areaId ? {
+      ...a, sections: a.sections.map(s => s.id === sectionId ? { ...s, items: [...s.items, newItem] } : s)
+    } : a));
+    setDrafts(prev => ({ ...prev, [sectionId]: null }));
+    // Background DB sync
+    const { data, error } = await window.dbHelpers.addLineItem({
+      bid_id: activeBidId, area_id: areaId, section_id: sectionId,
+      description: newItem.description, qty: newItem.qty, unit: newItem.unit,
+      unit_cost: newItem.unit_cost, drawing_ref: newItem.drawing_ref,
+      sort_order: newItem.sort_order,
     });
     if (error) { console.error('addLineItem failed:', error); return; }
-    if (data) {
+    if (data?.id && data.id !== tempId) {
       setTree(prev => prev.map(a => a.id === areaId ? {
-        ...a, sections: a.sections.map(s => s.id === sectionId ? { ...s, items: [...s.items, data] } : s)
+        ...a, sections: a.sections.map(s => s.id === sectionId ? {
+          ...s, items: s.items.map(it => it.id === tempId ? { ...it, id: data.id } : it)
+        } : s)
       } : a));
-      setDrafts(prev => ({ ...prev, [sectionId]: null }));
     }
   }
 
   function handleAddItemClick(areaId, sectionId) {
-    const input = document.querySelector(`[data-draft-desc="${sectionId}"]`);
-    if (input) input.focus();
+    setTimeout(() => {
+      const input = document.querySelector(`[data-draft-desc="${sectionId}"]`);
+      if (input) input.focus();
+    }, 0);
   }
 
   // ── MARKUP % ──────────────────────────────────────────────────────────────
@@ -1616,6 +1632,13 @@ function generateProposalPDF(tree, bid) {
 
   function newPage() { doc.addPage(); y = 15; }
 
+  // Logo
+  if (window.FS_LOGO_B64) {
+    const logoW = 56, logoH = logoW * (219 / 800);
+    doc.addImage('data:image/jpeg;base64,' + window.FS_LOGO_B64, 'JPEG', LM, y, logoW, logoH);
+    y += logoH + 3;
+  }
+
   // Page 1 header
   const ax = RM, ay = y + 1;
   [{ t: 'Form and Structure, Inc.', b: true }, { t: '10708 NE 2nd Ave' },
@@ -1651,31 +1674,58 @@ function generateProposalPDF(tree, bid) {
     .forEach(c => txt(c.x, y, c.t, { bold: true, size: 7.5, align: c.a }));
   y += 5.2; hline(y, LM, RM, 0.4); y += 3;
 
-  for (const area of (tree || [])) {
-    if (area.ignore) continue;
-    checkY(8);
-    const aT = (area.sections || []).reduce((s, sec) =>
-      s + (sec.items || []).filter(it => !it.ignore).reduce((s2, it) =>
-        s2 + (it.qty || 0) * (it.unit_cost || 0), 0), 0) * ohFactor;
-    const aQty = area.qty || 1;
-    txt(cDesc, y, area.name || 'Area', { bold: true, size: 8.5 });
-    txt(cQty, y, String(aQty), { size: 8.5, align: 'right' });
-    txt(cUnit, y, aQty > 1 ? 'rooms' : 'lump sum', { size: 8.5 });
-    txt(cPrice, y, '$' + aT.toLocaleString(undefined, { maximumFractionDigits: 0 }), { size: 8.5, align: 'right' });
+  const $ = n => '$' + (n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const mode = (I.pricing_mode || 'byarea').toLowerCase().replace(/\s+/g, '');
+
+  function areaMatTotal(area) {
+    if (area.ignore) return 0;
+    return (area.sections || []).reduce((s, sec) => {
+      if (sec.ignore) return s;
+      return s + (sec.items || []).reduce((s2, it) =>
+        s2 + (it.ignore ? 0 : (it.qty || 0) * (it.unit_cost || 0)), 0);
+    }, 0) * (area.qty || 1);
+  }
+
+  if (mode === 'lumpsum') {
+    checkY(6);
+    txt(cDesc,  y, I.name || 'Base Scope of Work', { size: 8.5 });
+    txt(cQty,   y, '1', { size: 8.5, align: 'right' });
+    txt(cUnit,  y, 'lump sum', { size: 8.5 });
+    txt(cPrice, y, $(bidCalc.total), { size: 8.5, align: 'right' });
     y += 5;
-    for (const sec of (area.sections || [])) {
-      if (sec.ignore) continue;
-      for (const item of (sec.items || [])) {
-        if (item.ignore) continue;
-        checkY(5);
-        const iTotal = (item.qty || 0) * (item.unit_cost || 0) * ohFactor;
-        txt(cDesc, y, '  ' + (item.desc || item.description || '—'), { size: 7.5, maxWidth: 90 });
-        if (item.drawing_ref) txt(cRef, y, item.drawing_ref, { size: 7.5, maxWidth: 28 });
-        txt(cQty, y, String(item.qty || 1), { size: 7.5, align: 'right' });
-        txt(cUnit, y, item.unit || '', { size: 7.5 });
-        txt(cPrice, y, '$' + iTotal.toLocaleString(undefined, { maximumFractionDigits: 0 }), { size: 7.5, align: 'right' });
-        y += 4.2;
+  } else if (mode === 'byarea') {
+    for (const area of (tree || [])) {
+      if (area.ignore || area.no_print) continue;
+      checkY(8);
+      const aQty = area.qty || 1;
+      txt(cDesc,  y, area.name || 'Area', { bold: true, size: 8.5 });
+      txt(cQty,   y, String(aQty), { size: 8.5, align: 'right' });
+      txt(cUnit,  y, aQty > 1 ? 'rooms' : 'lump sum', { size: 8.5 });
+      txt(cPrice, y, $(areaMatTotal(area) * ohFactor), { size: 8.5, align: 'right' });
+      y += 5;
+    }
+  } else {
+    // Itemized: area header + all items + area subtotal
+    for (const area of (tree || [])) {
+      if (area.ignore || area.no_print) continue;
+      checkY(10);
+      txt(cDesc, y, area.name || 'Area', { bold: true, size: 8.5 }); y += 4.5;
+      for (const sec of (area.sections || [])) {
+        if (sec.ignore || sec.no_print) continue;
+        for (const it of (sec.items || [])) {
+          if (it.ignore || it.no_print) continue;
+          checkY(5);
+          txt(cDesc,  y, '  ' + (it.description || it.desc || '—'), { size: 7.5, maxWidth: 90 });
+          if (it.drawing_ref) txt(cRef, y, it.drawing_ref, { size: 7.5, maxWidth: 28 });
+          txt(cQty,   y, String(it.qty || 1), { size: 7.5, align: 'right' });
+          txt(cUnit,  y, it.unit || '', { size: 7.5 });
+          txt(cPrice, y, $((it.qty || 0) * (it.unit_cost || 0) * ohFactor), { size: 7.5, align: 'right' });
+          y += 4.2;
+        }
       }
+      txt(cDesc,  y, '  ' + (area.name || 'Area') + ' Subtotal', { italic: true, size: 7.5 });
+      txt(cPrice, y, $(areaMatTotal(area) * ohFactor), { italic: true, size: 7.5, align: 'right' });
+      y += 4.2; y += 2;
     }
   }
 
@@ -1683,14 +1733,14 @@ function generateProposalPDF(tree, bid) {
   txt(cDesc, y, 'Base Bid', { bold: true, size: 10 });
   txt(cQty, y, '1', { bold: true, size: 10, align: 'right' });
   txt(cUnit, y, '$', { bold: true, size: 10 });
-  txt(cPrice, y, '$' + bidCalc.total.toLocaleString(undefined, { maximumFractionDigits: 0 }), { bold: true, size: 10, align: 'right' });
+  txt(cPrice, y, $(bidCalc.total), { bold: true, size: 10, align: 'right' });
   y += 6; hline(y, LM, RM, 0.8); y += 6;
 
   // Page 2 — Terms
   newPage();
   txt(LM, y, 'Form and Structure, Inc.  ' + (I.doc_type || 'Proposal'), { bold: true, size: 9.5 }); y += 4.5;
   txt(LM, y, (I.number ? I.number + ' - ' : '') + (I.name || ''), { size: 8.5 });
-  txt(RM, y, 'Page No. 2 of 2 Pages', { size: 8.5, align: 'right' }); y += 4.5;
+  txt(RM, y, 'Page No. 2', { size: 8.5, align: 'right' }); y += 4.5;
   txt(LM, y, I.client || '', { size: 8.5 }); y += 3.5;
   hline(y, LM, RM, 0.5); y += 5.5;
 
@@ -1703,6 +1753,11 @@ function generateProposalPDF(tree, bid) {
 
   section('EXCLUSIONS:', (I.exclusions || DEFAULT_EXCLUSIONS).filter(e => e.active).map(e => e.text));
   section('CLARIFICATIONS:', (I.clarifications || DEFAULT_CLARIFICATIONS).filter(e => e.active).map(e => e.text));
+  if ((I.general_terms  || []).some(e => e.active)) section('GENERAL TERMS:',           (I.general_terms  || []).filter(e => e.active).map(e => e.text));
+  if ((I.warranty       || []).some(e => e.active)) section('WARRANTY AND FABRICATION:', (I.warranty       || []).filter(e => e.active).map(e => e.text));
+  if ((I.finish_terms   || []).some(e => e.active)) section('FINISH MATERIALS:',         (I.finish_terms   || []).filter(e => e.active).map(e => e.text));
+  if ((I.hardware_terms || []).some(e => e.active)) section('HARDWARE ASSUMPTIONS:',     (I.hardware_terms || []).filter(e => e.active).map(e => e.text));
+  if ((I.fab_note       || []).some(e => e.active)) section('FABRICATION NOTE:',         (I.fab_note       || []).filter(e => e.active).map(e => e.text));
 
   y += 4;
   txt(LM, y, 'Please Note: Prices valid for 30 days.', { italic: true, size: 7.5 });
