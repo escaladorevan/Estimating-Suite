@@ -817,7 +817,11 @@ function calcBid(){
   return { mat, ohAmt, matOh, delAmt, insAmt, total };
 }
 
-function markDirty(){ _dirty = true; }
+function markDirty(){
+  _dirty = true;
+  clearTimeout(window._fsSaveTimer);
+  window._fsSaveTimer = setTimeout(function(){ window.parent.postMessage({ type: 'fs-save', data: ST }, '*'); }, 2000);
+}
 
 // ══════════════════════════════════════════════════════════════
 // RENDER
@@ -2901,6 +2905,13 @@ document.addEventListener('keydown',e=>{
 render();
 initContacts();
 initLibFile();
+
+// ── SHELL BRIDGE (postMessage) ────────────────────────────────────────────────
+window.addEventListener('message', function(e) {
+  if (e.data && e.data.type === 'fs-load' && e.data.data) {
+    loadFromJSON(JSON.stringify(e.data.data));
+  }
+});
 </script>
 <div id="client-dd" class="client-dd"></div>
 <script>
