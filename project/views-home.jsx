@@ -172,11 +172,11 @@ const STAGE_COLS = [
   { id:'Lost',            label:'Lost' },
 ];
 
-const PipelineView = ({ onOpenDetail }) => {
+const PipelineView = ({ onOpenDetail, onOpenEstimate }) => {
   const [bids, setBids]             = uS_home(null);
   const [error, setError]           = uS_home(null);
   const [showCreate, setShowCreate] = uS_home(false);
-  const [form, setForm]             = uS_home({ gc_name:'', name:'', due_date:'', project_type:'' });
+  const [form, setForm]             = uS_home({ gc_name:'', name:'', due_date:'', project_type:'', open_estimate:false });
   const [saving, setSaving]         = uS_home(false);
 
   uE_home(() => {
@@ -192,6 +192,15 @@ const PipelineView = ({ onOpenDetail }) => {
     return () => { cancelled = true; };
   }, []);
 
+  uE_home(() => {
+    if (window.__openIngestITB) {
+      setShowCreate(true);
+      if (window.__openIngestITBToEstimate) setForm(f => ({ ...f, open_estimate: true }));
+      window.__openIngestITB = false;
+      window.__openIngestITBToEstimate = false;
+    }
+  }, []);
+
   const bidsForStage = uM_home(() => {
     if (!bids) return {};
     const m = {};
@@ -202,14 +211,16 @@ const PipelineView = ({ onOpenDetail }) => {
 
   async function handleCreate(e) {
     e.preventDefault();
-    if (!form.gc_name || !form.name || !form.due_date || !form.project_type) return;
+    if (!form.gc_name || !form.name || !form.due_date) return;
     setSaving(true);
     const { data: newBid, error: err } = await window.dbHelpers.addBid(form);
     setSaving(false);
     if (err) { alert('Error creating bid: ' + err.message); return; }
     setBids(prev => [newBid, ...(prev || [])]);
-    setForm({ gc_name:'', name:'', due_date:'', project_type:'' });
+    const shouldOpenEstimate = !!form.open_estimate;
+    setForm({ gc_name:'', name:'', due_date:'', project_type:'', open_estimate:false });
     setShowCreate(false);
+    if (shouldOpenEstimate) onOpenEstimate && onOpenEstimate(newBid);
   }
 
   async function handleAdvance(bid) {
@@ -261,6 +272,56 @@ const PipelineView = ({ onOpenDetail }) => {
       </div>
 
       <div style={{padding:'16px 20px 40px', overflowX:'auto'}}>
+        {showCreate && (
+          <div className="modal-overlay" onClick={() => setShowCreate(false)}>
+            <div className="modal-box" style={{maxWidth:740}} onClick={e => e.stopPropagation()}>
+              <div className="modal-head">
+                <div>
+                  <div style={{fontSize:10.5,fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',color:'var(--mute)',marginBottom:1}}>Ingest ITB</div>
+                  <div style={{fontSize:15,fontWeight:700}}>Create Bid</div>
+                </div>
+                <div style={{flex:1}}/>
+                <button className="modal-close" onClick={() => setShowCreate(false)} title="Close">×</button>
+              </div>
+              <form className="modal-body" onSubmit={handleCreate}>
+                <div className="g2" style={{gap:10}}>
+                  <div className="field">
+                    <label>GC / Client *</label>
+                    <input required value={form.gc_name} onChange={e=>setForm(f=>({...f,gc_name:e.target.value}))} placeholder="Turner Construction"/>
+                  </div>
+                  <div className="field">
+                    <label>Project Name *</label>
+                    <input required value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Caldwell Medical Center"/>
+                  </div>
+                  <div className="field">
+                    <label>Bid Due Date *</label>
+                    <input required type="date" value={form.due_date} onChange={e=>setForm(f=>({...f,due_date:e.target.value}))}/>
+                  </div>
+                  <div className="field">
+                    <label>Project Type</label>
+                    <input value={form.project_type} onChange={e=>setForm(f=>({...f,project_type:e.target.value}))} placeholder="Healthcare TI"/>
+                  </div>
+                </div>
+                <div style={{fontSize:11.5,color:'var(--mute)',marginTop:10}}>
+                  Only the starred fields are required for initial ITB ingestion.
+                </div>
+                <label style={{display:'flex',gap:8,alignItems:'center',marginTop:10,fontSize:12,color:'var(--ink-2)'}}>
+                  <input
+                    type="checkbox"
+                    checked={!!form.open_estimate}
+                    onChange={e=>setForm(f=>({...f,open_estimate:e.target.checked}))}
+                  />
+                  Open in Bid Workbook after create
+                </label>
+                <div className="modal-foot" style={{padding:'14px 0 0'}}>
+                  <button className="btn ghost" type="button" onClick={() => setShowCreate(false)}>Cancel</button>
+                  <div style={{flex:1}}/>
+                  <button className="btn accent" type="submit" disabled={saving}>{saving?'Saving…':'Create Bid'}</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
         {totalBids === 0 && !showCreate ? (
           <window.EmptyState
             heading="No bids yet"
@@ -277,25 +338,8 @@ const PipelineView = ({ onOpenDetail }) => {
                   <div className="col-head">
                     <span>{col.label}</span>
                     <span className="n">{colBids.length}</span>
-                    {isITB && <button className="btn ghost sm" style={{marginLeft:'auto',fontSize:11}} onClick={() => setShowCreate(v => !v)}><Icon.plus/></button>}
+                    {isITB && <button className="btn ghost sm" style={{marginLeft:'auto',fontSize:11}} onClick={() => setShowCreate(true)}><Icon.plus/></button>}
                   </div>
-
-                  {isITB && showCreate && (
-                    <form className="card" style={{padding:'12px 14px',borderColor:'var(--accent)',borderWidth:1.5,marginBottom:8}} onSubmit={handleCreate}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:'var(--mute)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:3}}>Client / GC</div>
-                      <input required value={form.gc_name} onChange={e=>setForm(f=>({...f,gc_name:e.target.value}))} placeholder="Turner Construction" style={{width:'100%',border:'1px solid var(--line)',borderRadius:'var(--r-sm)',padding:'5px 8px',fontSize:12.5,background:'var(--paper)',marginBottom:6}}/>
-                      <div style={{fontSize:10.5,fontWeight:700,color:'var(--mute)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:3}}>Project Name</div>
-                      <input required value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Caldwell Medical Center" style={{width:'100%',border:'1px solid var(--line)',borderRadius:'var(--r-sm)',padding:'5px 8px',fontSize:12.5,background:'var(--paper)',marginBottom:6}}/>
-                      <div style={{fontSize:10.5,fontWeight:700,color:'var(--mute)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:3}}>Bid Due Date</div>
-                      <input required type="date" value={form.due_date} onChange={e=>setForm(f=>({...f,due_date:e.target.value}))} style={{width:'100%',border:'1px solid var(--line)',borderRadius:'var(--r-sm)',padding:'5px 8px',fontSize:12.5,background:'var(--paper)',marginBottom:6}}/>
-                      <div style={{fontSize:10.5,fontWeight:700,color:'var(--mute)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:3}}>Project Type</div>
-                      <input required value={form.project_type} onChange={e=>setForm(f=>({...f,project_type:e.target.value}))} placeholder="Healthcare TI" style={{width:'100%',border:'1px solid var(--line)',borderRadius:'var(--r-sm)',padding:'5px 8px',fontSize:12.5,background:'var(--paper)',marginBottom:8}}/>
-                      <div style={{display:'flex',gap:6}}>
-                        <button className="btn accent sm" type="submit" disabled={saving}>{saving?'Saving…':'Create Bid'}</button>
-                        <button className="btn ghost sm" type="button" onClick={()=>setShowCreate(false)}>Cancel</button>
-                      </div>
-                    </form>
-                  )}
 
                   {colBids.map((bid) => {
                     const nextStage = window.dbHelpers.STAGE_NEXT[bid.stage];
