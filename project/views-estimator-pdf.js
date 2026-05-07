@@ -111,8 +111,9 @@
       .forEach(([v, l]) => { if (!v) return; txt(cDesc, y, l, { bold: true, size: 7.5 }); txt(cDesc + 38, y, v, { size: 7.5 }); y += 4; });
 
     if (bid.addendums) {
-      txt(cDesc, y, 'The following addendums have been received and acknowledged:', { bold: true, size: 7.5 }); y += 4;
-      txt(cDesc + 4, y, bid.addendums, { size: 7.5, maxWidth: CW - 4 }); y += 4;
+      txt(cDesc, y, 'Addendums:', { bold: true, size: 7.5 });
+      txt(cDesc + 28, y, bid.addendums, { size: 7.5, maxWidth: CW - 28 });
+      y += 4;
     }
     y += 2;
 

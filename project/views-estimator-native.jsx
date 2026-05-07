@@ -251,11 +251,13 @@ function EstimatorNative({ bidId }) {
         {totals && (
           <div style={{display:'flex',alignItems:'center',gap:7,fontSize:12,fontFamily:'var(--mono)',flexWrap:'wrap',flexShrink:0}}>
             <span style={{color:'#A09080'}}>Mat {fmt$(totals.mat)}</span>
-            {[['oh_pct','OH',bid.oh_pct??15],['del_pct','Del',bid.del_pct??5],['ins_pct','Ins',bid.ins_pct??20]].map(([f,label,v])=>(
-              <span key={f} style={{color:'#A09080',display:'flex',alignItems:'center',gap:2}}>
-                +{label} <input type="number" style={pctI} defaultValue={v} min="0" max="100" step="0.1" onBlur={e=>setMargin(f,e.target.value)} />%
-              </span>
-            ))}
+            <React.Fragment key={`${bid.oh_pct??15}-${bid.del_pct??5}-${bid.ins_pct??20}`}>
+              {[['oh_pct','OH',bid.oh_pct??15],['del_pct','Del',bid.del_pct??5],['ins_pct','Ins',bid.ins_pct??20]].map(([f,label,v])=>(
+                <span key={f} style={{color:'#A09080',display:'flex',alignItems:'center',gap:2}}>
+                  +{label} <input type="number" style={pctI} defaultValue={v} min="0" max="100" step="0.1" onBlur={e=>setMargin(f,e.target.value)} />%
+                </span>
+              ))}
+            </React.Fragment>
             <span style={{fontWeight:700,fontSize:14,color:'#C46A3C',marginLeft:2}}>{fmt$(totals.total)}</span>
           </div>
         )}
