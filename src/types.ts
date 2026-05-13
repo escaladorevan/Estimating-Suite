@@ -49,6 +49,8 @@ export type EstimateItem = {
   name?: string;
   description?: string;
   drawingRef?: string;
+  category?: string;
+  materialType?: string;
   qty: number;
   unit?: string;
   unitCost: number;
