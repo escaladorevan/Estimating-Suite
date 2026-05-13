@@ -1,25 +1,59 @@
-# CODING AGENTS: READ THIS FIRST
+# Estimating Suite
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+Estimating Suite is being rebuilt from the original prototype bundle into a full-stack web app for FS bid tracking, estimating, proposal generation, job tracking, file storage, and historical margin analysis.
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+The legacy prototype files remain under `project/` as reference material. The modern app lives under `src/`.
 
-## What you should do — IMPORTANT
+## Source Systems Being Merged
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+- `project/uploads/Estimating_Master_v4.xlsx`: long-term opportunity, bid, job, CO, and historical tracking source of truth.
+- `project/uploads/FS_Estimator_v2_1.html`: estimating/proposal workflow reference.
+- `project/uploads/FS Job Dashboard.html`: job execution, files, COs, install calendar, and activity workflow reference.
+- Existing `project/*.jsx` files: integration prototype and Supabase bridge reference.
 
-**Find the primary design file under `project/` and read it top to bottom.** The chat transcripts will tell you which file the user was last iterating on. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+## Modern App Stack
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+- Next.js + React + TypeScript
+- Supabase Auth/Postgres/Storage-ready architecture
+- Vitest for business-rule tests
+- XLSX import for Estimating Master V4
+- jsPDF proposal export
 
-## About the design files
+## Run Locally
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+```bash
+npm install
+npm run dev
+```
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+Optional Supabase environment:
 
-## Bundle contents
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
 
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `Estimating Suite` project files (HTML prototypes, assets, components)
+Apply the new schema from:
+
+```text
+supabase/rebuild-schema.sql
+```
+
+## Verification
+
+```bash
+npm test
+npm run typecheck
+npm run build
+```
+
+The current rebuild includes:
+
+- Master-style opportunity register with workbook import
+- Active bid kanban limited to active pursuit work
+- Native estimator workspace with FS Estimator V2-style totals
+- PDF proposal export
+- Jobs list and robust job detail page
+- CO approval rollups into current contract value
+- File-slot model from FS Job Dashboard
+- Bid/job analytics and margin summary

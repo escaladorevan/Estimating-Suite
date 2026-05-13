@@ -1,1 +1,10 @@
 .claude/
+.next/
+node_modules/
+coverage/
+dist/
+.env.local
+npm-debug.log*
+*.tsbuildinfo
+.codex-pdf-tools/
+.codex-pdf-render/
