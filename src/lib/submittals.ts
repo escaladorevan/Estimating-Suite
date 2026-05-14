@@ -1,4 +1,5 @@
 import type { SubmittalPackage, SubmittalStatus } from "@/types";
+import { SUBMITTAL_READY_STATUSES, SUBMITTAL_WAITING_STATUSES } from "./status-constants";
 
 export type ReleaseState = "Ready" | "Waiting" | "Blocked" | "No Packages";
 export type SubmittalSeverity = "good" | "warn" | "bad" | "neutral";
@@ -29,8 +30,8 @@ export type SubmittalSummary = {
   waitingCount: number;
 };
 
-const readyStatuses: SubmittalStatus[] = ["Approved", "Approved as Noted", "Void / Not Required"];
-const waitingStatuses: SubmittalStatus[] = ["Submitted", "Resubmitted"];
+const readyStatuses: readonly SubmittalStatus[] = SUBMITTAL_READY_STATUSES;
+const waitingStatuses: readonly SubmittalStatus[] = SUBMITTAL_WAITING_STATUSES;
 
 export function createSubmittalPackage(input: CreateSubmittalInput): SubmittalPackage {
   return {

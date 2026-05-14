@@ -184,3 +184,5 @@ create index if not exists opportunities_due_idx on opportunities(bid_due_date);
 create index if not exists jobs_install_idx on jobs(install_start, install_end);
 create index if not exists change_orders_job_status_idx on change_orders(job_id, status);
 create index if not exists files_owner_idx on files(owner_type, owner_id);
+-- DEPRECATED: intermediate rebuild schema kept only for migration history/reference.
+-- Do not run this file. The canonical reset schema is supabase/rebuild-production-schema.sql.

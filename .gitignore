@@ -5,6 +5,7 @@ coverage/
 dist/
 .env.local
 npm-debug.log*
+next-dev.*.log
 *.tsbuildinfo
 .codex-pdf-tools/
 .codex-pdf-render/
