@@ -130,19 +130,59 @@ async function markBidWon(bid) {
   return window.sb.from('jobs').insert(jobPayload).select().single();
 }
 
+// Fields the legacy views use on a bid that map to opportunities columns.
+const BID_TO_OPP_FIELD = {
+  name:            'project_name',
+  gc_name:         'client',
+  project_type:    'job_type',
+  due_date:        'bid_due_date',
+  estimated_value: 'estimated_value',
+  notes:           'notes',
+  stage:           'status',  // translated below via STAGE_TO_STATUS
+};
+
+// Fields that lived in bids but have no column in opportunities yet (estimates data).
+// We drop them silently so the save doesn't error.
+const BID_FIELDS_NOT_IN_OPP = new Set([
+  'oh_pct', 'del_pct', 'ins_pct', 'estimator', 'doc_type', 'attention',
+  'po_number', 'terms', 'drawings_dated', 'bid_docs', 'exclusions',
+  'clarifications', 'general_terms', 'warranty', 'finish_terms',
+  'hardware_terms', 'fab_note', 'pricing_mode', 'delivery_date',
+  'specs_dated', 'addendums', 'address', 'ship_via', 'number',
+]);
+
+function translateBidFields(fields) {
+  const out = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (BID_FIELDS_NOT_IN_OPP.has(k)) continue;
+    const mapped = BID_TO_OPP_FIELD[k];
+    if (mapped) {
+      out[mapped] = (k === 'stage') ? (STAGE_TO_STATUS[v] || v) : v;
+    } else {
+      out[k] = v;  // pass through any already-correct column name
+    }
+  }
+  return out;
+}
+
 async function updateBid(bidId, fields) {
+  const translated = translateBidFields(fields);
+  if (Object.keys(translated).length === 0) return { data: null, error: null };
   return window.sb.from('opportunities')
-    .update({ ...fields, updated_at: new Date().toISOString() })
+    .update({ ...translated, updated_at: new Date().toISOString() })
     .eq('id', bidId);
 }
 
 async function updateBidInfo(bidId, fields) {
+  const translated = translateBidFields(fields);
+  if (Object.keys(translated).length === 0) return { data: null, error: null };
   return window.sb.from('opportunities')
-    .update({ ...fields, updated_at: new Date().toISOString() })
+    .update({ ...translated, updated_at: new Date().toISOString() })
     .eq('id', bidId);
 }
 
 async function updateBidTerms(bidId, columnName, jsonbArray) {
+  if (BID_FIELDS_NOT_IN_OPP.has(columnName)) return { data: null, error: null };
   return window.sb.from('opportunities')
     .update({ [columnName]: jsonbArray, updated_at: new Date().toISOString() })
     .eq('id', bidId);
