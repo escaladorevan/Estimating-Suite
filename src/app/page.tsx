@@ -22,10 +22,11 @@ import type { ChangeEvent, ElementType, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { supabase, getCurrentUserProfile } from "@/lib/supabase-client";
 import { BidWorkbook } from "@/components/BidWorkbook";
+import { useJobsPersistence } from "@/hooks/useJobsPersistence";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "@/lib/change-order-workflow";
 import { calculateEstimateTotals } from "@/lib/estimate-math";
 import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
-import { pruneProjectFileSlotMetadata, saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
+import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
 import {
   currentContractValue,
@@ -39,7 +40,6 @@ import {
 import { fileSlots, estimates as seedEstimates, jobs as seedJobs, opportunities as seedOpportunities } from "@/lib/sample-data";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "@/lib/opportunity-import";
 import { listOpportunities, saveOpportunity } from "@/lib/opportunity-repository";
-import { listJobs, listPMNotes, saveJobHeader, saveChangeOrder, savePurchaseOrder, saveSubmittal, savePMNote, saveActivityEvent } from "@/lib/job-repository";
 import { filterOpportunitiesForView, suggestJobNumber, type RegisterView } from "@/lib/opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote, type PMActionItem } from "@/lib/pm-actions";
 import { buildProposalPdf } from "@/lib/proposal-pdf";
@@ -145,7 +145,6 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [opportunityPersistenceStatus, setOpportunityPersistenceStatus] = useState("Checking Supabase...");
   const [estimatePersistenceStatus, setEstimatePersistenceStatus] = useState("Workbook snapshots save after sign-in.");
-  const [jobPersistenceStatus, setJobPersistenceStatus] = useState("Jobs load on sign-in.");
   const [loginEmail, setLoginEmail] = useState("escalador.evan@gmail.com");
   const [sessionEmail, setSessionEmail] = useState("");
   const [authStatus, setAuthStatus] = useState("Sign in to save live data.");
@@ -168,6 +167,26 @@ export default function Home() {
       createdAt: "2026-05-09"
     }
   ]);
+  const {
+    jobPersistenceStatus,
+    loadPersistedJobs,
+    loadPersistedPMNotes,
+    persistActivity,
+    persistChangeOrder,
+    persistJobHeader,
+    persistPMNote,
+    persistProjectFileAttachment,
+    persistPurchaseOrder,
+    persistSubmittal,
+    setJobPersistenceStatus
+  } = useJobsPersistence({
+    estimates,
+    setDetailJobId,
+    setEstimates,
+    setJobs,
+    setPmNotes,
+    setSelectedJobId
+  });
 
   const selectedEstimate = estimates.find((estimate) => estimate.id === activeEstimateId) ?? estimates[0];
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? jobs[0];
@@ -225,42 +244,6 @@ export default function Home() {
     } catch {
       if (!isMounted) return;
       setOpportunityPersistenceStatus("Local sample mode. Sign in before Supabase can read and save live records.");
-    }
-  }
-
-  async function loadPersistedJobs(isMounted = true) {
-    try {
-      const persisted = await listJobs();
-      if (!isMounted) return;
-
-      if (persisted.length) {
-        setJobs((current) => {
-          const byNumber = new Map(persisted.map((job) => [job.jobNumber, job]));
-          const localOnly = current.filter((job) => !byNumber.has(job.jobNumber));
-          return [...persisted, ...localOnly];
-        });
-        setJobPersistenceStatus(`Loaded ${persisted.length} jobs from Supabase.`);
-        return;
-      }
-
-      setJobPersistenceStatus("Supabase connected. Using sample jobs until real rows are added.");
-    } catch {
-      if (!isMounted) return;
-      setJobPersistenceStatus("Local sample mode. Sign in before Supabase can read and save jobs.");
-    }
-  }
-
-  async function loadPersistedPMNotes(isMounted = true) {
-    try {
-      const persisted = await listPMNotes();
-      if (!isMounted) return;
-
-      if (persisted.length) {
-        setPmNotes(persisted);
-      }
-    } catch {
-      if (!isMounted) return;
-      setJobPersistenceStatus("Local sample mode. Sign in before Supabase can read and save PM notes.");
     }
   }
 
@@ -413,36 +396,6 @@ export default function Home() {
     }
   }
 
-  async function persistJobHeader(job: Job, forceCreate = false) {
-    if (!isUuid(job.id) && !forceCreate) return;
-    const localId = job.id;
-    setJobPersistenceStatus(`Saving job ${job.jobNumber}...`);
-
-    try {
-      const saved = await saveJobHeader(job);
-      setJobs((current) =>
-        current.map((candidate) =>
-          candidate.id === localId || candidate.jobNumber === saved.jobNumber ? saved : candidate
-        )
-      );
-      setSelectedJobId((current) => (current === localId ? saved.id : current));
-      setDetailJobId((current) => (current === localId ? saved.id : current));
-      setJobPersistenceStatus(`Job ${saved.jobNumber} saved to Supabase.`);
-
-      // On first create, link any matching estimate to the new job UUID
-      if (forceCreate && saved.opportunityId && isUuid(saved.id)) {
-        const linked = estimates.find((e) => e.opportunityId === saved.opportunityId && !e.jobId);
-        if (linked && isUuid(linked.id)) {
-          const updated = { ...linked, jobId: saved.id };
-          setEstimates((current) => current.map((e) => (e.id === linked.id ? updated : e)));
-          void saveEstimateHeader(updated).catch(() => {});
-        }
-      }
-    } catch {
-      setJobPersistenceStatus(`Job save failed. ${job.jobNumber} is local only.`);
-    }
-  }
-
   function updateJobHeader(jobId: string, updates: Partial<Job>) {
     const job = jobs.find((candidate) => candidate.id === jobId);
     if (!job) return;
@@ -473,143 +426,6 @@ export default function Home() {
     return r === "admin" || r === "estimator" || r === "pm";
   }
 
-  async function persistChangeOrder(co: ChangeOrder) {
-    const localId = co.id;
-    setJobPersistenceStatus(`Saving CO ${co.number}...`);
-    try {
-      const saved = await saveChangeOrder(co);
-      setJobs((current) =>
-        current.map((job) =>
-          job.id !== co.jobId
-            ? job
-            : { ...job, changeOrders: job.changeOrders.map((c) => (c.id === localId ? saved : c)) }
-        )
-      );
-      setJobPersistenceStatus(`CO ${co.number} saved.`);
-    } catch {
-      setJobPersistenceStatus(`CO ${co.number} save failed — local only.`);
-    }
-  }
-
-  async function persistPurchaseOrder(po: PurchaseOrder) {
-    const localId = po.id;
-    setJobPersistenceStatus(`Saving PO ${po.poNumber}...`);
-    try {
-      const saved = await savePurchaseOrder(po);
-      setJobs((current) =>
-        current.map((job) =>
-          job.id !== po.jobId
-            ? job
-            : { ...job, purchaseOrders: job.purchaseOrders.map((p) => (p.id === localId ? saved : p)) }
-        )
-      );
-      setJobPersistenceStatus(`PO ${po.poNumber} saved.`);
-    } catch {
-      setJobPersistenceStatus(`PO ${po.poNumber} save failed — local only.`);
-    }
-  }
-
-  async function persistSubmittal(sub: SubmittalPackage) {
-    const localId = sub.id;
-    setJobPersistenceStatus(`Saving submittal ${sub.name}...`);
-    try {
-      const saved = await saveSubmittal(sub);
-      setJobs((current) =>
-        current.map((job) =>
-          job.id !== sub.jobId
-            ? job
-            : { ...job, submittals: job.submittals.map((s) => (s.id === localId ? saved : s)) }
-        )
-      );
-      setJobPersistenceStatus(`Submittal ${sub.name} saved.`);
-    } catch {
-      setJobPersistenceStatus(`Submittal ${sub.name} save failed — local only.`);
-    }
-  }
-
-  async function persistPMNote(note: PMNote) {
-    if (note.jobId && !isUuid(note.jobId)) {
-      setJobPersistenceStatus("PM note saved locally. Link it to a persisted job before saving the job reference.");
-      return;
-    }
-
-    try {
-      const saved = await savePMNote(note);
-      setPmNotes((current) => current.map((candidate) => (candidate.id === note.id ? saved : candidate)));
-      setJobPersistenceStatus("PM note saved.");
-    } catch {
-      setJobPersistenceStatus("PM note save failed - local only.");
-    }
-  }
-
-  async function persistActivity(event: ActivityEvent) {
-    if (!isUuid(event.ownerId)) return;
-
-    try {
-      const saved = await saveActivityEvent(event);
-      setJobs((current) =>
-        current.map((job) =>
-          job.activity.some((candidate) => candidate.id === event.id)
-            ? { ...job, activity: job.activity.map((candidate) => (candidate.id === event.id ? saved : candidate)) }
-            : job
-        )
-      );
-    } catch {
-      setJobPersistenceStatus("Activity log save failed - local only.");
-    }
-  }
-
-  async function persistProjectFileAttachment(localFile: ProjectFile, file: File, options: { replaceSlot?: boolean } = {}) {
-    if (!isUuid(localFile.ownerId)) {
-      setJobPersistenceStatus("File attached locally. Save the job item before storing files.");
-      return;
-    }
-
-    setJobPersistenceStatus(`Uploading ${file.name}...`);
-
-    try {
-      const storagePath = await uploadProjectFile({
-        file,
-        ownerType: localFile.ownerType,
-        ownerId: localFile.ownerId,
-        slot: localFile.slot,
-        fileName: file.name,
-        mimeType: file.type
-      });
-      if (!storagePath) throw new Error("Upload did not return a storage path.");
-
-      const saved = await saveProjectFileMetadata({
-        ownerType: localFile.ownerType,
-        ownerId: localFile.ownerId,
-        slot: localFile.slot,
-        name: file.name,
-        storagePath,
-        mimeType: file.type || null,
-        sizeBytes: file.size
-      });
-
-      if (saved) {
-        if (options.replaceSlot) {
-          await pruneProjectFileSlotMetadata({
-            ownerType: localFile.ownerType,
-            ownerId: localFile.ownerId,
-            slot: localFile.slot,
-            keepId: saved.id
-          });
-        }
-        setJobs((current) =>
-          current.map((job) =>
-            job.files.some((candidate) => candidate.id === localFile.id)
-              ? { ...job, files: job.files.map((candidate) => (candidate.id === localFile.id ? saved : candidate)) }
-              : job
-          )
-        );
-      }
-      setJobPersistenceStatus(saved ? `Stored ${file.name} in Supabase Storage.` : `Uploaded ${file.name}; metadata is local only.`);
-    } catch {
-      setJobPersistenceStatus("File attached locally only. Supabase Storage is waiting on sign-in or persisted owner id.");
-    }
-  }
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
