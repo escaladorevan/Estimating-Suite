@@ -60,7 +60,12 @@ export function useJobsPersistence({
         });
         setJobs(reconciled.jobs);
         setEstimates(reconciled.estimates);
-        setPmNotes(reconciled.pmNotes);
+        setPmNotes((current) =>
+          current.map((note) => ({
+            ...note,
+            jobId: note.jobId ? reconciled.localToPersistedJobIds.get(note.jobId) ?? note.jobId : note.jobId
+          }))
+        );
         setSelectedJobId(reconciled.selectedJobId);
         setDetailJobId(reconciled.detailJobId);
         setJobPersistenceStatus(`Loaded ${persisted.length} jobs from Supabase.`);
@@ -105,7 +110,12 @@ export function useJobsPersistence({
       });
       setJobs(reconciled.jobs);
       setEstimates(reconciled.estimates);
-      setPmNotes(reconciled.pmNotes);
+      setPmNotes((current) =>
+        current.map((note) => ({
+          ...note,
+          jobId: note.jobId ? reconciled.localToPersistedJobIds.get(note.jobId) ?? note.jobId : note.jobId
+        }))
+      );
       setSelectedJobId(reconciled.selectedJobId);
       setDetailJobId(reconciled.detailJobId);
       setJobPersistenceStatus(`Job ${saved.jobNumber} saved to Supabase.`);
@@ -178,19 +188,24 @@ export function useJobsPersistence({
   }, [setJobs]);
 
   const persistPMNote = useCallback(async (note: PMNote) => {
-    if (note.jobId && !isUuid(note.jobId)) {
-      const blockedJob = jobs.find((job) => job.id === note.jobId);
-      const blockedLabel = blockedJob ? `${blockedJob.jobNumber} (${blockedJob.id})` : note.jobId;
+    const normalizedNote = {
+      ...note,
+      jobId: normalizeUuid(note.jobId) ?? note.jobId
+    };
+
+    if (normalizedNote.jobId && !isUuid(normalizedNote.jobId)) {
+      const blockedJob = jobs.find((job) => job.id === normalizedNote.jobId);
+      const blockedLabel = blockedJob ? `${blockedJob.jobNumber} (${blockedJob.id})` : normalizedNote.jobId;
       setJobPersistenceStatus(`PM note saved locally. Job reference ${blockedLabel} is not a persisted Supabase UUID.`);
       return;
     }
 
     try {
-      const saved = await savePMNote(note);
+      const saved = await savePMNote(normalizedNote);
       setPmNotes((current) => current.map((candidate) => (candidate.id === note.id ? saved : candidate)));
       setJobPersistenceStatus("PM note saved.");
-    } catch {
-      setJobPersistenceStatus("PM note save failed - local only.");
+    } catch (error) {
+      setJobPersistenceStatus(`PM note save failed - local only. ${errorMessage(error)}`);
     }
   }, [jobs, setPmNotes]);
 
@@ -262,8 +277,8 @@ export function useJobsPersistence({
         );
       }
       setJobPersistenceStatus(saved ? `Stored ${file.name} in Supabase Storage.` : `Uploaded ${file.name}; metadata is local only.`);
-    } catch {
-      setJobPersistenceStatus("File attached locally only. Supabase Storage is waiting on sign-in or persisted owner id.");
+    } catch (error) {
+      setJobPersistenceStatus(`File attached locally only. ${errorMessage(error)}`);
     }
   }, [setJobs]);
 
@@ -282,6 +297,17 @@ export function useJobsPersistence({
   };
 }
 
+function normalizeUuid(value?: string) {
+  const trimmed = value?.trim() ?? "";
+  return isUuid(trimmed) ? trimmed : null;
+}
+
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error && "message" in error && typeof error.message === "string") return error.message;
+  return "Unknown Supabase error.";
 }

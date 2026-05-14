@@ -35,7 +35,7 @@ import { jobDetailTabs } from "./job-detail-tabs";
 import { mapOpportunityFromRow, mapOpportunityToUpsert } from "./opportunity-repository";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "./opportunity-import";
 import { CHANGE_ORDER_STATUSES, OPPORTUNITY_STATUSES } from "./status-constants";
-import { reconcilePersistedJobIdentity } from "./job-persistence-reconciliation";
+import { reconcilePersistedJobIdentity, resolvePersistedJobForPMNote } from "./job-persistence-reconciliation";
 import { filterOpportunitiesForView, suggestJobNumber } from "./opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote } from "./pm-actions";
 import { addMonthsToCalendarMonth, buildCapacityWeeks, buildInstallCalendarMonth } from "./schedule-capacity";
@@ -49,6 +49,7 @@ import {
 } from "./submittals";
 import { estimateItemsToClipboardText, parseClipboardLineItems } from "./workbook-clipboard";
 import { cloneArea, cloneItems, cloneSection } from "./workbook-copy";
+import type { Job } from "@/types";
 
 const productionSchema = () => readFileSync(join(process.cwd(), "supabase", "rebuild-production-schema.sql"), "utf8");
 
@@ -1135,6 +1136,31 @@ describe("job persistence reconciliation", () => {
     expect(result.detailJobId).toBe(persistedJobId);
     expect(result.localToPersistedJobIds.get("job-g061")).toBe(persistedJobId);
   });
+
+  it("prefers a persisted UUID job when a local job with the same number is requested", () => {
+    const persistedJobId = "50f42d9f-b53f-4a97-b711-dc8b1cd13384";
+    const jobs = [
+      {
+        id: "job-g061",
+        jobNumber: "G26-061",
+        projectName: "Smoke Test"
+      },
+      {
+        id: persistedJobId,
+        jobNumber: "G26-061",
+        projectName: "Smoke Test"
+      }
+    ] as Job[];
+
+    const result = resolvePersistedJobForPMNote({
+      jobs,
+      requestedJobId: "job-g061",
+      parsedJobNumber: null
+    });
+
+    expect(result.linkedJob?.id).toBe(persistedJobId);
+    expect(result.persistedJob?.id).toBe(persistedJobId);
+  });
 });
 
 describe("job detail tabs", () => {
@@ -1177,6 +1203,54 @@ describe("change order workflow", () => {
       "The scope summary is still generic.",
       "CO-002 already exists on this job."
     ]);
+  });
+
+  it("accepts a descriptive priced change order even when the header still has the generated scope", () => {
+    const warnings = validateChangeOrderSubmission({
+      estimate: {
+        id: "est-co",
+        jobId: "job-g042",
+        documentType: "Change Order",
+        proposalNumber: "CO-002",
+        projectName: "Tempe Student Union",
+        client: "DPR",
+        scopeSummary: "CO-002 additional scope for Tempe Student Union",
+        pricingMode: "byarea",
+        ohPct: 12,
+        delPct: 3,
+        insPct: 8,
+        areas: [
+          {
+            id: "area-co",
+            name: "Phase 2 Nurse Station",
+            qty: 1,
+            sections: [
+              {
+                id: "section-co",
+                name: "Casework add",
+                items: [
+                  {
+                    id: "item-co",
+                    description: "Add 18 LF of PLAM uppers and solid surface countertop",
+                    qty: 18,
+                    unit: "LF",
+                    unitCost: 325
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        subItems: [],
+        alternates: [],
+        exclusions: [],
+        clarifications: []
+      },
+      amount: 5850,
+      existingChangeOrders: []
+    });
+
+    expect(warnings).toEqual([]);
   });
 
   it("creates a workbook-backed change order with contract context", () => {

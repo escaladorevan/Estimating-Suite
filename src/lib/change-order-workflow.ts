@@ -27,12 +27,40 @@ export function validateChangeOrderSubmission({
     : `${number?.toLowerCase()} additional scope for ${estimate.projectName.toLowerCase()}`;
 
   if (amount <= 0) warnings.push("This change order total is $0.");
-  if (!scope || scope === genericScope || scope === "additional scope") warnings.push("The scope summary is still generic.");
+  if ((!scope || scope === genericScope || scope === "additional scope") && !hasDescriptiveChangeOrderScope(estimate)) {
+    warnings.push("The scope summary is still generic.");
+  }
   if (number && existingChangeOrders.some((co) => co.number.toLowerCase() === number.toLowerCase())) {
     warnings.push(`${number} already exists on this job.`);
   }
 
   return warnings;
+}
+
+function hasDescriptiveChangeOrderScope(estimate: Estimate) {
+  const genericLabels = new Set([
+    "",
+    "added scope",
+    "additional scope",
+    "change order scope"
+  ]);
+
+  const labels = [
+    ...estimate.areas.flatMap((area) => [
+      area.name,
+      ...area.sections.flatMap((section) => [
+        section.name,
+        ...section.items.map((item) => item.description)
+      ])
+    ]),
+    ...(estimate.subItems ?? []).map((item) => item.description),
+    ...(estimate.alternates ?? []).map((alternate) => alternate.description)
+  ];
+
+  return labels.some((label) => {
+    const normalized = label?.trim().toLowerCase() ?? "";
+    return normalized.length > 2 && !genericLabels.has(normalized);
+  });
 }
 
 export function createChangeOrderEstimateFromJob(job: Job, date: string): Estimate {

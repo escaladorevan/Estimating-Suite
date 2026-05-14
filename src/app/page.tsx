@@ -932,14 +932,24 @@ export default function Home() {
     }
     let attachedFile: ProjectFile | null = null;
     let attachedActivity: ActivityEvent | null = null;
+    const requestedJob = jobs.find((job) => job.id === jobId);
+    const persistedJob = requestedJob
+      ? jobs.find((job) => job.jobNumber.toLowerCase() === requestedJob.jobNumber.toLowerCase() && isUuid(job.id))
+      : undefined;
+    const persistenceJobId = persistedJob?.id ?? jobId;
+
+    if (persistedJob && persistedJob.id !== jobId) {
+      setSelectedJobId((current) => (current === jobId ? persistedJob.id : current));
+      setDetailJobId((current) => (current === jobId ? persistedJob.id : current));
+    }
 
     setJobs((current) =>
       current.map((job) => {
-        if (job.id !== jobId) return job;
+        if (job.id !== persistenceJobId) return job;
         const nextFile: ProjectFile = {
           id: `file-${slot}-${Date.now()}`,
           ownerType: "job",
-          ownerId: jobId,
+          ownerId: persistenceJobId,
           slot,
           name: file.name,
           uploadedAt: today
@@ -947,7 +957,7 @@ export default function Home() {
         const activity: ActivityEvent = {
           id: `act-${Date.now()}`,
           ownerType: "job",
-          ownerId: jobId,
+          ownerId: persistenceJobId,
           author: "System",
           message: `${file.name} uploaded to ${slot}.`,
           createdAt: today
@@ -966,7 +976,7 @@ export default function Home() {
       })
     );
     if (attachedFile) void persistProjectFileAttachment(attachedFile, file, { replaceSlot: true });
-    if (attachedActivity && isUuid(jobId)) void persistActivity(attachedActivity);
+    if (attachedActivity && isUuid(persistenceJobId)) void persistActivity(attachedActivity);
   }
 
   function createServiceJob(input: {
@@ -3032,7 +3042,7 @@ function OpportunityModal({
     suggestJobNumber({ pm: "Geoff", awardDate: today, existingJobs })
   );
   const [awardContract, setAwardContract] = useState(draft.initialContractValue ?? draft.estimatedValue);
-  const canConvert = draft.status === "Won" || draft.winLoss === "Won";
+  const canConvert = draft.status !== "Lost" && draft.status !== "Archived" && draft.winLoss !== "Lost";
 
   function changeAwardPm(pm: string) {
     setAwardPm(pm);
@@ -3191,6 +3201,7 @@ function OpportunityModal({
             </div>
             <div className="award-copy">
               <span>Opportunity ID stays {draft.jobId} for historical tracking.</span>
+              <span>Conversion will mark this opportunity Won and create the job record.</span>
               <strong>Job will be created as {awardJobNumber}</strong>
             </div>
             {canConvertToJob ? (
