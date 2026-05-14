@@ -22,11 +22,15 @@ export function BidWorkbook({
   estimate,
   onChange,
   onExportPdf,
+  onSaveSnapshot,
+  saveStatus,
   onSubmitChangeOrder
 }: {
   estimate: Estimate;
   onChange: (estimate: Estimate) => void;
   onExportPdf: () => void;
+  onSaveSnapshot?: (estimate: Estimate) => void;
+  saveStatus?: string;
   onSubmitChangeOrder?: (estimate: Estimate, amount: number) => void;
 }) {
   const [view, setView] = useState<WorkbookView>("area");
@@ -258,6 +262,7 @@ export function BidWorkbook({
           <label>Del <input type="number" value={estimate.delPct} onChange={(event) => patch({ delPct: Number(event.target.value) })} />%</label>
           <label>Ins <input type="number" value={estimate.insPct} onChange={(event) => patch({ insPct: Number(event.target.value) })} />%</label>
           <b>{money.format(totals.bidTotal)}</b>
+          {onSaveSnapshot ? <button onClick={() => onSaveSnapshot(estimate)}>Save Snapshot</button> : null}
           <button onClick={onExportPdf}><FileDown size={14} /> Build {estimate.documentType ?? "Proposal"}</button>
           {estimate.documentType === "Change Order" && estimate.jobId && onSubmitChangeOrder ? (
             <button className="submit-co-button" onClick={() => onSubmitChangeOrder(estimate, totals.bidTotal)}>
@@ -266,6 +271,7 @@ export function BidWorkbook({
           ) : null}
         </div>
       </header>
+      {saveStatus ? <div className="workbook-save-strip">{saveStatus}</div> : null}
       {estimate.documentType === "Change Order" && estimate.changeOrderContext ? (
         <ChangeOrderImpactBar estimate={estimate} thisCoAmount={totals.bidTotal} />
       ) : null}
