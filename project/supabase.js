@@ -9,45 +9,107 @@ window.sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // All helpers return { data, error } matching Supabase JS v2 conventions.
 // IMPORTANT: Never include line_items.total in INSERT/UPDATE — it is GENERATED ALWAYS AS.
 
-// ── Bid helpers ───────────────────────────────────────────────────────────────
+// ── Bid helpers (backed by opportunities table) ───────────────────────────────
+// The legacy schema used a `bids` table. The production schema uses `opportunities`.
+// These helpers translate between the old bid shape and the new opportunities schema.
+
+const STATUS_TO_STAGE = {
+  'Lead / ITB':  'ITB',
+  'New':         'ITB',
+  'Pricing':     'Takeoff/Pricing',
+  'Estimating':  'Takeoff/Pricing',
+  'Review / Send': 'Review',
+  'Submitted':   'Submit',
+  'Follow Up':   'Submit',
+  'Won':         'Won',
+  'Lost':        'Lost',
+  'Cold':        'Lost',
+  'Archived':    'Lost',
+};
+
+const STAGE_TO_STATUS = {
+  'ITB':             'Lead / ITB',
+  'Takeoff/Pricing': 'Pricing',
+  'Review':          'Review / Send',
+  'Submit':          'Submitted',
+  'Won':             'Won',
+  'Lost':            'Lost',
+};
+
+function opportunityToBid(row) {
+  return {
+    id:              row.id,
+    number:          row.opportunity_number,
+    name:            row.project_name,
+    gc_name:         row.client,
+    stage:           STATUS_TO_STAGE[row.status] || row.status,
+    due_date:        row.bid_due_date,
+    estimated_value: row.estimated_value,
+    project_type:    row.job_type,
+    notes:           row.notes,
+    created_at:      row.created_at,
+    updated_at:      row.updated_at,
+  };
+}
+
+const OPP_COLUMNS = 'id, opportunity_number, project_name, client, status, bid_due_date, estimated_value, job_type, notes, created_at, updated_at';
 
 async function getBids() {
-  return window.sb.from('bids').select('*').order('created_at', { ascending: false });
+  const { data, error } = await window.sb.from('opportunities')
+    .select(OPP_COLUMNS)
+    .order('created_at', { ascending: false });
+  if (error) return { data: null, error };
+  return { data: data.map(opportunityToBid), error: null };
 }
 
 async function getBid(bidId) {
-  return window.sb.from('bids').select('*').eq('id', bidId).single();
+  const { data, error } = await window.sb.from('opportunities')
+    .select(OPP_COLUMNS)
+    .eq('id', bidId)
+    .single();
+  if (error) return { data: null, error };
+  return { data: opportunityToBid(data), error: null };
 }
 
 async function addBid({ gc_name, name, due_date, project_type }) {
   const year = new Date().getFullYear().toString().slice(-2);
   const seq = String(Date.now()).slice(-3);
-  const number = `B${year}-${seq}`;
-  return window.sb.from('bids')
-    .insert({ number, name, gc_name, due_date, project_type, stage: 'ITB' })
-    .select().single();
+  const opportunity_number = `B${year}-${seq}`;
+  const { data, error } = await window.sb.from('opportunities')
+    .insert({
+      opportunity_number,
+      project_name: name,
+      client: gc_name || 'Unknown',
+      bid_due_date: due_date || null,
+      job_type: project_type || null,
+      status: 'Lead / ITB',
+    })
+    .select(OPP_COLUMNS)
+    .single();
+  if (error) return { data: null, error };
+  return { data: opportunityToBid(data), error: null };
 }
 
 // STAGE_NEXT maps current stage → next stage for the advance button.
 // Submit has no single next — caller must pass 'Won' or 'Lost' explicitly.
 const STAGE_NEXT = {
-  'ITB': 'Takeoff/Pricing',
+  'ITB':             'Takeoff/Pricing',
   'Takeoff/Pricing': 'Review',
-  'Review': 'Submit',
-  'Submit': null,
+  'Review':          'Submit',
+  'Submit':          null,
 };
 
 async function updateBidStage(bidId, stage) {
-  // stage must be one of: 'ITB','Takeoff/Pricing','Review','Submit','Won','Lost'
-  return window.sb.from('bids')
-    .update({ stage, updated_at: new Date().toISOString() })
+  const status = STAGE_TO_STATUS[stage] || stage;
+  return window.sb.from('opportunities')
+    .update({ status, updated_at: new Date().toISOString() })
     .eq('id', bidId);
 }
 
 async function markBidWon(bid) {
   const now = new Date().toISOString();
-  const { error: stageErr } = await window.sb.from('bids')
-    .update({ stage: 'Won', updated_at: now })
+  const { error: stageErr } = await window.sb.from('opportunities')
+    .update({ status: 'Won', updated_at: now })
     .eq('id', bid.id);
   if (stageErr) return { data: null, error: stageErr };
 
@@ -55,43 +117,33 @@ async function markBidWon(bid) {
   if (existingErr) return { data: null, error: existingErr };
   if (existing) return { data: existing, error: null };
 
+  const rawNum = bid.number ? bid.number.replace(/^B/, 'J') : `J-${String(Date.now()).slice(-6)}`;
   const jobPayload = {
-    bid_id: bid.id,
-    number: bid.number ? bid.number.replace(/^B/, 'J') : `J-${String(Date.now()).slice(-6)}`,
-    name: bid.name || 'Untitled Job',
-    gc_name: bid.gc_name || null,
-    status: 'Ready',
-    contract_value: null,
+    opportunity_id:  bid.id,
+    job_number:      rawNum,
+    project_name:    bid.name || 'Untitled Job',
+    client:          bid.gc_name || 'Unknown',
+    base_contract:   0,
+    backlog_status:  'Awarded / Waiting',
   };
 
   return window.sb.from('jobs').insert(jobPayload).select().single();
 }
 
 async function updateBid(bidId, fields) {
-  // General-purpose bid update — accepts any column subset.
-  return window.sb.from('bids')
+  return window.sb.from('opportunities')
     .update({ ...fields, updated_at: new Date().toISOString() })
     .eq('id', bidId);
 }
 
 async function updateBidInfo(bidId, fields) {
-  // V2 alias for updateBid — accepts estimator metadata columns:
-  // oh_pct, del_pct, ins_pct, doc_type, attention, po_number, terms,
-  // drawings_dated, bid_docs, estimator, exclusions, clarifications,
-  // general_terms, warranty, finish_terms, hardware_terms, fab_note,
-  // pricing_mode, delivery_date, specs_dated, addendums,
-  // address, ship_via
-  return window.sb.from('bids')
+  return window.sb.from('opportunities')
     .update({ ...fields, updated_at: new Date().toISOString() })
     .eq('id', bidId);
 }
 
 async function updateBidTerms(bidId, columnName, jsonbArray) {
-  // Targeted JSONB array update for exclusions/clarifications/terms fields.
-  // columnName: 'exclusions' | 'clarifications' | 'general_terms' |
-  //             'warranty' | 'finish_terms' | 'hardware_terms' | 'fab_note'
-  // jsonbArray: array of { text, active, sub } objects
-  return window.sb.from('bids')
+  return window.sb.from('opportunities')
     .update({ [columnName]: jsonbArray, updated_at: new Date().toISOString() })
     .eq('id', bidId);
 }
@@ -202,7 +254,7 @@ async function getJob(id) {
 }
 
 async function getJobByBidId(bidId) {
-  return window.sb.from('jobs').select('*').eq('bid_id', bidId).maybeSingle();
+  return window.sb.from('jobs').select('*').eq('opportunity_id', bidId).maybeSingle();
 }
 
 async function updateJob(id, fields) {
