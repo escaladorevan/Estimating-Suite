@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import type { ChangeEvent, ElementType, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase-client";
+import { supabase, getCurrentUserProfile } from "@/lib/supabase-client";
 import { BidWorkbook } from "@/components/BidWorkbook";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "@/lib/change-order-workflow";
 import { calculateEstimateTotals } from "@/lib/estimate-math";
@@ -39,7 +39,7 @@ import {
 import { fileSlots, estimates as seedEstimates, jobs as seedJobs, opportunities as seedOpportunities } from "@/lib/sample-data";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "@/lib/opportunity-import";
 import { listOpportunities, saveOpportunity } from "@/lib/opportunity-repository";
-import { listJobs, saveJobHeader } from "@/lib/job-repository";
+import { listJobs, saveJobHeader, saveChangeOrder, savePurchaseOrder, saveSubmittal } from "@/lib/job-repository";
 import { filterOpportunitiesForView, suggestJobNumber, type RegisterView } from "@/lib/opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote, type PMActionItem } from "@/lib/pm-actions";
 import { buildProposalPdf } from "@/lib/proposal-pdf";
@@ -54,7 +54,7 @@ import {
   type SubmittalAction,
   type UpdateSubmittalInput
 } from "@/lib/submittals";
-import type { ChangeOrder, Estimate, Job, Opportunity, OpportunityStatus, PMNote, ProjectFile, PurchaseOrder, PurchaseOrderScope, PurchaseOrderStatus, SubmittalPackage } from "@/types";
+import type { AppUserProfile, ChangeOrder, ChangeOrderStatus, Estimate, Job, Opportunity, OpportunityStatus, PMNote, ProjectFile, PurchaseOrder, PurchaseOrderScope, PurchaseOrderStatus, SubmittalPackage } from "@/types";
 
 type View = "dashboard" | "opportunities" | "kanban" | "estimator" | "jobs" | "calendar" | "service" | "files" | "analytics";
 type DashboardAnalytics = {
@@ -149,6 +149,7 @@ export default function Home() {
   const [loginEmail, setLoginEmail] = useState("escalador.evan@gmail.com");
   const [sessionEmail, setSessionEmail] = useState("");
   const [authStatus, setAuthStatus] = useState("Sign in to save live data.");
+  const [currentUser, setCurrentUser] = useState<AppUserProfile | null>(null);
   const [pmNotes, setPmNotes] = useState<PMNote[]>([
     {
       id: "note-manny",
@@ -274,6 +275,7 @@ export default function Home() {
       if (email) {
         void loadPersistedOpportunities();
         void loadPersistedJobs();
+        void getCurrentUserProfile().then((profile) => { if (isMounted) setCurrentUser(profile); });
       }
     });
 
@@ -284,6 +286,9 @@ export default function Home() {
       if (email) {
         void loadPersistedOpportunities();
         void loadPersistedJobs();
+        void getCurrentUserProfile().then(setCurrentUser);
+      } else {
+        setCurrentUser(null);
       }
     });
 
@@ -406,6 +411,16 @@ export default function Home() {
       setSelectedJobId((current) => (current === localId ? saved.id : current));
       setDetailJobId((current) => (current === localId ? saved.id : current));
       setJobPersistenceStatus(`Job ${saved.jobNumber} saved to Supabase.`);
+
+      // On first create, link any matching estimate to the new job UUID
+      if (forceCreate && saved.opportunityId && isUuid(saved.id)) {
+        const linked = estimates.find((e) => e.opportunityId === saved.opportunityId && !e.jobId);
+        if (linked && isUuid(linked.id)) {
+          const updated = { ...linked, jobId: saved.id };
+          setEstimates((current) => current.map((e) => (e.id === linked.id ? updated : e)));
+          void saveEstimateHeader(updated).catch(() => {});
+        }
+      }
     } catch {
       setJobPersistenceStatus(`Job save failed. ${job.jobNumber} is local only.`);
     }
@@ -416,7 +431,83 @@ export default function Home() {
     if (!job) return;
     const updated = { ...job, ...updates };
     setJobs((current) => current.map((candidate) => (candidate.id === jobId ? updated : candidate)));
+
+    // Prompt to mark linked opportunity as Lost when voiding a job
+    if (updates.backlogStatus === "Void" && updated.opportunityId) {
+      const linkedOpp = opportunities.find((o) => o.id === updated.opportunityId);
+      if (linkedOpp && linkedOpp.winLoss !== "Lost") {
+        const markLost = window.confirm(
+          `Mark linked opportunity "${linkedOpp.projectName}" as Lost?`
+        );
+        if (markLost) {
+          void persistOpportunity({ ...linkedOpp, status: "Lost", winLoss: "Lost" });
+        }
+      }
+    }
+
     void persistJobHeader(updated);
+  }
+
+  function canWrite(scope: "estimating" | "pm" | "shared") {
+    if (!currentUser) return false;
+    const r = currentUser.role;
+    if (scope === "estimating") return r === "admin" || r === "estimator";
+    if (scope === "pm") return r === "admin" || r === "pm";
+    return r === "admin" || r === "estimator" || r === "pm";
+  }
+
+  async function persistChangeOrder(co: ChangeOrder) {
+    const localId = co.id;
+    setJobPersistenceStatus(`Saving CO ${co.number}...`);
+    try {
+      const saved = await saveChangeOrder(co);
+      setJobs((current) =>
+        current.map((job) =>
+          job.id !== co.jobId
+            ? job
+            : { ...job, changeOrders: job.changeOrders.map((c) => (c.id === localId ? saved : c)) }
+        )
+      );
+      setJobPersistenceStatus(`CO ${co.number} saved.`);
+    } catch {
+      setJobPersistenceStatus(`CO ${co.number} save failed — local only.`);
+    }
+  }
+
+  async function persistPurchaseOrder(po: PurchaseOrder) {
+    const localId = po.id;
+    setJobPersistenceStatus(`Saving PO ${po.poNumber}...`);
+    try {
+      const saved = await savePurchaseOrder(po);
+      setJobs((current) =>
+        current.map((job) =>
+          job.id !== po.jobId
+            ? job
+            : { ...job, purchaseOrders: job.purchaseOrders.map((p) => (p.id === localId ? saved : p)) }
+        )
+      );
+      setJobPersistenceStatus(`PO ${po.poNumber} saved.`);
+    } catch {
+      setJobPersistenceStatus(`PO ${po.poNumber} save failed — local only.`);
+    }
+  }
+
+  async function persistSubmittal(sub: SubmittalPackage) {
+    const localId = sub.id;
+    setJobPersistenceStatus(`Saving submittal ${sub.name}...`);
+    try {
+      const saved = await saveSubmittal(sub);
+      setJobs((current) =>
+        current.map((job) =>
+          job.id !== sub.jobId
+            ? job
+            : { ...job, submittals: job.submittals.map((s) => (s.id === localId ? saved : s)) }
+        )
+      );
+      setJobPersistenceStatus(`Submittal ${sub.name} saved.`);
+    } catch {
+      setJobPersistenceStatus(`Submittal ${sub.name} save failed — local only.`);
+    }
   }
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
@@ -442,6 +533,12 @@ export default function Home() {
     await supabase.auth.signOut();
     setSessionEmail("");
     setAuthStatus("Signed out. Local sample mode remains available.");
+  }
+
+  function reopenOpportunity(opportunityId: string, targetStatus: OpportunityStatus) {
+    const opp = opportunities.find((o) => o.id === opportunityId);
+    if (!opp) return;
+    void persistOpportunity({ ...opp, status: targetStatus, winLoss: "" });
   }
 
   async function importMasterWorkbook(event: ChangeEvent<HTMLInputElement>) {
@@ -491,22 +588,21 @@ export default function Home() {
       if (!shouldContinue) return;
     }
 
+    const number = estimate.proposalNumber || nextChangeOrderNumber(sourceJob.changeOrders);
+    const changeOrder: ChangeOrder = {
+      id: `co-${Date.now()}`,
+      jobId: sourceJob.id,
+      number,
+      description: estimate.scopeSummary || `${number} additional scope`,
+      amount,
+      status: "submitted",
+      dateSubmitted: today,
+      notes: `Created from workbook ${estimate.id}.`
+    };
+
     setJobs((current) =>
       current.map((job) => {
         if (job.id !== estimate.jobId) return job;
-
-        const number = estimate.proposalNumber || nextChangeOrderNumber(job.changeOrders);
-        const changeOrder: ChangeOrder = {
-          id: `co-${Date.now()}`,
-          jobId: job.id,
-          number,
-          description: estimate.scopeSummary || `${number} additional scope`,
-          amount,
-          status: "submitted",
-          dateSubmitted: today,
-          notes: `Created from workbook ${estimate.id}.`
-        };
-
         return {
           ...job,
           changeOrders: [...job.changeOrders, changeOrder],
@@ -524,86 +620,93 @@ export default function Home() {
         };
       })
     );
+    if (isUuid(sourceJob.id)) void persistChangeOrder(changeOrder);
     setSelectedJobId(estimate.jobId);
     setDetailJobId(estimate.jobId);
     goToView("jobs");
   }
 
   function approveSubmittedCo(jobId: string) {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+    const approvedCos = job.changeOrders
+      .filter((co) => co.status === "submitted")
+      .map((co) => ({ ...co, status: "approved" as ChangeOrderStatus, approvedDate: today }));
+
     setJobs((current) =>
-      current.map((job) =>
-        job.id !== jobId
-          ? job
+      current.map((j) =>
+        j.id !== jobId
+          ? j
           : {
-              ...job,
-              changeOrders: job.changeOrders.map((co) =>
+              ...j,
+              changeOrders: j.changeOrders.map((co) =>
                 co.status === "submitted" ? { ...co, status: "approved", approvedDate: today } : co
               ),
               activity: [
                 {
                   id: `act-${Date.now()}`,
                   ownerType: "job",
-                  ownerId: job.id,
+                  ownerId: j.id,
                   author: "System",
                   message: "Submitted change orders were approved and rolled into current contract.",
                   createdAt: today
                 },
-                ...job.activity
+                ...j.activity
               ]
             }
       )
     );
+    if (isUuid(jobId)) {
+      for (const co of approvedCos) void persistChangeOrder(co);
+    }
   }
 
   function updateSubmittal(jobId: string, submittalId: string, action: SubmittalAction) {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+    const currentSub = job.submittals.find((s) => s.id === submittalId);
+    if (!currentSub) return;
+    const updatedSub = applySubmittalAction(currentSub, action, today);
+    const submittals = job.submittals.map((s) => (s.id === submittalId ? updatedSub : s));
+    const submittalSummary = summarizeSubmittals(submittals, today);
+    const shouldMoveToRelease =
+      submittalSummary.releaseState === "Ready" && ["Awarded / Waiting", "Submittals"].includes(job.backlogStatus);
+    const shouldMoveToSubmittals =
+      submittalSummary.releaseState !== "Ready" && job.backlogStatus === "Awarded / Waiting";
+    const newBacklogStatus = shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus;
+
     setJobs((current) =>
-      current.map((job) => {
-        if (job.id !== jobId) return job;
-
-        const submittals = job.submittals.map((item) =>
-          item.id === submittalId ? applySubmittalAction(item, action, today) : item
-        );
-        const updated = submittals.find((item) => item.id === submittalId);
-        const submittalSummary = summarizeSubmittals(submittals, today);
-        const shouldMoveToRelease =
-          submittalSummary.releaseState === "Ready" && ["Awarded / Waiting", "Submittals"].includes(job.backlogStatus);
-        const shouldMoveToSubmittals =
-          submittalSummary.releaseState !== "Ready" && job.backlogStatus === "Awarded / Waiting";
-
+      current.map((j) => {
+        if (j.id !== jobId) return j;
         return {
-          ...job,
-          backlogStatus: shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus,
-          submittals,
+          ...j,
+          backlogStatus: newBacklogStatus,
+          submittals: j.submittals.map((s) => (s.id === submittalId ? updatedSub : s)),
           activity: [
             {
               id: `act-${Date.now()}`,
               ownerType: "submittal",
-              ownerId: updated?.id ?? submittalId,
+              ownerId: updatedSub.id,
               author: "System",
-              message: `${updated?.name ?? "Submittal"} moved to ${updated?.status ?? "updated"}.`,
+              message: `${updatedSub.name} moved to ${updatedSub.status}.`,
               createdAt: today
             },
-            ...job.activity
+            ...j.activity
           ]
         };
       })
     );
+    if (isUuid(jobId)) void persistSubmittal(updatedSub);
   }
 
   function createJobSubmittal(
     jobId: string,
     input: Omit<SubmittalPackage, "id" | "jobId" | "status" | "revision">
   ) {
+    const item = createSubmittalPackage({ ...input, id: `sub-${Date.now()}`, jobId });
     setJobs((current) =>
       current.map((job) => {
         if (job.id !== jobId) return job;
-
-        const item = createSubmittalPackage({
-          ...input,
-          id: `sub-${Date.now()}`,
-          jobId: job.id
-        });
-
         return {
           ...job,
           backlogStatus: job.backlogStatus === "Awarded / Waiting" ? "Submittals" : job.backlogStatus,
@@ -622,41 +725,45 @@ export default function Home() {
         };
       })
     );
+    if (isUuid(jobId)) void persistSubmittal(item);
   }
 
   function editJobSubmittal(jobId: string, submittalId: string, updates: UpdateSubmittalInput) {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+    const current = job.submittals.find((s) => s.id === submittalId);
+    if (!current) return;
+    const updatedSub = updateSubmittalPackage(current, updates);
+    const submittals = job.submittals.map((s) => (s.id === submittalId ? updatedSub : s));
+    const submittalSummary = summarizeSubmittals(submittals, today);
+    const shouldMoveToRelease =
+      submittalSummary.releaseState === "Ready" && ["Awarded / Waiting", "Submittals"].includes(job.backlogStatus);
+    const shouldMoveToSubmittals =
+      submittalSummary.releaseState !== "Ready" && job.backlogStatus === "Awarded / Waiting";
+    const newBacklogStatus = shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus;
+
     setJobs((current) =>
-      current.map((job) => {
-        if (job.id !== jobId) return job;
-
-        const submittals = job.submittals.map((item) =>
-          item.id === submittalId ? updateSubmittalPackage(item, updates) : item
-        );
-        const updated = submittals.find((item) => item.id === submittalId);
-        const submittalSummary = summarizeSubmittals(submittals, today);
-        const shouldMoveToRelease =
-          submittalSummary.releaseState === "Ready" && ["Awarded / Waiting", "Submittals"].includes(job.backlogStatus);
-        const shouldMoveToSubmittals =
-          submittalSummary.releaseState !== "Ready" && job.backlogStatus === "Awarded / Waiting";
-
+      current.map((j) => {
+        if (j.id !== jobId) return j;
         return {
-          ...job,
-          backlogStatus: shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus,
-          submittals,
+          ...j,
+          backlogStatus: newBacklogStatus,
+          submittals: j.submittals.map((s) => (s.id === submittalId ? updatedSub : s)),
           activity: [
             {
               id: `act-${Date.now()}`,
               ownerType: "submittal",
-              ownerId: updated?.id ?? submittalId,
+              ownerId: updatedSub.id,
               author: "System",
-              message: `${updated?.name ?? "Submittal"} package updated.`,
+              message: `${updatedSub.name} package updated.`,
               createdAt: today
             },
-            ...job.activity
+            ...j.activity
           ]
         };
       })
     );
+    if (isUuid(jobId)) void persistSubmittal(updatedSub);
   }
 
   function updateSubmittalChecklist(
@@ -664,50 +771,48 @@ export default function Home() {
     submittalId: string,
     updates: Parameters<typeof setSubmittalChecklistState>[1]
   ) {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+    const current = job.submittals.find((s) => s.id === submittalId);
+    if (!current) return;
+    const updatedSub = setSubmittalChecklistState(current, updates, today);
+    const submittals = job.submittals.map((s) => (s.id === submittalId ? updatedSub : s));
+    const submittalSummary = summarizeSubmittals(submittals, today);
+    const shouldMoveToRelease =
+      submittalSummary.releaseState === "Ready" && ["Awarded / Waiting", "Submittals"].includes(job.backlogStatus);
+    const shouldMoveToSubmittals =
+      submittalSummary.releaseState !== "Ready" && job.backlogStatus === "Awarded / Waiting";
+    const newBacklogStatus = shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus;
+
     setJobs((current) =>
-      current.map((job) => {
-        if (job.id !== jobId) return job;
-
-        const submittals = job.submittals.map((item) =>
-          item.id === submittalId ? setSubmittalChecklistState(item, updates, today) : item
-        );
-        const updated = submittals.find((item) => item.id === submittalId);
-        const submittalSummary = summarizeSubmittals(submittals, today);
-        const shouldMoveToRelease =
-          submittalSummary.releaseState === "Ready" && ["Awarded / Waiting", "Submittals"].includes(job.backlogStatus);
-        const shouldMoveToSubmittals =
-          submittalSummary.releaseState !== "Ready" && job.backlogStatus === "Awarded / Waiting";
-
+      current.map((j) => {
+        if (j.id !== jobId) return j;
         return {
-          ...job,
-          backlogStatus: shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus,
-          submittals,
+          ...j,
+          backlogStatus: newBacklogStatus,
+          submittals: j.submittals.map((s) => (s.id === submittalId ? updatedSub : s)),
           activity: [
             {
               id: `act-${Date.now()}`,
               ownerType: "submittal",
-              ownerId: updated?.id ?? submittalId,
+              ownerId: updatedSub.id,
               author: "System",
-              message: `${updated?.name ?? "Submittal"} checklist updated.`,
+              message: `${updatedSub.name} checklist updated.`,
               createdAt: today
             },
-            ...job.activity
+            ...j.activity
           ]
         };
       })
     );
+    if (isUuid(jobId)) void persistSubmittal(updatedSub);
   }
 
   function createPurchaseOrder(jobId: string, input: Omit<PurchaseOrder, "id" | "jobId">) {
+    const po: PurchaseOrder = { ...input, id: `po-${Date.now()}`, jobId };
     setJobs((current) =>
       current.map((job) => {
         if (job.id !== jobId) return job;
-        const po: PurchaseOrder = {
-          ...input,
-          id: `po-${Date.now()}`,
-          jobId
-        };
-
         return {
           ...job,
           purchaseOrders: [...job.purchaseOrders, po],
@@ -725,32 +830,37 @@ export default function Home() {
         };
       })
     );
+    if (isUuid(jobId)) void persistPurchaseOrder(po);
   }
 
   function editPurchaseOrder(jobId: string, poId: string, updates: Partial<PurchaseOrder>) {
-    setJobs((current) =>
-      current.map((job) => {
-        if (job.id !== jobId) return job;
-        const purchaseOrders = job.purchaseOrders.map((po) => (po.id === poId ? { ...po, ...updates } : po));
-        const updated = purchaseOrders.find((po) => po.id === poId);
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+    const existing = job.purchaseOrders.find((p) => p.id === poId);
+    if (!existing) return;
+    const updatedPo = { ...existing, ...updates };
 
+    setJobs((current) =>
+      current.map((j) => {
+        if (j.id !== jobId) return j;
         return {
-          ...job,
-          purchaseOrders,
+          ...j,
+          purchaseOrders: j.purchaseOrders.map((po) => (po.id === poId ? updatedPo : po)),
           activity: [
             {
               id: `act-${Date.now()}`,
               ownerType: "purchase_order",
               ownerId: poId,
               author: "System",
-              message: `${updated?.poNumber ?? "PO"} updated.`,
+              message: `${updatedPo.poNumber} updated.`,
               createdAt: today
             },
-            ...job.activity
+            ...j.activity
           ]
         };
       })
     );
+    if (isUuid(jobId)) void persistPurchaseOrder(updatedPo);
   }
 
   function attachPurchaseOrderFile(jobId: string, poId: string, file: File | undefined) {
@@ -957,6 +1067,7 @@ export default function Home() {
             {sessionEmail ? (
               <div className="auth-box">
                 <span>{authStatus}</span>
+                {currentUser && <span className="role-badge">{currentUser.role}</span>}
                 <button className="ghost-button compact" onClick={signOut} type="button">Sign out</button>
               </div>
             ) : (
@@ -978,6 +1089,9 @@ export default function Home() {
           </div>
         </header>
         <div className="persistence-strip">{opportunityPersistenceStatus}</div>
+        {currentUser?.role === "viewer" && (
+          <div className="viewer-banner">You are in read-only mode. Contact an admin to request edit access.</div>
+        )}
 
         {view === "dashboard" && (
           <HomeDashboard
@@ -1052,6 +1166,7 @@ export default function Home() {
           onSubmittalChecklist={updateSubmittalChecklist}
           onSubmittalFile={attachSubmittalFile}
           onSubmittalAction={updateSubmittal}
+          canEditHeader={canWrite("pm")}
         />
       ) : null}
       {selectedOpportunity ? (
@@ -1061,6 +1176,8 @@ export default function Home() {
           onClose={() => setSelectedOpportunityId(null)}
           onUpdate={(next) => void persistOpportunity(next)}
           existingJobs={jobs}
+          canConvertToJob={canWrite("estimating")}
+          onReopenOpportunity={reopenOpportunity}
           onConvertToJob={(opportunity, award) => {
             const contractValue = award.contractValue || opportunity.initialContractValue || opportunity.estimatedValue;
             const awardedOpportunity: Opportunity = {
@@ -1072,6 +1189,7 @@ export default function Home() {
             };
             const newJob: Job = {
               id: `job-${opportunity.id}`,
+              opportunityId: isUuid(opportunity.id) ? opportunity.id : undefined,
               jobNumber: award.jobNumber,
               pm: award.pm,
               client: opportunity.client,
@@ -1995,7 +2113,8 @@ function JobDetailModal({
   pmNotes,
   onSubmittalChecklist,
   onSubmittalFile,
-  onSubmittalAction
+  onSubmittalAction,
+  canEditHeader = true
 }: {
   job: Job;
   onApproveCos: (id: string) => void;
@@ -2013,6 +2132,7 @@ function JobDetailModal({
   onSubmittalChecklist: (jobId: string, submittalId: string, updates: Parameters<typeof setSubmittalChecklistState>[1]) => void;
   onSubmittalFile: (jobId: string, submittalId: string, file: File | undefined) => void;
   onSubmittalAction: (jobId: string, submittalId: string, action: SubmittalAction) => void;
+  canEditHeader?: boolean;
 }) {
   const coSummary = summarizeChangeOrders(job.changeOrders);
   const currentValue = currentContractValue(job.baseContract, job.changeOrders);
@@ -2185,7 +2305,7 @@ function JobDetailModal({
               })}
             </div>
             <p>{job.notes}</p>
-            <details className="job-header-edit-panel">
+            {canEditHeader && <details className="job-header-edit-panel">
               <summary>Edit job header</summary>
               <div className="job-header-edit-grid">
                 <label>
@@ -2229,7 +2349,7 @@ function JobDetailModal({
                   <input onBlur={(e) => onUpdateJob(job.id, { pm: e.target.value })} defaultValue={job.pm} type="text" />
                 </label>
               </div>
-            </details>
+            </details>}
           </section>
           <nav className="job-detail-nav" aria-label="Job detail tabs">
             {jobDetailTabs.map((tab) => (
@@ -2786,7 +2906,9 @@ function OpportunityModal({
   onUpdate,
   onConvertToJob,
   onOpenEstimate,
-  existingJobs
+  existingJobs,
+  canConvertToJob = true,
+  onReopenOpportunity
 }: {
   opportunity: Opportunity;
   onAttachFile?: (opportunity: Opportunity, slot: string, file: File) => Promise<ProjectFile | null>;
@@ -2795,6 +2917,8 @@ function OpportunityModal({
   onConvertToJob: (opportunity: Opportunity, award: AwardDetails) => void;
   onOpenEstimate: (opportunity: Opportunity) => void;
   existingJobs: Job[];
+  canConvertToJob?: boolean;
+  onReopenOpportunity?: (opportunityId: string, targetStatus: OpportunityStatus) => void;
 }) {
   const [draft, setDraft] = useState(opportunity);
   const [awardPm, setAwardPm] = useState("Geoff");
@@ -2964,21 +3088,36 @@ function OpportunityModal({
               <span>Opportunity ID stays {draft.jobId} for historical tracking.</span>
               <strong>Job will be created as {awardJobNumber}</strong>
             </div>
-            <button
-              className="primary"
-              disabled={!canConvert}
-              onClick={() =>
-                onConvertToJob(draft, {
-                  pm: awardPm,
-                  jobNumber: awardJobNumber,
-                  contractValue: awardContract,
-                  ntpDate: awardDate
-                })
-              }
-              type="button"
-            >
-              Convert to job
-            </button>
+            {canConvertToJob ? (
+              <button
+                className="primary"
+                disabled={!canConvert}
+                onClick={() =>
+                  onConvertToJob(draft, {
+                    pm: awardPm,
+                    jobNumber: awardJobNumber,
+                    contractValue: awardContract,
+                    ntpDate: awardDate
+                  })
+                }
+                type="button"
+              >
+                Convert to job
+              </button>
+            ) : (
+              <p className="permission-note">Estimator or admin role required to convert to a job.</p>
+            )}
+            {(draft.status === "Won" || draft.status === "Lost") && onReopenOpportunity && (
+              <div className="reopen-row">
+                <span>Reopen as:</span>
+                {(["Submitted", "Follow Up", "Pricing"] as OpportunityStatus[]).map((s) => (
+                  <button key={s} className="ghost-button compact" type="button"
+                    onClick={() => { onReopenOpportunity(draft.id, s); onClose(); }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
         </div>
 
