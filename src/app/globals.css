@@ -257,6 +257,12 @@ button {
   min-width: 0;
 }
 
+.auth-box-expanded {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 640px;
+}
+
 .auth-box input {
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -266,6 +272,32 @@ button {
   height: 30px;
   padding: 0 9px;
   width: 210px;
+}
+
+.auth-box input[type="password"] {
+  width: 150px;
+}
+
+.auth-status {
+  flex-basis: 100%;
+  min-height: 14px;
+  text-align: right;
+}
+
+.text-button {
+  background: transparent;
+  border: 0;
+  color: var(--moss);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  height: 30px;
+  padding: 0 2px;
+  white-space: nowrap;
+}
+
+.text-button:hover {
+  color: var(--cedar);
 }
 
 .ghost-button.compact {

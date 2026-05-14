@@ -146,6 +146,7 @@ export default function Home() {
   const [opportunityPersistenceStatus, setOpportunityPersistenceStatus] = useState("Checking Supabase...");
   const [estimatePersistenceStatus, setEstimatePersistenceStatus] = useState("Workbook snapshots save after sign-in.");
   const [loginEmail, setLoginEmail] = useState("escalador.evan@gmail.com");
+  const [loginPassword, setLoginPassword] = useState("");
   const [sessionEmail, setSessionEmail] = useState("");
   const [authStatus, setAuthStatus] = useState("Sign in to save live data.");
   const [currentUser, setCurrentUser] = useState<AppUserProfile | null>(null);
@@ -426,9 +427,33 @@ export default function Home() {
     return r === "admin" || r === "estimator" || r === "pm";
   }
 
-
-  async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
+  async function signInWithPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!supabase) {
+      setAuthStatus("Supabase env is not configured.");
+      return;
+    }
+    if (!loginPassword) {
+      setAuthStatus("Enter a password, or use magic link.");
+      return;
+    }
+
+    setAuthStatus("Signing in...");
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password: loginPassword
+    });
+
+    if (error) {
+      setAuthStatus(error.message);
+      return;
+    }
+
+    setLoginPassword("");
+    setAuthStatus("Signed in. Loading your role...");
+  }
+
+  async function sendMagicLink() {
     if (!supabase) {
       setAuthStatus("Supabase env is not configured.");
       return;
@@ -1077,14 +1102,24 @@ export default function Home() {
                 <button className="ghost-button compact" onClick={signOut} type="button">Sign out</button>
               </div>
             ) : (
-              <form className="auth-box" onSubmit={sendMagicLink}>
+              <form className="auth-box auth-box-expanded" onSubmit={signInWithPassword}>
                 <input
                   aria-label="Email for Supabase sign-in"
                   onChange={(event) => setLoginEmail(event.target.value)}
+                  placeholder="Email"
                   type="email"
                   value={loginEmail}
                 />
+                <input
+                  aria-label="Password for Supabase sign-in"
+                  onChange={(event) => setLoginPassword(event.target.value)}
+                  placeholder="Password"
+                  type="password"
+                  value={loginPassword}
+                />
                 <button className="ghost-button compact" type="submit">Sign in</button>
+                <button className="text-button" onClick={sendMagicLink} type="button">Magic link</button>
+                <span className="auth-status">{authStatus}</span>
               </form>
             )}
             <label className="import-button">
