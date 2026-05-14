@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "./change-order-workflow";
 import { calculateEstimateTotals } from "./estimate-math";
 import { mapEstimateFromRow, mapEstimateSnapshotToInsert, mapEstimateToUpsert } from "./estimate-repository";
-import { buildProjectFileStoragePath, mapProjectFileFromRow, mapProjectFileToInsert } from "./file-repository";
+import { buildProjectFileStoragePath, mapProjectFileFromRow, mapProjectFileToInsert, pruneProjectFileSlotMetadata } from "./file-repository";
 import {
   mapActivityEventFromRow,
   mapActivityEventToInsert,
@@ -613,6 +613,52 @@ describe("file repository mapping", () => {
         name: "Contract.pdf"
       })
     ).toThrow("persisted UUID owner id");
+  });
+
+  it("prunes replaced file-slot metadata while keeping the newest file row", async () => {
+    const calls: Array<[string, string]> = [];
+    const client = {
+      from: () => ({
+        delete: () => ({
+          eq: (column: string, value: string) => {
+            calls.push([column, value]);
+            return {
+              eq: (column2: string, value2: string) => {
+                calls.push([column2, value2]);
+                return {
+                  eq: (column3: string, value3: string) => {
+                    calls.push([column3, value3]);
+                    return {
+                      neq: (column4: string, value4: string) => {
+                        calls.push([column4, value4]);
+                        return { error: null };
+                      }
+                    };
+                  }
+                };
+              }
+            };
+          }
+        })
+      })
+    };
+
+    await pruneProjectFileSlotMetadata(
+      {
+        ownerType: "job",
+        ownerId: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+        slot: "contract",
+        keepId: "8f861063-22d2-4db4-8a0f-b5f8b8f70a1b"
+      },
+      client as any
+    );
+
+    expect(calls).toEqual([
+      ["owner_type", "job"],
+      ["owner_id", "50f42d9f-b53f-4a97-b711-dc8b1cd13384"],
+      ["slot", "contract"],
+      ["id", "8f861063-22d2-4db4-8a0f-b5f8b8f70a1b"]
+    ]);
   });
 });
 

@@ -2210,7 +2210,7 @@ td strong {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.file-slots span,
+.file-slots > span,
 .file-board article {
   background: var(--panel);
   border: 1px dashed var(--line-2);
@@ -2219,7 +2219,7 @@ td strong {
   padding: 9px;
 }
 
-.file-slots span.filled,
+.file-slots > span.filled,
 .file-board article {
   border-style: solid;
   color: var(--ink);

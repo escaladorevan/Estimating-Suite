@@ -25,7 +25,7 @@ import { BidWorkbook } from "@/components/BidWorkbook";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "@/lib/change-order-workflow";
 import { calculateEstimateTotals } from "@/lib/estimate-math";
 import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
-import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
+import { pruneProjectFileSlotMetadata, saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
 import {
   currentContractValue,
@@ -559,7 +559,7 @@ export default function Home() {
     }
   }
 
-  async function persistProjectFileAttachment(localFile: ProjectFile, file: File) {
+  async function persistProjectFileAttachment(localFile: ProjectFile, file: File, options: { replaceSlot?: boolean } = {}) {
     if (!isUuid(localFile.ownerId)) {
       setJobPersistenceStatus("File attached locally. Save the job item before storing files.");
       return;
@@ -589,6 +589,14 @@ export default function Home() {
       });
 
       if (saved) {
+        if (options.replaceSlot) {
+          await pruneProjectFileSlotMetadata({
+            ownerType: localFile.ownerType,
+            ownerId: localFile.ownerId,
+            slot: localFile.slot,
+            keepId: saved.id
+          });
+        }
         setJobs((current) =>
           current.map((job) =>
             job.files.some((candidate) => candidate.id === localFile.id)
@@ -1033,6 +1041,51 @@ export default function Home() {
     if (attachedActivity) void persistActivity(attachedActivity);
   }
 
+  function attachJobFile(jobId: string, slot: string, file: File | undefined) {
+    if (!file) return;
+    if (currentUser && !canWrite("pm")) {
+      setJobPersistenceStatus("PM or admin role required to attach job files.");
+      return;
+    }
+    let attachedFile: ProjectFile | null = null;
+    let attachedActivity: ActivityEvent | null = null;
+
+    setJobs((current) =>
+      current.map((job) => {
+        if (job.id !== jobId) return job;
+        const nextFile: ProjectFile = {
+          id: `file-${slot}-${Date.now()}`,
+          ownerType: "job",
+          ownerId: jobId,
+          slot,
+          name: file.name,
+          uploadedAt: today
+        };
+        const activity: ActivityEvent = {
+          id: `act-${Date.now()}`,
+          ownerType: "job",
+          ownerId: jobId,
+          author: "System",
+          message: `${file.name} uploaded to ${slot}.`,
+          createdAt: today
+        };
+        attachedFile = nextFile;
+        attachedActivity = activity;
+
+        return {
+          ...job,
+          files: [
+            ...job.files.filter((candidate) => !(candidate.ownerType === "job" && candidate.slot === slot)),
+            nextFile
+          ],
+          activity: [activity, ...job.activity]
+        };
+      })
+    );
+    if (attachedFile) void persistProjectFileAttachment(attachedFile, file, { replaceSlot: true });
+    if (attachedActivity && isUuid(jobId)) void persistActivity(attachedActivity);
+  }
+
   function createServiceJob(input: {
     client: string;
     projectName: string;
@@ -1262,6 +1315,7 @@ export default function Home() {
           onCreateSubmittal={createJobSubmittal}
           onEditPurchaseOrder={editPurchaseOrder}
           onEditSubmittal={editJobSubmittal}
+          onJobFile={attachJobFile}
           onPurchaseOrderFile={attachPurchaseOrderFile}
           onStartChangeOrder={startChangeOrderFromJob}
           onUpdateJob={updateJobHeader}
@@ -2210,6 +2264,7 @@ function JobDetailModal({
   onCreateSubmittal,
   onEditPurchaseOrder,
   onEditSubmittal,
+  onJobFile,
   onPurchaseOrderFile,
   onStartChangeOrder,
   onUpdateJob,
@@ -2228,6 +2283,7 @@ function JobDetailModal({
   onCreateSubmittal: (jobId: string, input: Omit<SubmittalPackage, "id" | "jobId" | "status" | "revision">) => void;
   onEditPurchaseOrder: (jobId: string, poId: string, updates: Partial<PurchaseOrder>) => void;
   onEditSubmittal: (jobId: string, submittalId: string, updates: UpdateSubmittalInput) => void;
+  onJobFile: (jobId: string, slot: string, file: File | undefined) => void;
   onPurchaseOrderFile: (jobId: string, poId: string, file: File | undefined) => void;
   onStartChangeOrder: (jobId: string) => void;
   onUpdateJob: (jobId: string, updates: Partial<Job>) => void;
@@ -2737,10 +2793,24 @@ function JobDetailModal({
           {activeTab === "files" ? (
           <section className="modal-section" id="job-files">
             <h3>Files</h3>
+            {!canEditHeader ? <p className="permission-note">PM or admin role required to attach job files.</p> : null}
             <div className="file-slots">
               {fileSlots.map((slot) => {
-                const file = job.files.find((candidate) => candidate.slot === slot);
-                return <span className={file ? "filled" : ""} key={slot}>{slot}{file ? ` - ${file.name}` : " - missing"}</span>;
+                const file = job.files.find((candidate) => candidate.ownerType === "job" && candidate.slot === slot);
+                return (
+                  <label className={file ? "file-slot filled" : "file-slot"} key={slot}>
+                    <span>{slot}</span>
+                    <strong>{file?.name ?? "Missing"}</strong>
+                    <input
+                      disabled={!canEditHeader}
+                      onChange={(event) => {
+                        onJobFile(job.id, slot, event.currentTarget.files?.[0]);
+                        event.currentTarget.value = "";
+                      }}
+                      type="file"
+                    />
+                  </label>
+                );
               })}
             </div>
           </section>

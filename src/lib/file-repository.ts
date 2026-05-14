@@ -115,6 +115,26 @@ export async function saveProjectFileMetadata(input: ProjectFileInsertInput, cli
   return data ? mapProjectFileFromRow(data) : null;
 }
 
+export async function pruneProjectFileSlotMetadata(
+  input: Pick<ProjectFileInsertInput, "ownerType" | "ownerId" | "slot"> & { keepId: string },
+  client: SupabaseFileClient | null = supabase
+) {
+  if (!client) return;
+  if (!isUuid(input.ownerId) || !isUuid(input.keepId)) {
+    throw new Error("Project file metadata pruning requires persisted UUID ids.");
+  }
+
+  const { error } = await client
+    .from("files")
+    .delete()
+    .eq("owner_type", input.ownerType)
+    .eq("owner_id", input.ownerId)
+    .eq("slot", input.slot)
+    .neq("id", input.keepId);
+
+  if (error) throw error;
+}
+
 export async function uploadProjectFile({
   file,
   ownerType,
