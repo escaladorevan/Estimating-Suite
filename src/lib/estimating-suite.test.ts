@@ -35,6 +35,7 @@ import { jobDetailTabs } from "./job-detail-tabs";
 import { mapOpportunityFromRow, mapOpportunityToUpsert } from "./opportunity-repository";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "./opportunity-import";
 import { CHANGE_ORDER_STATUSES, OPPORTUNITY_STATUSES } from "./status-constants";
+import { reconcilePersistedJobIdentity } from "./job-persistence-reconciliation";
 import { filterOpportunitiesForView, suggestJobNumber } from "./opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote } from "./pm-actions";
 import { addMonthsToCalendarMonth, buildCapacityWeeks, buildInstallCalendarMonth } from "./schedule-capacity";
@@ -980,6 +981,159 @@ describe("job repository mapping", () => {
       job_id: null,
       completed_at: "2026-05-15T12:00:00Z"
     });
+  });
+});
+
+describe("job persistence reconciliation", () => {
+  it("replaces local job ids with persisted UUIDs across selected records and child references", () => {
+    const persistedJobId = "50f42d9f-b53f-4a97-b711-dc8b1cd13384";
+    const result = reconcilePersistedJobIdentity({
+      currentJobs: [
+        {
+          id: "job-g061",
+          jobNumber: "G26-061",
+          workType: "Bid / ITB",
+          pm: "Geoff",
+          client: "Smoke GC",
+          projectName: "Smoke Test",
+          baseContract: 100000,
+          bidRef: "",
+          awardDate: "",
+          ntpDate: "",
+          backlogStatus: "Awarded / Waiting",
+          forecastStart: "",
+          forecastEnd: "",
+          forecastQuarter: "",
+          expectedFabStart: "",
+          expectedCompletion: "",
+          fabStatus: "Not Started",
+          installStart: "",
+          installEnd: "",
+          installStatus: "Ready",
+          invoiceStatus: "Not Billed",
+          crewSize: 2,
+          gc: "",
+          notes: "",
+          changeOrders: [
+            {
+              id: "co-local",
+              jobId: "job-g061",
+              number: "CO-001",
+              description: "Priced smoke",
+              amount: 2500,
+              status: "submitted",
+              dateSubmitted: "2026-05-14"
+            }
+          ],
+          purchaseOrders: [],
+          submittals: [
+            {
+              id: "sub-local",
+              jobId: "job-g061",
+              name: "Smoke Shop Drawings",
+              type: "Shop Drawings",
+              status: "Submitted",
+              revision: 1,
+              releaseBlocker: true
+            }
+          ],
+          files: [
+            {
+              id: "file-contract-local",
+              ownerType: "job",
+              ownerId: "job-g061",
+              slot: "contract",
+              name: "contract-smoke.txt",
+              uploadedAt: "2026-05-14"
+            }
+          ],
+          activity: [
+            {
+              id: "act-local",
+              ownerType: "job",
+              ownerId: "job-g061",
+              author: "System",
+              message: "Created smoke job.",
+              createdAt: "2026-05-14"
+            }
+          ]
+        }
+      ],
+      persistedJobs: [
+        {
+          id: persistedJobId,
+          jobNumber: "G26-061",
+          workType: "Bid / ITB",
+          pm: "Geoff",
+          client: "Smoke GC",
+          projectName: "Smoke Test",
+          baseContract: 100000,
+          bidRef: "",
+          awardDate: "",
+          ntpDate: "",
+          backlogStatus: "Awarded / Waiting",
+          forecastStart: "",
+          forecastEnd: "",
+          forecastQuarter: "",
+          expectedFabStart: "",
+          expectedCompletion: "",
+          fabStatus: "Not Started",
+          installStart: "",
+          installEnd: "",
+          installStatus: "Ready",
+          invoiceStatus: "Not Billed",
+          crewSize: 2,
+          gc: "",
+          notes: "",
+          changeOrders: [],
+          purchaseOrders: [],
+          submittals: [],
+          files: [],
+          activity: []
+        }
+      ],
+      estimates: [
+        {
+          id: "estimate-local",
+          jobId: "job-g061",
+          projectName: "Smoke Test",
+          client: "Smoke GC",
+          pricingMode: "itemized",
+          ohPct: 0,
+          delPct: 0,
+          insPct: 0,
+          areas: [],
+          subItems: [],
+          alternates: [],
+          exclusions: [],
+          clarifications: []
+        }
+      ],
+      pmNotes: [
+        {
+          id: "note-local",
+          text: "Call Manny Job G26-061",
+          status: "Open",
+          priority: "Normal",
+          jobId: "job-g061",
+          createdAt: "2026-05-14"
+        }
+      ],
+      selectedJobId: "job-g061",
+      detailJobId: "job-g061"
+    });
+
+    expect(result.jobs).toHaveLength(1);
+    expect(result.jobs[0].id).toBe(persistedJobId);
+    expect(result.jobs[0].changeOrders[0].jobId).toBe(persistedJobId);
+    expect(result.jobs[0].submittals[0].jobId).toBe(persistedJobId);
+    expect(result.jobs[0].files[0].ownerId).toBe(persistedJobId);
+    expect(result.jobs[0].activity[0].ownerId).toBe(persistedJobId);
+    expect(result.estimates[0].jobId).toBe(persistedJobId);
+    expect(result.pmNotes[0].jobId).toBe(persistedJobId);
+    expect(result.selectedJobId).toBe(persistedJobId);
+    expect(result.detailJobId).toBe(persistedJobId);
+    expect(result.localToPersistedJobIds.get("job-g061")).toBe(persistedJobId);
   });
 });
 

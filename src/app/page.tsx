@@ -27,6 +27,7 @@ import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChange
 import { calculateEstimateTotals } from "@/lib/estimate-math";
 import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
 import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
+import { resolvePersistedJobForPMNote } from "@/lib/job-persistence-reconciliation";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
 import {
   currentContractValue,
@@ -129,11 +130,8 @@ type AwardDetails = {
 };
 
 export default function Home() {
-  const [view, setView] = useState<View>(() => {
-    if (typeof window === "undefined") return "dashboard";
-    const hash = window.location.hash.replace("#", "") as View;
-    return viewIds.includes(hash) ? hash : "dashboard";
-  });
+  const [view, setView] = useState<View>("dashboard");
+  const [hasMounted, setHasMounted] = useState(false);
   const [opportunities, setOpportunities] = useState<Opportunity[]>(seedOpportunities);
   const [estimates, setEstimates] = useState<Estimate[]>(seedEstimates);
   const [activeEstimateId, setActiveEstimateId] = useState(seedEstimates[0]?.id ?? "");
@@ -181,7 +179,11 @@ export default function Home() {
     persistSubmittal,
     setJobPersistenceStatus
   } = useJobsPersistence({
+    detailJobId,
     estimates,
+    jobs,
+    pmNotes,
+    selectedJobId,
     setDetailJobId,
     setEstimates,
     setJobs,
@@ -197,6 +199,7 @@ export default function Home() {
   const pipelineOpportunities = opportunities.filter((opportunity) =>
     ["Lead / ITB", "Pricing", "Review / Send"].includes(opportunity.status)
   );
+  const renderedView: View = hasMounted ? view : "dashboard";
 
   const analytics = useMemo(() => {
     const submitted = opportunities.filter((opportunity) => opportunity.sentDate).length;
@@ -307,9 +310,15 @@ export default function Home() {
       }
     }
 
+    const initialHashSync = window.setTimeout(() => {
+      syncViewFromHash();
+      setHasMounted(true);
+    }, 50);
     window.addEventListener("hashchange", syncViewFromHash);
-    syncViewFromHash();
-    return () => window.removeEventListener("hashchange", syncViewFromHash);
+    return () => {
+      window.clearTimeout(initialHashSync);
+      window.removeEventListener("hashchange", syncViewFromHash);
+    };
   }, []);
 
   async function persistOpportunity(next: Opportunity) {
@@ -1030,16 +1039,24 @@ export default function Home() {
     if (!trimmed) return;
 
     const parsedJobNumber = parseJobReferenceFromNote(trimmed);
-    const linkedJob = jobId
-      ? jobs.find((job) => job.id === jobId)
-      : jobs.find((job) => parsedJobNumber && job.jobNumber.toLowerCase() === parsedJobNumber.toLowerCase());
+    const { linkedJob, persistedJob } = resolvePersistedJobForPMNote({
+      jobs,
+      requestedJobId: jobId,
+      parsedJobNumber
+    });
+    const noteJobId = persistedJob?.id ?? linkedJob?.id;
+
+    if (persistedJob && linkedJob && linkedJob.id !== persistedJob.id) {
+      setSelectedJobId((current) => (current === linkedJob.id ? persistedJob.id : current));
+      setDetailJobId((current) => (current === linkedJob.id ? persistedJob.id : current));
+    }
 
     const note: PMNote = {
       id: `note-${Date.now()}`,
       text: trimmed,
       status: "Open",
       priority: trimmed.includes("!") ? "Pinned" : "Normal",
-      jobId: linkedJob?.id,
+      jobId: noteJobId,
       createdAt: today
     };
 
@@ -1054,6 +1071,10 @@ export default function Home() {
       current.map((note) => (note.id === noteId ? { ...note, status, completedAt: status === "Done" ? today : undefined } : note))
     );
     if (updated) void persistPMNote(updated);
+  }
+
+  if (!hasMounted) {
+    return <main className="app-shell" />;
   }
 
   return (
@@ -1073,7 +1094,7 @@ export default function Home() {
           {nav.map((item) => {
             const Icon = item.icon;
             return (
-              <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => goToView(item.id)}>
+              <button className={renderedView === item.id ? "active" : ""} key={item.id} onClick={() => goToView(item.id)}>
                 <Icon size={18} />
                 {item.label}
               </button>
@@ -1091,7 +1112,7 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <h1>{nav.find((item) => item.id === view)?.label}</h1>
+            <h1>{nav.find((item) => item.id === renderedView)?.label}</h1>
             <p>Manual-first Supabase-ready rebuild of the FS bid, estimate, proposal, and job workflow.</p>
           </div>
           <div className="topbar-actions">
@@ -1134,7 +1155,7 @@ export default function Home() {
           <div className="viewer-banner">You are in read-only mode. Contact an admin to request edit access.</div>
         )}
 
-        {view === "dashboard" && (
+        {renderedView === "dashboard" && (
           <HomeDashboard
             analytics={analytics}
             jobs={jobs}
@@ -1146,7 +1167,7 @@ export default function Home() {
             pmNotes={pmNotes}
           />
         )}
-        {view === "opportunities" && (
+        {renderedView === "opportunities" && (
           <OpportunityRegister
             opportunities={opportunities}
             query={query}
@@ -1154,8 +1175,8 @@ export default function Home() {
             onOpenOpportunity={setSelectedOpportunityId}
           />
         )}
-        {view === "kanban" && <PipelineKanban opportunities={pipelineOpportunities} onOpenOpportunity={setSelectedOpportunityId} />}
-        {view === "estimator" && (
+        {renderedView === "kanban" && <PipelineKanban opportunities={pipelineOpportunities} onOpenOpportunity={setSelectedOpportunityId} />}
+        {renderedView === "estimator" && (
           <BidWorkbook
             estimate={selectedEstimate}
             onChange={(next) => setEstimates((current) => current.map((estimate) => (estimate.id === next.id ? next : estimate)))}
@@ -1165,7 +1186,7 @@ export default function Home() {
             onSubmitChangeOrder={submitEstimateAsChangeOrder}
           />
         )}
-        {view === "jobs" && (
+        {renderedView === "jobs" && (
           <JobsView
             jobs={jobs}
             onApproveCos={approveSubmittedCo}
@@ -1185,10 +1206,10 @@ export default function Home() {
             saveStatus={jobPersistenceStatus}
           />
         )}
-        {view === "calendar" && <CalendarCapacityView jobs={jobs} onOpenJob={setDetailJobId} />}
-        {view === "service" && <ServiceView jobs={jobs} onCreateServiceJob={createServiceJob} />}
-        {view === "files" && <FilesView jobs={jobs} opportunities={opportunities} />}
-        {view === "analytics" && <AnalyticsView analytics={analytics} jobs={jobs} opportunities={opportunities} />}
+        {renderedView === "calendar" && <CalendarCapacityView jobs={jobs} onOpenJob={setDetailJobId} />}
+        {renderedView === "service" && <ServiceView jobs={jobs} onCreateServiceJob={createServiceJob} />}
+        {renderedView === "files" && <FilesView jobs={jobs} opportunities={opportunities} />}
+        {renderedView === "analytics" && <AnalyticsView analytics={analytics} jobs={jobs} opportunities={opportunities} />}
       </section>
       {detailJob ? (
         <JobDetailModal
