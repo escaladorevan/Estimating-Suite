@@ -1,45 +1,74 @@
 # Estimating Suite
 
-Estimating Suite is being rebuilt from the original prototype bundle into a full-stack web app for FS bid tracking, estimating, proposal generation, job tracking, file storage, and historical margin analysis.
+Estimating Suite is the FS operating system for estimating, proposals, bid tracking, job management, change orders, files, service work, and historical margin analysis.
 
-The legacy prototype files remain under `project/` as reference material. The modern app lives under `src/`.
+The production app is the **Next.js + Supabase stack under `src/`**. The old CDN prototype under `project/` is reference material only.
 
-## Source Systems Being Merged
+## What This App Is For
 
-- `project/uploads/Estimating_Master_v4.xlsx`: long-term opportunity, bid, job, CO, and historical tracking source of truth.
-- `project/uploads/FS_Estimator_v2_1.html`: estimating/proposal workflow reference.
-- `project/uploads/FS Job Dashboard.html`: job execution, files, COs, install calendar, and activity workflow reference.
-- Existing `project/*.jsx` files: integration prototype and Supabase bridge reference.
+- Track long-range opportunities with `Q-YY-NNN` opportunity IDs.
+- Keep active pursuit work in Pipeline without crowding the long-term Bid Register.
+- Build proposals, quotes, budgets, service quotes, and change orders in the Bid Workbook.
+- Convert won opportunities into jobs with PM/job-number nomenclature like `G26-042`.
+- Manage job execution: status, install dates, shop drawings, submittals, files, POs, COs, PM notes, and activity.
+- Store bid/job files in Supabase Storage.
+- Preserve historical values for forecasting, backlog, win/loss, margin, and job-cost analysis.
 
-## Modern App Stack
+## Canonical Code Paths
 
-- Next.js + React + TypeScript
-- Supabase Auth/Postgres/Storage-ready architecture
-- Vitest for business-rule tests
-- XLSX import for Estimating Master V4
-- jsPDF proposal export
+Use these paths for new work:
 
-## Run Locally
+- App shell and feature UI: `src/app/page.tsx`
+- Bid workbook UI: `src/components/BidWorkbook.tsx`
+- Shared domain types: `src/types.ts`
+- Shared status contracts: `src/lib/status-constants.ts`
+- Opportunity persistence: `src/lib/opportunity-repository.ts`
+- Estimate persistence: `src/lib/estimate-repository.ts`
+- Job, CO, PO, submittal persistence: `src/lib/job-repository.ts`
+- File metadata/storage helpers: `src/lib/file-repository.ts`
+- Production database reset: `supabase/rebuild-production-schema.sql`
+- Product blueprint: `docs/product-blueprint-v1.md`
+- Agent handoff guardrails: `docs/agent-handoff.md`
+
+Do not add new production behavior to `index.html` or `project/*.js`. Those files are legacy reference material.
+
+## Supabase Schema
+
+For a clean production reset, run:
+
+```text
+supabase/rebuild-production-schema.sql
+```
+
+That is the schema of record. It includes the production tables, storage bucket policies, role helpers, RLS policies, PM/job workflow tables, purchase orders, submittals, files, activity, estimate snapshots, and pricing library structure.
+
+The older files `supabase/schema.sql` and `supabase/rebuild-schema.sql` are deprecated prototype schemas. Keep them only as migration history/reference unless a future cleanup removes them.
+
+## Local Setup
 
 ```bash
 npm install
 npm run dev
 ```
 
-Optional Supabase environment:
+On Windows PowerShell, if scripts are blocked, use:
+
+```powershell
+npm.cmd run dev
+```
+
+Optional local Supabase environment:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
-Apply the new schema from:
-
-```text
-supabase/rebuild-schema.sql
-```
+Without those variables the app runs as a local prototype. With them, repository helpers can read and write Supabase data subject to Auth/RLS.
 
 ## Verification
+
+Run these before committing:
 
 ```bash
 npm test
@@ -47,13 +76,32 @@ npm run typecheck
 npm run build
 ```
 
-The current rebuild includes:
+On Windows PowerShell, use the `.cmd` shim if needed:
 
-- Master-style opportunity register with workbook import
-- Active bid kanban limited to active pursuit work
-- Native estimator workspace with FS Estimator V2-style totals
-- PDF proposal export
-- Jobs list and robust job detail page
-- CO approval rollups into current contract value
-- File-slot model from FS Job Dashboard
-- Bid/job analytics and margin summary
+```powershell
+npm.cmd test
+npm.cmd run typecheck
+npm.cmd run build
+```
+
+## Current Product Surface
+
+- Home/PM dashboard concepts
+- Master-style opportunity register
+- Pipeline for active bids
+- Bid Workbook / estimator prototype
+- Workbook-backed change order flow
+- Jobs list and job detail workspace
+- Shop drawing and submittal tracking
+- Purchase order tracking for stone/quartz and other subs
+- Calendar/capacity view
+- Service work path
+- Files and analytics surfaces
+
+## Near-Term Production Focus
+
+1. Keep all new work in the Next/Supabase stack.
+2. Finish end-to-end persistence for PM notes, job files, activity events, and storage uploads.
+3. Split the large client page into feature slices once the current persistence spine is proven.
+4. Add RLS role-matrix tests for admin, estimator, PM, viewer, and accounting.
+5. Expand browser smoke tests around opportunity to estimate to job to CO workflows.

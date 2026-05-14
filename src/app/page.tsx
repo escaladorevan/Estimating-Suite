@@ -39,7 +39,7 @@ import {
 import { fileSlots, estimates as seedEstimates, jobs as seedJobs, opportunities as seedOpportunities } from "@/lib/sample-data";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "@/lib/opportunity-import";
 import { listOpportunities, saveOpportunity } from "@/lib/opportunity-repository";
-import { listJobs, saveJobHeader, saveChangeOrder, savePurchaseOrder, saveSubmittal } from "@/lib/job-repository";
+import { listJobs, listPMNotes, saveJobHeader, saveChangeOrder, savePurchaseOrder, saveSubmittal, savePMNote, saveActivityEvent } from "@/lib/job-repository";
 import { filterOpportunitiesForView, suggestJobNumber, type RegisterView } from "@/lib/opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote, type PMActionItem } from "@/lib/pm-actions";
 import { buildProposalPdf } from "@/lib/proposal-pdf";
@@ -54,7 +54,7 @@ import {
   type SubmittalAction,
   type UpdateSubmittalInput
 } from "@/lib/submittals";
-import type { AppUserProfile, ChangeOrder, ChangeOrderStatus, Estimate, Job, Opportunity, OpportunityStatus, PMNote, ProjectFile, PurchaseOrder, PurchaseOrderScope, PurchaseOrderStatus, SubmittalPackage } from "@/types";
+import type { ActivityEvent, AppUserProfile, ChangeOrder, ChangeOrderStatus, Estimate, Job, Opportunity, OpportunityStatus, PMNote, ProjectFile, PurchaseOrder, PurchaseOrderScope, PurchaseOrderStatus, SubmittalPackage } from "@/types";
 
 type View = "dashboard" | "opportunities" | "kanban" | "estimator" | "jobs" | "calendar" | "service" | "files" | "analytics";
 type DashboardAnalytics = {
@@ -250,10 +250,25 @@ export default function Home() {
     }
   }
 
+  async function loadPersistedPMNotes(isMounted = true) {
+    try {
+      const persisted = await listPMNotes();
+      if (!isMounted) return;
+
+      if (persisted.length) {
+        setPmNotes(persisted);
+      }
+    } catch {
+      if (!isMounted) return;
+      setJobPersistenceStatus("Local sample mode. Sign in before Supabase can read and save PM notes.");
+    }
+  }
+
   useEffect(() => {
     let isMounted = true;
     void loadPersistedOpportunities(isMounted);
     void loadPersistedJobs(isMounted);
+    void loadPersistedPMNotes(isMounted);
 
     return () => {
       isMounted = false;
@@ -275,6 +290,7 @@ export default function Home() {
       if (email) {
         void loadPersistedOpportunities();
         void loadPersistedJobs();
+        void loadPersistedPMNotes();
         void getCurrentUserProfile().then((profile) => { if (isMounted) setCurrentUser(profile); });
       }
     });
@@ -286,6 +302,7 @@ export default function Home() {
       if (email) {
         void loadPersistedOpportunities();
         void loadPersistedJobs();
+        void loadPersistedPMNotes();
         void getCurrentUserProfile().then(setCurrentUser);
       } else {
         setCurrentUser(null);
@@ -510,6 +527,82 @@ export default function Home() {
     }
   }
 
+  async function persistPMNote(note: PMNote) {
+    if (note.jobId && !isUuid(note.jobId)) {
+      setJobPersistenceStatus("PM note saved locally. Link it to a persisted job before saving the job reference.");
+      return;
+    }
+
+    try {
+      const saved = await savePMNote(note);
+      setPmNotes((current) => current.map((candidate) => (candidate.id === note.id ? saved : candidate)));
+      setJobPersistenceStatus("PM note saved.");
+    } catch {
+      setJobPersistenceStatus("PM note save failed - local only.");
+    }
+  }
+
+  async function persistActivity(event: ActivityEvent) {
+    if (!isUuid(event.ownerId)) return;
+
+    try {
+      const saved = await saveActivityEvent(event);
+      setJobs((current) =>
+        current.map((job) =>
+          job.activity.some((candidate) => candidate.id === event.id)
+            ? { ...job, activity: job.activity.map((candidate) => (candidate.id === event.id ? saved : candidate)) }
+            : job
+        )
+      );
+    } catch {
+      setJobPersistenceStatus("Activity log save failed - local only.");
+    }
+  }
+
+  async function persistProjectFileAttachment(localFile: ProjectFile, file: File) {
+    if (!isUuid(localFile.ownerId)) {
+      setJobPersistenceStatus("File attached locally. Save the job item before storing files.");
+      return;
+    }
+
+    setJobPersistenceStatus(`Uploading ${file.name}...`);
+
+    try {
+      const storagePath = await uploadProjectFile({
+        file,
+        ownerType: localFile.ownerType,
+        ownerId: localFile.ownerId,
+        slot: localFile.slot,
+        fileName: file.name,
+        mimeType: file.type
+      });
+      if (!storagePath) throw new Error("Upload did not return a storage path.");
+
+      const saved = await saveProjectFileMetadata({
+        ownerType: localFile.ownerType,
+        ownerId: localFile.ownerId,
+        slot: localFile.slot,
+        name: file.name,
+        storagePath,
+        mimeType: file.type || null,
+        sizeBytes: file.size
+      });
+
+      if (saved) {
+        setJobs((current) =>
+          current.map((job) =>
+            job.files.some((candidate) => candidate.id === localFile.id)
+              ? { ...job, files: job.files.map((candidate) => (candidate.id === localFile.id ? saved : candidate)) }
+              : job
+          )
+        );
+      }
+      setJobPersistenceStatus(saved ? `Stored ${file.name} in Supabase Storage.` : `Uploaded ${file.name}; metadata is local only.`);
+    } catch {
+      setJobPersistenceStatus("File attached locally only. Supabase Storage is waiting on sign-in or persisted owner id.");
+    }
+  }
+
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) {
@@ -599,6 +692,14 @@ export default function Home() {
       dateSubmitted: today,
       notes: `Created from workbook ${estimate.id}.`
     };
+    const activity: ActivityEvent = {
+      id: `act-${Date.now()}`,
+      ownerType: "job",
+      ownerId: sourceJob.id,
+      author: "System",
+      message: `${number} submitted from Bid Workbook for ${money.format(amount)}.`,
+      createdAt: today
+    };
 
     setJobs((current) =>
       current.map((job) => {
@@ -606,21 +707,14 @@ export default function Home() {
         return {
           ...job,
           changeOrders: [...job.changeOrders, changeOrder],
-          activity: [
-            {
-              id: `act-${Date.now()}`,
-              ownerType: "job",
-              ownerId: job.id,
-              author: "System",
-              message: `${number} submitted from Bid Workbook for ${money.format(amount)}.`,
-              createdAt: today
-            },
-            ...job.activity
-          ]
+          activity: [activity, ...job.activity]
         };
       })
     );
-    if (isUuid(sourceJob.id)) void persistChangeOrder(changeOrder);
+    if (isUuid(sourceJob.id)) {
+      void persistChangeOrder(changeOrder);
+      void persistActivity(activity);
+    }
     setSelectedJobId(estimate.jobId);
     setDetailJobId(estimate.jobId);
     goToView("jobs");
@@ -632,6 +726,14 @@ export default function Home() {
     const approvedCos = job.changeOrders
       .filter((co) => co.status === "submitted")
       .map((co) => ({ ...co, status: "approved" as ChangeOrderStatus, approvedDate: today }));
+    const activity: ActivityEvent = {
+      id: `act-${Date.now()}`,
+      ownerType: "job",
+      ownerId: jobId,
+      author: "System",
+      message: "Submitted change orders were approved and rolled into current contract.",
+      createdAt: today
+    };
 
     setJobs((current) =>
       current.map((j) =>
@@ -642,22 +744,13 @@ export default function Home() {
               changeOrders: j.changeOrders.map((co) =>
                 co.status === "submitted" ? { ...co, status: "approved", approvedDate: today } : co
               ),
-              activity: [
-                {
-                  id: `act-${Date.now()}`,
-                  ownerType: "job",
-                  ownerId: j.id,
-                  author: "System",
-                  message: "Submitted change orders were approved and rolled into current contract.",
-                  createdAt: today
-                },
-                ...j.activity
-              ]
+              activity: [activity, ...j.activity]
             }
       )
     );
     if (isUuid(jobId)) {
       for (const co of approvedCos) void persistChangeOrder(co);
+      void persistActivity(activity);
     }
   }
 
@@ -865,6 +958,8 @@ export default function Home() {
 
   function attachPurchaseOrderFile(jobId: string, poId: string, file: File | undefined) {
     if (!file) return;
+    let attachedFile: ProjectFile | null = null;
+    let attachedActivity: ActivityEvent | null = null;
     setJobs((current) =>
       current.map((job) => {
         if (job.id !== jobId) return job;
@@ -877,28 +972,32 @@ export default function Home() {
           name: file.name,
           uploadedAt: today
         };
+        const activity: ActivityEvent = {
+          id: `act-${Date.now()}`,
+          ownerType: "purchase_order",
+          ownerId: poId,
+          author: "System",
+          message: `${file.name} attached to ${po?.poNumber ?? "PO"}.`,
+          createdAt: today
+        };
+        attachedFile = nextFile;
+        attachedActivity = activity;
 
         return {
           ...job,
           files: [...job.files, nextFile],
-          activity: [
-            {
-              id: `act-${Date.now()}`,
-              ownerType: "purchase_order",
-              ownerId: poId,
-              author: "System",
-              message: `${file.name} attached to ${po?.poNumber ?? "PO"}.`,
-              createdAt: today
-            },
-            ...job.activity
-          ]
+          activity: [activity, ...job.activity]
         };
       })
     );
+    if (attachedFile) void persistProjectFileAttachment(attachedFile, file);
+    if (attachedActivity) void persistActivity(attachedActivity);
   }
 
   function attachSubmittalFile(jobId: string, submittalId: string, file: File | undefined) {
     if (!file) return;
+    let attachedFile: ProjectFile | null = null;
+    let attachedActivity: ActivityEvent | null = null;
 
     setJobs((current) =>
       current.map((job) => {
@@ -912,24 +1011,26 @@ export default function Home() {
           name: file.name,
           uploadedAt: today
         };
+        const activity: ActivityEvent = {
+          id: `act-${Date.now()}`,
+          ownerType: "submittal",
+          ownerId: submittalId,
+          author: "System",
+          message: `${file.name} attached to ${submittal?.name ?? "submittal package"}.`,
+          createdAt: today
+        };
+        attachedFile = nextFile;
+        attachedActivity = activity;
 
         return {
           ...job,
           files: [...job.files, nextFile],
-          activity: [
-            {
-              id: `act-${Date.now()}`,
-              ownerType: "submittal",
-              ownerId: submittalId,
-              author: "System",
-              message: `${file.name} attached to ${submittal?.name ?? "submittal package"}.`,
-              createdAt: today
-            },
-            ...job.activity
-          ]
+          activity: [activity, ...job.activity]
         };
       })
     );
+    if (attachedFile) void persistProjectFileAttachment(attachedFile, file);
+    if (attachedActivity) void persistActivity(attachedActivity);
   }
 
   function createServiceJob(input: {
@@ -1006,23 +1107,26 @@ export default function Home() {
       ? jobs.find((job) => job.id === jobId)
       : jobs.find((job) => parsedJobNumber && job.jobNumber.toLowerCase() === parsedJobNumber.toLowerCase());
 
-    setPmNotes((current) => [
-      {
-        id: `note-${Date.now()}`,
-        text: trimmed,
-        status: "Open",
-        priority: trimmed.includes("!") ? "Pinned" : "Normal",
-        jobId: linkedJob?.id,
-        createdAt: today
-      },
-      ...current
-    ]);
+    const note: PMNote = {
+      id: `note-${Date.now()}`,
+      text: trimmed,
+      status: "Open",
+      priority: trimmed.includes("!") ? "Pinned" : "Normal",
+      jobId: linkedJob?.id,
+      createdAt: today
+    };
+
+    setPmNotes((current) => [note, ...current]);
+    void persistPMNote(note);
   }
 
   function updatePmNoteStatus(noteId: string, status: PMNote["status"]) {
+    const note = pmNotes.find((candidate) => candidate.id === noteId);
+    const updated = note ? { ...note, status, completedAt: status === "Done" ? today : undefined } : null;
     setPmNotes((current) =>
       current.map((note) => (note.id === noteId ? { ...note, status, completedAt: status === "Done" ? today : undefined } : note))
     );
+    if (updated) void persistPMNote(updated);
   }
 
   return (

@@ -577,10 +577,11 @@ describe("file repository mapping", () => {
       ownerType: "estimate",
       ownerId: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
       slot: "signed proposal",
-      fileName: "Proposal Rev 1.pdf"
+      fileName: "Proposal Rev 1.pdf",
+      uniqueId: "upload-001"
     });
 
-    expect(storagePath).toBe("estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/signed-proposal/proposal-rev-1.pdf");
+    expect(storagePath).toBe("estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/signed-proposal/upload-001-proposal-rev-1.pdf");
     expect(
       mapProjectFileToInsert({
         ownerType: "estimate",
@@ -597,7 +598,7 @@ describe("file repository mapping", () => {
       slot: "signed proposal",
       name: "Proposal Rev 1.pdf",
       storage_bucket: "project-files",
-      storage_path: "estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/signed-proposal/proposal-rev-1.pdf",
+      storage_path: "estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/signed-proposal/upload-001-proposal-rev-1.pdf",
       mime_type: "application/pdf",
       size_bytes: 15000
     });
@@ -911,6 +912,7 @@ describe("job repository mapping", () => {
 
     expect(activity).toMatchObject({ ownerType: "job", ownerId: jobUuid, author: "", message: "Job created" });
     expect(mapActivityEventToInsert(activity)).toMatchObject({ owner_type: "job", owner_id: jobUuid });
+    expect(mapActivityEventToInsert({ ...activity, ownerType: "change_order" })).toMatchObject({ owner_type: "change_order" });
     expect(() => mapActivityEventToInsert({ ...activity, ownerId: "job-g060" })).toThrow("persisted UUID owner id");
   });
 

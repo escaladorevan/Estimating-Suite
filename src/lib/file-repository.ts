@@ -82,14 +82,16 @@ export function buildProjectFileStoragePath({
   ownerType,
   ownerId,
   slot,
-  fileName
+  fileName,
+  uniqueId = makeStorageVersion()
 }: {
   ownerType: ProjectFile["ownerType"];
   ownerId: string;
   slot: string;
   fileName: string;
+  uniqueId?: string;
 }) {
-  return [slug(ownerType), ownerId, slug(slot), sanitizeFileName(fileName)].join("/");
+  return [slug(ownerType), ownerId, slug(slot), `${slug(uniqueId)}-${sanitizeFileName(fileName)}`].join("/");
 }
 
 export async function listProjectFiles(owner: Pick<ProjectFile, "ownerType" | "ownerId">, client: SupabaseFileClient | null = supabase) {
@@ -156,6 +158,10 @@ function sanitizeFileName(value: string) {
   const base = dotIndex > 0 ? trimmed.slice(0, dotIndex) : trimmed;
   const extension = dotIndex > 0 ? trimmed.slice(dotIndex).replace(/[^.a-z0-9]/gi, "") : "";
   return `${slug(base)}${extension}` || "file";
+}
+
+function makeStorageVersion() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function isUuid(value: string) {

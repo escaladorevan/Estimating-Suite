@@ -15,6 +15,7 @@ import type {
   WorkType
 } from "@/types";
 import { supabase } from "./supabase-client";
+import { mapProjectFileFromRow, type ProjectFileRow } from "./file-repository";
 import {
   BACKLOG_STATUSES,
   CHANGE_ORDER_STATUSES,
@@ -236,7 +237,7 @@ export type ActivityEventInsert = {
 };
 
 type SupabaseJobClient = {
-  from: (table: "jobs" | "change_orders" | "purchase_orders" | "submittals" | "files" | "activity_events") => any;
+  from: (table: "jobs" | "change_orders" | "purchase_orders" | "submittals" | "files" | "pm_notes" | "activity_events") => any;
 };
 
 export function mapJobFromRow(
@@ -451,35 +452,56 @@ export async function listJobs(client: SupabaseJobClient | null = supabase) {
   const jobIds = jobs.map((job) => job.id).filter(isUuid);
   if (!jobIds.length) return jobs.map((job) => mapJobFromRow(job));
 
-  const [{ data: coRows, error: coError }, { data: poRows, error: poError }, { data: subRows, error: subError }, { data: fileRows, error: fileError }, { data: activityRows, error: activityError }] =
+  const [{ data: coRows, error: coError }, { data: poRows, error: poError }, { data: subRows, error: subError }] =
     await Promise.all([
       client.from("change_orders").select("*").in("job_id", jobIds).order("number", { ascending: true }),
       client.from("purchase_orders").select("*").in("job_id", jobIds).order("po_number", { ascending: true }),
-      client.from("submittals").select("*").in("job_id", jobIds).order("due_date", { ascending: true }),
-      client.from("files").select("*").eq("owner_type", "job").in("owner_id", jobIds).order("uploaded_at", { ascending: false }),
-      client.from("activity_events").select("*").eq("owner_type", "job").in("owner_id", jobIds).order("created_at", { ascending: false })
+      client.from("submittals").select("*").in("job_id", jobIds).order("due_date", { ascending: true })
     ]);
 
-  for (const error of [coError, poError, subError, fileError, activityError]) {
+  for (const error of [coError, poError, subError]) {
+    if (error) throw error;
+  }
+
+  const changeOrders = (coRows ?? []) as ChangeOrderRow[];
+  const purchaseOrders = (poRows ?? []) as PurchaseOrderRow[];
+  const submittals = (subRows ?? []) as SubmittalRow[];
+  const relatedOwnerIds = uniqueIds([
+    ...jobIds,
+    ...changeOrders.map((row) => row.id),
+    ...purchaseOrders.map((row) => row.id),
+    ...submittals.map((row) => row.id)
+  ]);
+
+  const [{ data: fileRows, error: fileError }, { data: activityRows, error: activityError }] = await Promise.all([
+    client.from("files").select("*").in("owner_id", relatedOwnerIds).order("uploaded_at", { ascending: false }),
+    client.from("activity_events").select("*").in("owner_id", relatedOwnerIds).order("created_at", { ascending: false })
+  ]);
+
+  for (const error of [fileError, activityError]) {
     if (error) throw error;
   }
 
   return jobs.map((job) =>
-    mapJobFromRow(job, {
-      changeOrders: ((coRows ?? []) as ChangeOrderRow[]).filter((row) => row.job_id === job.id).map(mapChangeOrderFromRow),
-      purchaseOrders: ((poRows ?? []) as PurchaseOrderRow[]).filter((row) => row.job_id === job.id).map(mapPurchaseOrderFromRow),
-      submittals: ((subRows ?? []) as SubmittalRow[]).filter((row) => row.job_id === job.id).map(mapSubmittalFromRow),
-      files: ((fileRows ?? []) as any[]).filter((row) => row.owner_id === job.id).map((row) => ({
-        id: row.id,
-        ownerType: "job",
-        ownerId: row.owner_id,
-        slot: row.slot,
-        name: row.name,
-        url: row.storage_path ? `${row.storage_bucket ?? "project-files"}/${row.storage_path}` : undefined,
-        uploadedAt: row.uploaded_at ?? ""
-      })),
-      activity: ((activityRows ?? []) as ActivityEventRow[]).filter((row) => row.owner_id === job.id).map(mapActivityEventFromRow)
-    })
+    {
+      const jobChangeOrders = changeOrders.filter((row) => row.job_id === job.id);
+      const jobPurchaseOrders = purchaseOrders.filter((row) => row.job_id === job.id);
+      const jobSubmittals = submittals.filter((row) => row.job_id === job.id);
+      const jobOwnerIds = new Set([
+        job.id,
+        ...jobChangeOrders.map((row) => row.id),
+        ...jobPurchaseOrders.map((row) => row.id),
+        ...jobSubmittals.map((row) => row.id)
+      ]);
+
+      return mapJobFromRow(job, {
+        changeOrders: jobChangeOrders.map(mapChangeOrderFromRow),
+        purchaseOrders: jobPurchaseOrders.map(mapPurchaseOrderFromRow),
+        submittals: jobSubmittals.map(mapSubmittalFromRow),
+        files: ((fileRows ?? []) as ProjectFileRow[]).filter((row) => jobOwnerIds.has(row.owner_id)).map(mapProjectFileFromRow),
+        activity: ((activityRows ?? []) as ActivityEventRow[]).filter((row) => row.owner_id && jobOwnerIds.has(row.owner_id)).map(mapActivityEventFromRow)
+      });
+    }
   );
 }
 
@@ -519,6 +541,33 @@ export async function saveSubmittal(submittal: SubmittalPackage, client: Supabas
     : await client.from("submittals").insert(write).select("*").single();
   if (error) throw error;
   return data ? mapSubmittalFromRow(data as SubmittalRow) : submittal;
+}
+
+export async function listPMNotes(client: SupabaseJobClient | null = supabase): Promise<PMNote[]> {
+  if (!client) return [];
+  const { data, error } = await client.from("pm_notes").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as PMNoteRow[]).map(mapPMNoteFromRow);
+}
+
+export async function savePMNote(note: PMNote, client: SupabaseJobClient | null = supabase): Promise<PMNote> {
+  if (!client) return note;
+  const write = mapPMNoteToWrite(note);
+  const { data, error } = write.id
+    ? await client.from("pm_notes").upsert(write, { onConflict: "id" }).select("*").single()
+    : await client.from("pm_notes").insert(mapPMNoteToInsert(note)).select("*").single();
+  if (error) throw error;
+  return data ? mapPMNoteFromRow(data as PMNoteRow) : note;
+}
+
+export async function saveActivityEvent(event: ActivityEvent, client: SupabaseJobClient | null = supabase): Promise<ActivityEvent> {
+  if (!client) return event;
+  const write = mapActivityEventToInsert(event);
+  const { data, error } = write.id
+    ? await client.from("activity_events").upsert(write, { onConflict: "id" }).select("*").single()
+    : await client.from("activity_events").insert(write).select("*").single();
+  if (error) throw error;
+  return data ? mapActivityEventFromRow(data as ActivityEventRow) : event;
 }
 
 function mapChangeOrderToWrite(changeOrder: ChangeOrder & { estimateId?: string }): ChangeOrderWrite {
@@ -643,7 +692,7 @@ function normalizePMNotePriority(value: PMNotePriority | string | null): PMNoteP
 }
 
 function normalizeActivityOwnerType(value: ActivityOwnerType | string): ActivityOwnerType {
-  const ownerTypes: ActivityOwnerType[] = ["opportunity", "estimate", "job", "submittal", "purchase_order"];
+  const ownerTypes: ActivityOwnerType[] = ["opportunity", "estimate", "job", "change_order", "submittal", "purchase_order"];
   return ownerTypes.includes(value as ActivityOwnerType) ? (value as ActivityOwnerType) : "job";
 }
 
@@ -656,6 +705,10 @@ function toNullableNumber(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function uniqueIds(values: string[]) {
+  return [...new Set(values.filter(isUuid))];
 }
 
 function nullableText(value?: string) {

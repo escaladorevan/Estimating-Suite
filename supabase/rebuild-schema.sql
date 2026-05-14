@@ -1,3 +1,7 @@
+-- DEPRECATED INTERMEDIATE REBUILD SCHEMA.
+-- Do not run this for the production Next/Supabase app.
+-- The schema of record is supabase/rebuild-production-schema.sql.
+
 create extension if not exists "pgcrypto";
 
 create table if not exists opportunities (

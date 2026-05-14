@@ -265,7 +265,7 @@ export type Job = {
 
 export type ActivityEvent = {
   id: string;
-  ownerType: "opportunity" | "estimate" | "job" | "submittal" | "purchase_order";
+  ownerType: "opportunity" | "estimate" | "job" | "change_order" | "submittal" | "purchase_order";
   ownerId: string;
   author: string;
   message: string;

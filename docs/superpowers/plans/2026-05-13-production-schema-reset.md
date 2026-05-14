@@ -1,5 +1,7 @@
 # Production Schema Reset Implementation Plan
 
+> Historical plan note: this plan records the completed Supabase reset work from 2026-05-13. For current implementation direction, use `README.md` and `docs/agent-handoff.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the mixed prototype Supabase database with a clean production-ready schema for opportunities, estimating, jobs, contacts, files, PM work, and reporting.
@@ -209,9 +211,10 @@ all workflow/business smoke-test tables: 0
 
 **Files:**
 - Modify later: `src/app/page.tsx`
-- Create later: `src/lib/db/opportunities.ts`
-- Create later: `src/lib/db/estimates.ts`
-- Create later: `src/lib/db/jobs.ts`
+- Use: `src/lib/opportunity-repository.ts`
+- Use: `src/lib/estimate-repository.ts`
+- Use: `src/lib/job-repository.ts`
+- Use: `src/lib/file-repository.ts`
 
 - [ ] **Step 1: Do not wire all tables at once**
 

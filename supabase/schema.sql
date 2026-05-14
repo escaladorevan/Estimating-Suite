@@ -1,3 +1,7 @@
+-- DEPRECATED PROTOTYPE SCHEMA.
+-- Do not run this for the production Next/Supabase app.
+-- The schema of record is supabase/rebuild-production-schema.sql.
+
 -- F&S Estimating Suite — Full Database Schema
 -- Apply this in Supabase Dashboard → SQL Editor → Run
 -- All tables use RLS: authenticated users have full read/write access

@@ -1,4 +1,8 @@
 // Supabase client — loaded as plain <script> before Babel processes JSX
+// Legacy prototype Supabase bridge.
+// Production persistence belongs in src/lib/*-repository.ts.
+// Do not add production behavior here unless explicitly asked to work on the legacy prototype.
+
 const SUPABASE_URL = 'https://tapnbdorfxfdjmcwifzj.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhcG5iZG9yZnhmZGptY3dpZnpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczODgzNzUsImV4cCI6MjA5Mjk2NDM3NX0.sfflLwHEIQFmgbLlljJS51BdKCjqO-9BZWlH4-Wvs3s';
 

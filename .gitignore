@@ -9,3 +9,5 @@ next-dev.*.log
 *.tsbuildinfo
 .codex-pdf-tools/
 .codex-pdf-render/
+.worktrees/
+worktrees/
