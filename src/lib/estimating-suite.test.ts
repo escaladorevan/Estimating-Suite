@@ -6,6 +6,24 @@ import { calculateEstimateTotals } from "./estimate-math";
 import { mapEstimateFromRow, mapEstimateSnapshotToInsert, mapEstimateToUpsert } from "./estimate-repository";
 import { buildProjectFileStoragePath, mapProjectFileFromRow, mapProjectFileToInsert } from "./file-repository";
 import {
+  mapActivityEventFromRow,
+  mapActivityEventToInsert,
+  mapChangeOrderFromRow,
+  mapChangeOrderToInsert,
+  mapChangeOrderToUpdate,
+  mapJobFromRow,
+  mapJobToUpsert,
+  mapPMNoteFromRow,
+  mapPMNoteToInsert,
+  mapPMNoteToUpdate,
+  mapPurchaseOrderFromRow,
+  mapPurchaseOrderToInsert,
+  mapPurchaseOrderToUpdate,
+  mapSubmittalFromRow,
+  mapSubmittalToInsert,
+  mapSubmittalToUpdate
+} from "./job-repository";
+import {
   currentContractValue,
   jobCostSummary,
   summarizeBacklog,
@@ -594,6 +612,326 @@ describe("file repository mapping", () => {
         name: "Contract.pdf"
       })
     ).toThrow("persisted UUID owner id");
+  });
+});
+
+describe("job repository mapping", () => {
+  const jobUuid = "50f42d9f-b53f-4a97-b711-dc8b1cd13384";
+
+  it("maps production job rows into UI jobs with nullable contract and date fields", () => {
+    const job = mapJobFromRow({
+      id: jobUuid,
+      opportunity_id: null,
+      job_number: "G26-060",
+      work_type: "Negotiated",
+      pm: null,
+      client: "DPR",
+      project_name: "Tempe Student Union",
+      base_contract: "125000.50",
+      bid_ref: null,
+      award_date: "2026-05-01",
+      ntp_date: null,
+      backlog_status: "Submittals",
+      forecast_start: null,
+      forecast_end: "2026-08-21",
+      forecast_quarter: null,
+      expected_fab_start: null,
+      expected_completion: null,
+      fab_status: null,
+      install_start: null,
+      install_end: "2026-08-28",
+      install_status: null,
+      invoice_status: null,
+      crew_size: null,
+      gc: null,
+      service_scope: null,
+      requested_date: null,
+      scheduled_date: null,
+      assigned_to: null,
+      notes: null,
+      final_cost: null
+    });
+
+    expect(job).toMatchObject({
+      id: jobUuid,
+      jobNumber: "G26-060",
+      workType: "Negotiated",
+      pm: "",
+      client: "DPR",
+      projectName: "Tempe Student Union",
+      baseContract: 125000.5,
+      bidRef: "",
+      awardDate: "2026-05-01",
+      ntpDate: "",
+      backlogStatus: "Submittals",
+      forecastStart: "",
+      forecastEnd: "2026-08-21",
+      fabStatus: "Not Started",
+      installStart: "",
+      installEnd: "2026-08-28",
+      installStatus: "Ready",
+      invoiceStatus: "Not Billed",
+      crewSize: 0,
+      gc: "",
+      notes: "",
+      finalCost: undefined,
+      changeOrders: [],
+      purchaseOrders: [],
+      submittals: [],
+      files: [],
+      activity: []
+    });
+  });
+
+  it("maps UI job headers into upserts without sending local sample ids as UUIDs", () => {
+    const payload = mapJobToUpsert({
+      id: "job-g060",
+      jobNumber: "G26-060",
+      workType: "Bid / ITB",
+      pm: "Geoff",
+      client: "DPR",
+      projectName: "Tempe Student Union",
+      baseContract: 125000,
+      bidRef: "",
+      awardDate: "",
+      ntpDate: "2026-05-04",
+      backlogStatus: "Awarded / Waiting",
+      forecastStart: "",
+      forecastEnd: "2026-08-21",
+      forecastQuarter: "",
+      expectedFabStart: "",
+      expectedCompletion: "",
+      fabStatus: "Not Started",
+      installStart: "",
+      installEnd: "",
+      installStatus: "Ready",
+      invoiceStatus: "Not Billed",
+      crewSize: 3,
+      gc: "",
+      notes: "",
+      finalCost: undefined,
+      changeOrders: [],
+      purchaseOrders: [],
+      submittals: [],
+      files: [],
+      activity: []
+    });
+
+    expect(payload).toMatchObject({
+      job_number: "G26-060",
+      pm: "Geoff",
+      bid_ref: null,
+      award_date: null,
+      ntp_date: "2026-05-04",
+      forecast_start: null,
+      forecast_end: "2026-08-21",
+      final_cost: null
+    });
+    expect(payload.id).toBeUndefined();
+  });
+
+  it("maps every allowed database change order status", () => {
+    expect(
+      CHANGE_ORDER_STATUSES.map((status) =>
+        mapChangeOrderFromRow({
+          id: `${status}-id`,
+          job_id: jobUuid,
+          estimate_id: null,
+          number: `CO-${status}`,
+          description: status,
+          amount: "100",
+          status,
+          date_submitted: null,
+          approved_date: null,
+          gc_reference: null,
+          notes: null
+        }).status
+      )
+    ).toEqual(CHANGE_ORDER_STATUSES);
+
+    expect(
+      mapChangeOrderToInsert({
+        id: "co-local",
+        jobId: "job-g060",
+        number: "CO-001",
+        description: "Local draft",
+        amount: 100,
+        status: "submitted",
+        dateSubmitted: ""
+      })
+    ).toMatchObject({ job_id: null, date_submitted: null });
+  });
+
+  it("maps purchase order committed and invoiced fields", () => {
+    const po = mapPurchaseOrderFromRow({
+      id: "8f861063-22d2-4db4-8a0f-b5f8b8f70a1b",
+      job_id: jobUuid,
+      po_number: "PO-G26-060-001",
+      vendor: "Cambria",
+      scope: "Cambria",
+      description: null,
+      status: "Issued",
+      committed_amount: "15000.25",
+      approved_change_amount: "1200",
+      invoiced_amount: "7000.75",
+      paid_amount: null,
+      issue_date: "2026-05-10",
+      needed_by: null,
+      promised_date: "2026-06-01",
+      received_date: null,
+      owner: null,
+      notes: null
+    });
+
+    expect(po).toMatchObject({
+      committedAmount: 15000.25,
+      approvedChangeAmount: 1200,
+      invoicedAmount: 7000.75,
+      paidAmount: 0,
+      issueDate: "2026-05-10",
+      neededBy: "",
+      promisedDate: "2026-06-01"
+    });
+
+    expect(mapPurchaseOrderToUpdate(po)).toMatchObject({
+      committed_amount: 15000.25,
+      approved_change_amount: 1200,
+      invoiced_amount: 7000.75,
+      paid_amount: 0
+    });
+  });
+
+  it("maps submittal status and date fields", () => {
+    const submittal = mapSubmittalFromRow({
+      id: "2fa5c026-dd39-4211-a609-997d193c9800",
+      job_id: jobUuid,
+      name: "Shop Drawings",
+      type: "Shop Drawings",
+      status: "Approved as Noted",
+      revision: 2,
+      due_date: "2026-05-20",
+      submitted_date: "2026-05-12",
+      returned_date: "2026-05-18",
+      owner: "Pat",
+      release_blocker: true,
+      notes: null
+    });
+
+    expect(submittal).toMatchObject({
+      status: "Approved as Noted",
+      revision: 2,
+      dueDate: "2026-05-20",
+      submittedDate: "2026-05-12",
+      returnedDate: "2026-05-18",
+      releaseBlocker: true
+    });
+
+    expect(mapSubmittalToUpdate(submittal)).toMatchObject({
+      status: "Approved as Noted",
+      due_date: "2026-05-20",
+      submitted_date: "2026-05-12",
+      returned_date: "2026-05-18"
+    });
+  });
+
+  it("maps PM note job linkage and rejects local job ids for database inserts", () => {
+    expect(
+      mapPMNoteFromRow({
+        id: "a603d881-b3c0-4ffb-bb1f-a27f1584770d",
+        text: "Call Manny",
+        status: "Waiting",
+        priority: "Pinned",
+        job_id: jobUuid,
+        due_date: "2026-05-30",
+        created_at: "2026-05-14T12:00:00Z",
+        completed_at: null
+      })
+    ).toMatchObject({ jobId: jobUuid, dueDate: "2026-05-30", createdAt: "2026-05-14T12:00:00Z" });
+
+    expect(() =>
+      mapPMNoteToInsert({
+        id: "note-local",
+        text: "Needs persisted job",
+        status: "Open",
+        priority: "Normal",
+        jobId: "job-g060",
+        createdAt: "2026-05-14"
+      })
+    ).toThrow("persisted UUID job id");
+  });
+
+  it("maps child inserts and activity events with persisted owner ids", () => {
+    expect(
+      mapChangeOrderToUpdate({
+        id: "co-local",
+        jobId: jobUuid,
+        number: "CO-002",
+        description: "Added panels",
+        amount: 2500,
+        status: "approved",
+        dateSubmitted: "2026-05-10",
+        approvedDate: "2026-05-12"
+      })
+    ).toMatchObject({ id: undefined, job_id: jobUuid, approved_date: "2026-05-12" });
+
+    expect(
+      mapPurchaseOrderToInsert({
+        id: "po-local",
+        jobId: jobUuid,
+        poNumber: "PO-G26-060-001",
+        vendor: "Cambria",
+        scope: "Cambria",
+        description: "",
+        status: "Draft",
+        committedAmount: 9000
+      })
+    ).toMatchObject({ id: undefined, job_id: jobUuid, description: null, committed_amount: 9000 });
+
+    expect(
+      mapSubmittalToInsert({
+        id: "sub-local",
+        jobId: jobUuid,
+        name: "Finish Samples",
+        type: "Finish Samples",
+        status: "Submitted",
+        revision: 1,
+        submittedDate: "2026-05-11",
+        releaseBlocker: false
+      })
+    ).toMatchObject({ id: undefined, job_id: jobUuid, submitted_date: "2026-05-11" });
+
+    const activity = mapActivityEventFromRow({
+      id: "9f3fd299-c04f-443b-b833-eed49724505d",
+      owner_type: "job",
+      owner_id: jobUuid,
+      author: null,
+      message: "Job created",
+      created_at: "2026-05-14T12:00:00Z"
+    });
+
+    expect(activity).toMatchObject({ ownerType: "job", ownerId: jobUuid, author: "", message: "Job created" });
+    expect(mapActivityEventToInsert(activity)).toMatchObject({ owner_type: "job", owner_id: jobUuid });
+    expect(() => mapActivityEventToInsert({ ...activity, ownerId: "job-g060" })).toThrow("persisted UUID owner id");
+  });
+
+  it("maps PM note updates without resending immutable created timestamps", () => {
+    expect(
+      mapPMNoteToUpdate({
+        id: "note-local",
+        text: "Done",
+        status: "Done",
+        priority: "Normal",
+        createdAt: "2026-05-14T12:00:00Z",
+        completedAt: "2026-05-15T12:00:00Z"
+      })
+    ).toMatchObject({
+      id: undefined,
+      text: "Done",
+      status: "Done",
+      priority: "Normal",
+      job_id: null,
+      completed_at: "2026-05-15T12:00:00Z"
+    });
   });
 });
 
