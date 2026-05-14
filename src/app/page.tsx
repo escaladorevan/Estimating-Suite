@@ -458,6 +458,39 @@ export default function Home() {
     void persistOpportunity({ ...opp, status: targetStatus, winLoss: "" });
   }
 
+  function createNewOpportunity() {
+    const opportunityId = nextOpportunityId({ jobs, opportunities, date: today });
+    const newOpportunity: Opportunity = {
+      id: `opp-${Date.now()}`,
+      jobId: opportunityId,
+      month: monthFromDate(today),
+      client: "",
+      projectName: "New ITB",
+      bidDueDate: "",
+      drawingStage: "",
+      bidType: "Invited",
+      sentDate: "",
+      submissionMethod: "Email",
+      status: "Lead / ITB",
+      winLoss: "",
+      jobType: "",
+      workType: "Bid / ITB",
+      estimatedValue: 0,
+      links: { drawings: "", specs: "", schedule: "" },
+      notes: "",
+      bidFeedback: "",
+      ntpReceived: false,
+      initialContractValue: null,
+      finalCost: null,
+      files: []
+    };
+
+    setOpportunities((current) => [newOpportunity, ...current]);
+    setSelectedOpportunityId(newOpportunity.id);
+    goToView("opportunities");
+    void persistOpportunity(newOpportunity);
+  }
+
   async function importMasterWorkbook(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1070,6 +1103,7 @@ export default function Home() {
           <HomeDashboard
             analytics={analytics}
             jobs={jobs}
+            onCreateOpportunity={createNewOpportunity}
             onCreatePmNote={createPmNote}
             onUpdatePmNoteStatus={updatePmNoteStatus}
             opportunities={opportunities}
@@ -1265,6 +1299,7 @@ function HomeDashboard({
   pipelineOpportunities,
   jobs,
   pmNotes,
+  onCreateOpportunity,
   onCreatePmNote,
   onUpdatePmNoteStatus
 }: {
@@ -1273,6 +1308,7 @@ function HomeDashboard({
   pipelineOpportunities: Opportunity[];
   jobs: Job[];
   pmNotes: PMNote[];
+  onCreateOpportunity: () => void;
   onCreatePmNote: (text: string, jobId?: string) => void;
   onUpdatePmNoteStatus: (noteId: string, status: PMNote["status"]) => void;
 }) {
@@ -1314,7 +1350,7 @@ function HomeDashboard({
             {pipelineOpportunities.length} active bids are moving. {nextSubmitted.length} submitted bids are waiting in the register.
           </p>
         </div>
-        <button className="primary">New ITB</button>
+        <button className="primary" onClick={onCreateOpportunity}>New ITB</button>
       </section>
       <div className="metric-grid">
         <Metric label="Contract backlog" value={money.format(backlogSummary.totalBacklog)} detail={`${money.format(backlogSummary.wonNotStarted)} won not started`} />
@@ -1690,6 +1726,29 @@ function yearFromDate(value?: string) {
   if (!value) return null;
   const date = new Date(`${value}T12:00:00`);
   return Number.isNaN(date.getTime()) ? null : date.getFullYear();
+}
+
+function nextOpportunityId({
+  date,
+  jobs,
+  opportunities
+}: {
+  date: string;
+  jobs: Job[];
+  opportunities: Opportunity[];
+}) {
+  const year = new Date(`${date}T12:00:00`).getFullYear().toString().slice(-2);
+  const pattern = new RegExp(`^Q-${year}-(\\d{3})$`);
+  const numbers = [
+    ...opportunities.map((opportunity) => opportunity.jobId),
+    ...jobs.map((job) => job.bidRef ?? "")
+  ]
+    .map((value) => value.match(pattern)?.[1])
+    .filter((value): value is string => Boolean(value))
+    .map((value) => Number(value));
+  const next = Math.max(0, ...numbers) + 1;
+
+  return `Q-${year}-${String(next).padStart(3, "0")}`;
 }
 
 function LinkDots({ opportunity }: { opportunity: Opportunity }) {
