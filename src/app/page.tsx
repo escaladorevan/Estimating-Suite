@@ -39,6 +39,7 @@ import {
 import { fileSlots, estimates as seedEstimates, jobs as seedJobs, opportunities as seedOpportunities } from "@/lib/sample-data";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "@/lib/opportunity-import";
 import { listOpportunities, saveOpportunity } from "@/lib/opportunity-repository";
+import { listJobs, saveJobHeader } from "@/lib/job-repository";
 import { filterOpportunitiesForView, suggestJobNumber, type RegisterView } from "@/lib/opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote, type PMActionItem } from "@/lib/pm-actions";
 import { buildProposalPdf } from "@/lib/proposal-pdf";
@@ -144,6 +145,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [opportunityPersistenceStatus, setOpportunityPersistenceStatus] = useState("Checking Supabase...");
   const [estimatePersistenceStatus, setEstimatePersistenceStatus] = useState("Workbook snapshots save after sign-in.");
+  const [jobPersistenceStatus, setJobPersistenceStatus] = useState("Jobs load on sign-in.");
   const [loginEmail, setLoginEmail] = useState("escalador.evan@gmail.com");
   const [sessionEmail, setSessionEmail] = useState("");
   const [authStatus, setAuthStatus] = useState("Sign in to save live data.");
@@ -225,9 +227,32 @@ export default function Home() {
     }
   }
 
+  async function loadPersistedJobs(isMounted = true) {
+    try {
+      const persisted = await listJobs();
+      if (!isMounted) return;
+
+      if (persisted.length) {
+        setJobs((current) => {
+          const byNumber = new Map(persisted.map((job) => [job.jobNumber, job]));
+          const localOnly = current.filter((job) => !byNumber.has(job.jobNumber));
+          return [...persisted, ...localOnly];
+        });
+        setJobPersistenceStatus(`Loaded ${persisted.length} jobs from Supabase.`);
+        return;
+      }
+
+      setJobPersistenceStatus("Supabase connected. Using sample jobs until real rows are added.");
+    } catch {
+      if (!isMounted) return;
+      setJobPersistenceStatus("Local sample mode. Sign in before Supabase can read and save jobs.");
+    }
+  }
+
   useEffect(() => {
     let isMounted = true;
     void loadPersistedOpportunities(isMounted);
+    void loadPersistedJobs(isMounted);
 
     return () => {
       isMounted = false;
@@ -246,14 +271,20 @@ export default function Home() {
       const email = data.session?.user.email ?? "";
       setSessionEmail(email);
       setAuthStatus(email ? `Signed in as ${email}.` : "Sign in to save live data.");
-      if (email) void loadPersistedOpportunities();
+      if (email) {
+        void loadPersistedOpportunities();
+        void loadPersistedJobs();
+      }
     });
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       const email = session?.user.email ?? "";
       setSessionEmail(email);
       setAuthStatus(email ? `Signed in as ${email}.` : "Sign in to save live data.");
-      if (email) void loadPersistedOpportunities();
+      if (email) {
+        void loadPersistedOpportunities();
+        void loadPersistedJobs();
+      }
     });
 
     return () => {
@@ -358,6 +389,34 @@ export default function Home() {
       setOpportunityPersistenceStatus("File attached locally only. Supabase Storage is waiting on sign-in or persisted owner id.");
       return null;
     }
+  }
+
+  async function persistJobHeader(job: Job, forceCreate = false) {
+    if (!isUuid(job.id) && !forceCreate) return;
+    const localId = job.id;
+    setJobPersistenceStatus(`Saving job ${job.jobNumber}...`);
+
+    try {
+      const saved = await saveJobHeader(job);
+      setJobs((current) =>
+        current.map((candidate) =>
+          candidate.id === localId || candidate.jobNumber === saved.jobNumber ? saved : candidate
+        )
+      );
+      setSelectedJobId((current) => (current === localId ? saved.id : current));
+      setDetailJobId((current) => (current === localId ? saved.id : current));
+      setJobPersistenceStatus(`Job ${saved.jobNumber} saved to Supabase.`);
+    } catch {
+      setJobPersistenceStatus(`Job save failed. ${job.jobNumber} is local only.`);
+    }
+  }
+
+  function updateJobHeader(jobId: string, updates: Partial<Job>) {
+    const job = jobs.find((candidate) => candidate.id === jobId);
+    if (!job) return;
+    const updated = { ...job, ...updates };
+    setJobs((current) => current.map((candidate) => (candidate.id === jobId ? updated : candidate)));
+    void persistJobHeader(updated);
   }
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
@@ -817,6 +876,7 @@ export default function Home() {
     };
 
     setJobs((current) => [newJob, ...current]);
+    void persistJobHeader(newJob, true);
   }
 
   function goToView(nextView: View) {
@@ -959,12 +1019,14 @@ export default function Home() {
             onEditPurchaseOrder={editPurchaseOrder}
             onEditSubmittal={editJobSubmittal}
             onPurchaseOrderFile={attachPurchaseOrderFile}
+            onUpdateJob={updateJobHeader}
             onUpdatePmNoteStatus={updatePmNoteStatus}
             pmNotes={pmNotes}
             onOpenJob={setDetailJobId}
             onSubmittalChecklist={updateSubmittalChecklist}
             onSubmittalAction={updateSubmittal}
             onSubmittalFile={attachSubmittalFile}
+            saveStatus={jobPersistenceStatus}
           />
         )}
         {view === "calendar" && <CalendarCapacityView jobs={jobs} onOpenJob={setDetailJobId} />}
@@ -984,6 +1046,7 @@ export default function Home() {
           onEditSubmittal={editJobSubmittal}
           onPurchaseOrderFile={attachPurchaseOrderFile}
           onStartChangeOrder={startChangeOrderFromJob}
+          onUpdateJob={updateJobHeader}
           onUpdatePmNoteStatus={updatePmNoteStatus}
           pmNotes={pmNotes}
           onSubmittalChecklist={updateSubmittalChecklist}
@@ -1050,6 +1113,7 @@ export default function Home() {
 
             setJobs((current) => [newJob, ...current]);
             void persistOpportunity(awardedOpportunity);
+            void persistJobHeader(newJob, true);
             setSelectedJobId(newJob.id);
             setSelectedOpportunityId(null);
             goToView("jobs");
@@ -1657,12 +1721,14 @@ function JobsView({
   onEditPurchaseOrder,
   onEditSubmittal,
   onPurchaseOrderFile,
+  onUpdateJob,
   onUpdatePmNoteStatus,
   pmNotes,
   onOpenJob,
   onSubmittalChecklist,
   onSubmittalAction,
-  onSubmittalFile
+  onSubmittalFile,
+  saveStatus
 }: {
   jobs: Job[];
   onApproveCos: (id: string) => void;
@@ -1672,12 +1738,14 @@ function JobsView({
   onEditPurchaseOrder: (jobId: string, poId: string, updates: Partial<PurchaseOrder>) => void;
   onEditSubmittal: (jobId: string, submittalId: string, updates: UpdateSubmittalInput) => void;
   onPurchaseOrderFile: (jobId: string, poId: string, file: File | undefined) => void;
+  onUpdateJob: (jobId: string, updates: Partial<Job>) => void;
   onUpdatePmNoteStatus: (noteId: string, status: PMNote["status"]) => void;
   pmNotes: PMNote[];
   onOpenJob: (jobId: string) => void;
   onSubmittalChecklist: (jobId: string, submittalId: string, updates: Parameters<typeof setSubmittalChecklistState>[1]) => void;
   onSubmittalAction: (jobId: string, submittalId: string, action: SubmittalAction) => void;
   onSubmittalFile: (jobId: string, submittalId: string, file: File | undefined) => void;
+  saveStatus: string;
 }) {
   const [statusFilter, setStatusFilter] = useState("Open");
   const backlogSummary = summarizeBacklog(jobs);
@@ -1700,6 +1768,7 @@ function JobsView({
           <div>
             <h2>Jobs</h2>
             <p>Operational backlog, contract value, install timing, and CO exposure.</p>
+            <small className="persistence-note">{saveStatus}</small>
           </div>
           <BriefcaseBusiness size={28} />
         </div>
@@ -1921,6 +1990,7 @@ function JobDetailModal({
   onEditSubmittal,
   onPurchaseOrderFile,
   onStartChangeOrder,
+  onUpdateJob,
   onUpdatePmNoteStatus,
   pmNotes,
   onSubmittalChecklist,
@@ -1937,6 +2007,7 @@ function JobDetailModal({
   onEditSubmittal: (jobId: string, submittalId: string, updates: UpdateSubmittalInput) => void;
   onPurchaseOrderFile: (jobId: string, poId: string, file: File | undefined) => void;
   onStartChangeOrder: (jobId: string) => void;
+  onUpdateJob: (jobId: string, updates: Partial<Job>) => void;
   onUpdatePmNoteStatus: (noteId: string, status: PMNote["status"]) => void;
   pmNotes: PMNote[];
   onSubmittalChecklist: (jobId: string, submittalId: string, updates: Parameters<typeof setSubmittalChecklistState>[1]) => void;
@@ -2114,6 +2185,51 @@ function JobDetailModal({
               })}
             </div>
             <p>{job.notes}</p>
+            <details className="job-header-edit-panel">
+              <summary>Edit job header</summary>
+              <div className="job-header-edit-grid">
+                <label>
+                  <span>Backlog status</span>
+                  <select onChange={(e) => onUpdateJob(job.id, { backlogStatus: e.target.value as Job["backlogStatus"] })} value={job.backlogStatus}>
+                    {["Awarded / Waiting", "Submittals", "Release Pending", "In Fabrication", "Ready to Install", "Installing", "Installed", "Closeout", "Complete", "Void"].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Fab status</span>
+                  <select onChange={(e) => onUpdateJob(job.id, { fabStatus: e.target.value as Job["fabStatus"] })} value={job.fabStatus}>
+                    {["Not Started", "In Fabrication", "Ready", "Complete"].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Install status</span>
+                  <select onChange={(e) => onUpdateJob(job.id, { installStatus: e.target.value as Job["installStatus"] })} value={job.installStatus}>
+                    {["Ready", "Active", "Completed", "Installed", "Void"].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Invoice status</span>
+                  <select onChange={(e) => onUpdateJob(job.id, { invoiceStatus: e.target.value as Job["invoiceStatus"] })} value={job.invoiceStatus}>
+                    {["Not Billed", "Partial", "Billed", "Paid"].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Install start</span>
+                  <input onBlur={(e) => onUpdateJob(job.id, { installStart: e.target.value })} defaultValue={job.installStart} type="date" />
+                </label>
+                <label>
+                  <span>Install end</span>
+                  <input onBlur={(e) => onUpdateJob(job.id, { installEnd: e.target.value })} defaultValue={job.installEnd} type="date" />
+                </label>
+                <label>
+                  <span>Crew size</span>
+                  <input min="0" onBlur={(e) => onUpdateJob(job.id, { crewSize: Number(e.target.value) || 0 })} defaultValue={job.crewSize} type="number" />
+                </label>
+                <label>
+                  <span>PM</span>
+                  <input onBlur={(e) => onUpdateJob(job.id, { pm: e.target.value })} defaultValue={job.pm} type="text" />
+                </label>
+              </div>
+            </details>
           </section>
           <nav className="job-detail-nav" aria-label="Job detail tabs">
             {jobDetailTabs.map((tab) => (
