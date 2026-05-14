@@ -1,4 +1,5 @@
 import type { Opportunity, OpportunityStatus, WinLoss } from "../types";
+import { OPPORTUNITY_STATUSES } from "./status-constants";
 
 type MasterRow = Record<string, unknown>;
 
@@ -14,20 +15,7 @@ const boolish = (value: unknown) => ["yes", "y", "true", "received"].includes(te
 
 const status = (value: unknown): OpportunityStatus => {
   const raw = text(value);
-  const allowed: OpportunityStatus[] = [
-    "Lead / ITB",
-    "Pricing",
-    "Review / Send",
-    "New",
-    "Estimating",
-    "Submitted",
-    "Follow Up",
-    "Cold",
-    "Won",
-    "Lost",
-    "Archived"
-  ];
-  const found = allowed.find((candidate) => candidate.toLowerCase() === raw.toLowerCase());
+  const found = OPPORTUNITY_STATUSES.find((candidate) => candidate.toLowerCase() === raw.toLowerCase());
   return found ?? "New";
 };
 

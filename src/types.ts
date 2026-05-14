@@ -1,18 +1,15 @@
-export type OpportunityStatus =
-  | "Lead / ITB"
-  | "Pricing"
-  | "Review / Send"
-  | "New"
-  | "Estimating"
-  | "Submitted"
-  | "Follow Up"
-  | "Cold"
-  | "Won"
-  | "Lost"
-  | "Archived";
+import type {
+  BacklogStatus,
+  ChangeOrderStatus,
+  OpportunityStatus,
+  PurchaseOrderStatus,
+  SubmittalStatus,
+  WinLoss,
+  WorkType
+} from "./lib/status-constants";
 
-export type WinLoss = "" | "Won" | "Lost";
-export type WorkType = "Bid / ITB" | "Negotiated" | "Service";
+export type { BacklogStatus, ChangeOrderStatus, OpportunityStatus, PurchaseOrderStatus, SubmittalStatus, WinLoss, WorkType };
+
 export type EstimateDocumentType = "Proposal" | "Quote" | "Budget" | "Change Order" | "Service Quote" | "Revision";
 
 export type Opportunity = {
@@ -49,6 +46,8 @@ export type EstimateItem = {
   name?: string;
   description?: string;
   drawingRef?: string;
+  category?: string;
+  materialType?: string;
   qty: number;
   unit?: string;
   unitCost: number;
@@ -137,8 +136,6 @@ export type EstimateTotals = {
   bidTotal: number;
 };
 
-export type ChangeOrderStatus = "submitted" | "approved" | "rejected";
-export type PurchaseOrderStatus = "Draft" | "Issued" | "Acknowledged" | "In Progress" | "Complete" | "Closed" | "Void";
 export type PurchaseOrderScope =
   | "Stone / Quartz"
   | "Cambria"
@@ -147,28 +144,6 @@ export type PurchaseOrderScope =
   | "Metal"
   | "Install Labor"
   | "Other";
-
-export type SubmittalStatus =
-  | "Not Started"
-  | "In Progress"
-  | "Submitted"
-  | "Approved"
-  | "Approved as Noted"
-  | "Rejected / Revise and Resubmit"
-  | "Resubmitted"
-  | "Void / Not Required";
-
-export type BacklogStatus =
-  | "Awarded / Waiting"
-  | "Submittals"
-  | "Release Pending"
-  | "In Fabrication"
-  | "Ready to Install"
-  | "Installing"
-  | "Installed"
-  | "Closeout"
-  | "Complete"
-  | "Void";
 
 export type ChangeOrder = {
   id: string;

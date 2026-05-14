@@ -1,6 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "./change-order-workflow";
 import { calculateEstimateTotals } from "./estimate-math";
+import { mapEstimateFromRow, mapEstimateSnapshotToInsert, mapEstimateToUpsert } from "./estimate-repository";
+import { buildProjectFileStoragePath, mapProjectFileFromRow, mapProjectFileToInsert } from "./file-repository";
 import {
   currentContractValue,
   jobCostSummary,
@@ -10,7 +14,9 @@ import {
   summarizeServiceWork
 } from "./job-financials";
 import { jobDetailTabs } from "./job-detail-tabs";
+import { mapOpportunityFromRow, mapOpportunityToUpsert } from "./opportunity-repository";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "./opportunity-import";
+import { CHANGE_ORDER_STATUSES, OPPORTUNITY_STATUSES } from "./status-constants";
 import { filterOpportunitiesForView, suggestJobNumber } from "./opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote } from "./pm-actions";
 import { addMonthsToCalendarMonth, buildCapacityWeeks, buildInstallCalendarMonth } from "./schedule-capacity";
@@ -24,6 +30,35 @@ import {
 } from "./submittals";
 import { estimateItemsToClipboardText, parseClipboardLineItems } from "./workbook-clipboard";
 import { cloneArea, cloneItems, cloneSection } from "./workbook-copy";
+
+const productionSchema = () => readFileSync(join(process.cwd(), "supabase", "rebuild-production-schema.sql"), "utf8");
+
+function sqlCheckValues(sql: string, tableName: string, columnName: string): string[] {
+  const tableStart = sql.indexOf(`create table public.${tableName} (`);
+  expect(tableStart).toBeGreaterThanOrEqual(0);
+
+  const tableEnd = sql.indexOf("\n);", tableStart);
+  expect(tableEnd).toBeGreaterThan(tableStart);
+
+  const tableSql = sql.slice(tableStart, tableEnd);
+  const columnStart = tableSql.indexOf(`${columnName} text`);
+  expect(columnStart).toBeGreaterThanOrEqual(0);
+
+  const checkMatch = tableSql.slice(columnStart).match(/check \([^)]* in \(([^)]*)\)\)/);
+  expect(checkMatch).not.toBeNull();
+
+  return [...checkMatch![1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
+}
+
+describe("status contract constants", () => {
+  it("keeps opportunity statuses aligned with the production SQL check", () => {
+    expect(OPPORTUNITY_STATUSES).toEqual(sqlCheckValues(productionSchema(), "opportunities", "status"));
+  });
+
+  it("keeps change order statuses aligned with the production SQL check", () => {
+    expect(CHANGE_ORDER_STATUSES).toEqual(sqlCheckValues(productionSchema(), "change_orders", "status"));
+  });
+});
 
 describe("estimate math", () => {
   it("calculates area, material, burden, and bid totals from FS Estimator V2 structure", () => {
@@ -100,10 +135,34 @@ describe("job financials", () => {
 
     expect(currentContractValue(10000, changeOrders)).toBe(10750);
     expect(summarizeChangeOrders(changeOrders)).toEqual({
+      draft: 0,
+      priced: 0,
+      sent: 0,
       approved: 750,
       submitted: 500,
+      pending: 0,
       rejected: 750,
+      void: 0,
       count: 4
+    });
+  });
+
+  it("keeps database change order statuses in explicit financial buckets", () => {
+    expect(
+      summarizeChangeOrders([
+        { amount: 100, status: "draft" as const },
+        { amount: 200, status: "priced" as const },
+        { amount: 300, status: "sent" as const },
+        { amount: 400, status: "pending" as const },
+        { amount: 500, status: "void" as const }
+      ])
+    ).toMatchObject({
+      draft: 100,
+      priced: 200,
+      sent: 300,
+      pending: 400,
+      void: 500,
+      count: 5
     });
   });
 
@@ -229,6 +288,312 @@ describe("job financials", () => {
       projectedCost: 22000,
       projectedMarginPct: 80
     });
+  });
+
+  it("projects job cost from actual cost plus remaining open commitments", () => {
+    const summary = jobCostSummary(
+      {
+        baseContract: 100000,
+        finalCost: 25000,
+        changeOrders: [],
+        purchaseOrders: [
+          {
+            committedAmount: 20000,
+            invoicedAmount: 5000,
+            status: "Issued" as const,
+            scope: "Stone / Quartz" as const
+          }
+        ]
+      },
+      "2026-05-09"
+    );
+
+    expect(summary).toMatchObject({
+      revenue: 100000,
+      finalCost: 25000,
+      committedCost: 20000,
+      projectedCost: 40000,
+      projectedMarginPct: 60
+    });
+  });
+});
+
+describe("opportunity repository mapping", () => {
+  it("maps production Supabase opportunity rows into UI opportunities", () => {
+    const opportunity = mapOpportunityFromRow({
+      id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      opportunity_number: "Q-26-014",
+      work_type: "Negotiated",
+      month: "May",
+      client: "Andersen",
+      project_name: "Northwest Clinic",
+      bid_due_date: "2026-06-01",
+      drawing_stage: "DD",
+      bid_type: "Budget",
+      sent_date: null,
+      submission_method: "Email",
+      status: "Pricing",
+      win_loss: "",
+      job_type: "Medical",
+      estimated_value: 145000,
+      drawing_link: "drawings-url",
+      specs_link: null,
+      schedule_link: "schedule-url",
+      notes: "Follow up with Manny",
+      bid_feedback: null,
+      ntp_received: false,
+      initial_contract_value: null,
+      final_cost: null
+    });
+
+    expect(opportunity).toMatchObject({
+      id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      jobId: "Q-26-014",
+      workType: "Negotiated",
+      client: "Andersen",
+      projectName: "Northwest Clinic",
+      bidDueDate: "2026-06-01",
+      sentDate: "",
+      links: { drawings: "drawings-url", specs: "", schedule: "schedule-url" },
+      bidFeedback: "",
+      initialContractValue: null
+    });
+  });
+
+  it("maps UI opportunities into production Supabase upsert payloads", () => {
+    const payload = mapOpportunityToUpsert({
+      id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      jobId: "Q-26-014",
+      workType: "Negotiated",
+      month: "May",
+      client: "Andersen",
+      projectName: "Northwest Clinic",
+      bidDueDate: "2026-06-01",
+      drawingStage: "DD",
+      bidType: "Budget",
+      sentDate: "",
+      submissionMethod: "Email",
+      status: "Pricing",
+      winLoss: "",
+      jobType: "Medical",
+      estimatedValue: 145000,
+      links: { drawings: "drawings-url", specs: "", schedule: "schedule-url" },
+      notes: "Follow up with Manny",
+      bidFeedback: "",
+      ntpReceived: false,
+      initialContractValue: null,
+      finalCost: null,
+      files: []
+    });
+
+    expect(payload).toMatchObject({
+      id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      opportunity_number: "Q-26-014",
+      work_type: "Negotiated",
+      project_name: "Northwest Clinic",
+      bid_due_date: "2026-06-01",
+      sent_date: null,
+      specs_link: null,
+      estimated_value: 145000
+    });
+  });
+});
+
+describe("estimate repository mapping", () => {
+  const estimate = {
+    id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+    opportunityId: "1b6f59f2-c04c-4b10-bb2b-35a53d61516c",
+    jobId: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+    documentType: "Proposal" as const,
+    proposalNumber: "Q-26-014",
+    revision: "",
+    projectName: "Northwest Clinic",
+    projectLocation: "Phoenix, AZ",
+    client: "Andersen",
+    clientAddress: "",
+    clientContact: "Manny",
+    architect: "SmithGroup",
+    estimator: "Evan",
+    bidDate: "2026-06-01",
+    dueDate: "",
+    deliveryDate: "TBD",
+    shipVia: "",
+    poNumber: "",
+    projectId: "Q-26-014",
+    bidDocuments: "IFC drawings",
+    drawingsDated: "",
+    addenda: "",
+    scopeSummary: "Base casework",
+    validDays: 30,
+    paymentTerms: "Net 30",
+    leadTime: "",
+    pricingMode: "byarea" as const,
+    ohPct: 12,
+    delPct: 3,
+    insPct: 8,
+    areas: [{ id: "area-1", name: "Base Bid", qty: 1, sections: [{ id: "sec-1", name: "Lab", items: [{ id: "item-1", name: "Base cabinets", qty: 10, unitCost: 50 }] }] }],
+    subItems: [],
+    alternates: [],
+    exclusions: ["Electrical by others."],
+    clarifications: ["Based on IFC drawings."]
+  };
+
+  it("maps UI estimates into production Supabase header upserts", () => {
+    expect(mapEstimateToUpsert(estimate)).toMatchObject({
+      id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      opportunity_id: "1b6f59f2-c04c-4b10-bb2b-35a53d61516c",
+      job_id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      document_type: "Proposal",
+      proposal_number: "Q-26-014",
+      revision: null,
+      project_name: "Northwest Clinic",
+      client_address: null,
+      bid_date: "2026-06-01",
+      due_date: null,
+      project_identifier: "Q-26-014",
+      overhead_pct: 12,
+      delivery_pct: 3,
+      install_pct: 8,
+      exclusions: ["Electrical by others."],
+      clarifications: ["Based on IFC drawings."]
+    });
+  });
+
+  it("maps production Supabase estimate rows back into sample-mode workbook estimates", () => {
+    const mapped = mapEstimateFromRow({
+      id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      opportunity_id: null,
+      job_id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      document_type: "Budget",
+      proposal_number: null,
+      revision: null,
+      project_name: "Northwest Clinic",
+      project_location: null,
+      client: "Andersen",
+      client_address: null,
+      client_contact: "Manny",
+      architect: null,
+      estimator: null,
+      bid_date: null,
+      due_date: "2026-06-03",
+      delivery_date: null,
+      ship_via: null,
+      po_number: null,
+      project_identifier: "Q-26-014",
+      bid_documents: null,
+      drawings_dated: null,
+      addenda: null,
+      scope_summary: null,
+      valid_days: null,
+      payment_terms: null,
+      lead_time: null,
+      pricing_mode: "lumpsum",
+      overhead_pct: "10.5",
+      delivery_pct: 2,
+      install_pct: null,
+      exclusions: ["Electrical by others."],
+      clarifications: null,
+      terms: {},
+      change_order_context: null
+    });
+
+    expect(mapped).toMatchObject({
+      id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      opportunityId: undefined,
+      jobId: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      documentType: "Budget",
+      proposalNumber: "",
+      bidDate: "",
+      dueDate: "2026-06-03",
+      projectId: "Q-26-014",
+      pricingMode: "lumpsum",
+      ohPct: 10.5,
+      delPct: 2,
+      insPct: 0,
+      areas: [],
+      exclusions: ["Electrical by others."],
+      clarifications: []
+    });
+  });
+
+  it("serializes estimate snapshots with stable owner links and totals", () => {
+    expect(mapEstimateSnapshotToInsert(estimate)).toMatchObject({
+      estimate_id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      opportunity_id: "1b6f59f2-c04c-4b10-bb2b-35a53d61516c",
+      job_id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      material_total: 500,
+      bid_total: 621.6,
+      snapshot: estimate
+    });
+  });
+});
+
+describe("file repository mapping", () => {
+  it("maps project file rows into UI file metadata without losing owner links", () => {
+    expect(
+      mapProjectFileFromRow({
+        id: "file-1",
+        owner_type: "estimate",
+        owner_id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+        slot: "proposal",
+        name: "Proposal.pdf",
+        storage_bucket: "project-files",
+        storage_path: "estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/proposal/Proposal.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 15000,
+        uploaded_at: "2026-06-01T12:00:00Z"
+      })
+    ).toEqual({
+      id: "file-1",
+      ownerType: "estimate",
+      ownerId: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      slot: "proposal",
+      name: "Proposal.pdf",
+      url: "project-files/estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/proposal/Proposal.pdf",
+      uploadedAt: "2026-06-01T12:00:00Z"
+    });
+  });
+
+  it("maps UI file metadata into database inserts and generated storage paths", () => {
+    const storagePath = buildProjectFileStoragePath({
+      ownerType: "estimate",
+      ownerId: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      slot: "signed proposal",
+      fileName: "Proposal Rev 1.pdf"
+    });
+
+    expect(storagePath).toBe("estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/signed-proposal/proposal-rev-1.pdf");
+    expect(
+      mapProjectFileToInsert({
+        ownerType: "estimate",
+        ownerId: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+        slot: "signed proposal",
+        name: "Proposal Rev 1.pdf",
+        storagePath,
+        mimeType: "application/pdf",
+        sizeBytes: 15000
+      })
+    ).toMatchObject({
+      owner_type: "estimate",
+      owner_id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      slot: "signed proposal",
+      name: "Proposal Rev 1.pdf",
+      storage_bucket: "project-files",
+      storage_path: "estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/signed-proposal/proposal-rev-1.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 15000
+    });
+  });
+
+  it("rejects database file metadata inserts for local sample owner ids", () => {
+    expect(() =>
+      mapProjectFileToInsert({
+        ownerType: "job",
+        ownerId: "job-g060",
+        slot: "contract",
+        name: "Contract.pdf"
+      })
+    ).toThrow("persisted UUID owner id");
   });
 });
 

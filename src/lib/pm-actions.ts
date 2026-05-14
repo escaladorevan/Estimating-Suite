@@ -1,4 +1,5 @@
 import type { PMNote, PMNotePriority } from "@/types";
+import { BACKLOG_COMPLETE_STATUSES, PURCHASE_ORDER_INACTIVE_STATUSES, PURCHASE_ORDER_STATUSES, SUBMITTAL_READY_STATUSES } from "./status-constants";
 
 type ActionStatus = "Open" | "Waiting" | "Done";
 type ActionKind = "manual" | "submittal" | "purchase_order" | "change_order" | "file";
@@ -88,7 +89,7 @@ export function buildPmActionItems({
 
 function buildSubmittalActions(job: JobLike, today: string): PMActionItem[] {
   return (job.submittals ?? [])
-    .filter((item) => Boolean(item.releaseBlocker) && !["Approved", "Approved as Noted", "Void / Not Required"].includes(item.status))
+    .filter((item) => Boolean(item.releaseBlocker) && !SUBMITTAL_READY_STATUSES.includes(item.status as never))
     .filter((item) => item.dueDate && isPast(item.dueDate, today))
     .map((item) => ({
       id: `submittal-${job.id}-${item.name}`,
@@ -106,7 +107,7 @@ function buildSubmittalActions(job: JobLike, today: string): PMActionItem[] {
 
 function buildPurchaseOrderActions(job: JobLike, today: string): PMActionItem[] {
   return (job.purchaseOrders ?? []).flatMap((po) => {
-    if (["Issued", "Acknowledged", "In Progress", "Complete", "Closed", "Void"].includes(po.status)) {
+    if (PURCHASE_ORDER_STATUSES.filter((status) => status !== "Draft").includes(po.status as never)) {
       return promisedDateAction(job, po, today);
     }
 
@@ -132,7 +133,7 @@ function promisedDateAction(
   po: NonNullable<JobLike["purchaseOrders"]>[number],
   today: string
 ): PMActionItem[] {
-  if (!po.promisedDate || !isPast(po.promisedDate, today) || ["Complete", "Closed", "Void"].includes(po.status)) return [];
+  if (!po.promisedDate || !isPast(po.promisedDate, today) || PURCHASE_ORDER_INACTIVE_STATUSES.includes(po.status as never)) return [];
 
   return [
     {
@@ -172,7 +173,7 @@ function buildChangeOrderActions(job: JobLike): PMActionItem[] {
 
 function buildFileActions(job: JobLike): PMActionItem[] {
   const hasContract = (job.files ?? []).some((file) => file.slot === "contract");
-  if (hasContract || ["Complete", "Installed", "Void"].includes(job.backlogStatus ?? "")) return [];
+  if (hasContract || BACKLOG_COMPLETE_STATUSES.includes((job.backlogStatus ?? "") as never)) return [];
 
   return [
     {

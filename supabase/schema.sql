@@ -276,3 +276,5 @@ ALTER TABLE bids ADD COLUMN IF NOT EXISTS fab_note       jsonb DEFAULT '[]';
 -- The shell app writes this column via postMessage; V2 reads it on bid open.
 -- ─────────────────────────────────────────────────────────────────────────────
 ALTER TABLE bids ADD COLUMN IF NOT EXISTS estimate_data jsonb;
+-- DEPRECATED: legacy prototype schema kept only for reference.
+-- Do not run this file. The canonical reset schema is supabase/rebuild-production-schema.sql.

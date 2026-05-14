@@ -1,4 +1,10 @@
 import type { ChangeOrder, ChangeOrderStatus, PurchaseOrder, PurchaseOrderScope } from "../types";
+import {
+  BACKLOG_COMPLETE_STATUSES,
+  BACKLOG_NOT_STARTED_STATUSES,
+  CHANGE_ORDER_STATUSES,
+  PURCHASE_ORDER_CLOSED_STATUSES
+} from "./status-constants";
 
 export type ChangeOrderSummary = Record<ChangeOrderStatus, number> & {
   count: number;
@@ -61,13 +67,15 @@ export type JobCostSummary = {
 };
 
 export function summarizeChangeOrders(changeOrders: CoLike[]): ChangeOrderSummary {
+  const initialSummary = Object.fromEntries(CHANGE_ORDER_STATUSES.map((status) => [status, 0])) as Record<ChangeOrderStatus, number>;
+
   return changeOrders.reduce<ChangeOrderSummary>(
     (summary, changeOrder) => {
       summary[changeOrder.status] += changeOrder.amount;
       summary.count += 1;
       return summary;
     },
-    { approved: 0, submitted: 0, rejected: 0, count: 0 }
+    { ...initialSummary, count: 0 }
   );
 }
 
@@ -101,7 +109,7 @@ export function summarizePurchaseOrders(purchaseOrders: PurchaseOrderLike[] = []
       summary.openCommitment += Math.max(committed - invoiced, 0);
       summary.byScope[po.scope] = (summary.byScope[po.scope] ?? 0) + committed;
 
-      if (today && po.promisedDate && po.promisedDate < today && !["Complete", "Closed"].includes(po.status)) {
+      if (today && po.promisedDate && po.promisedDate < today && !(PURCHASE_ORDER_CLOSED_STATUSES as readonly string[]).includes(po.status)) {
         summary.lateCount += 1;
       }
 
@@ -115,7 +123,7 @@ export function jobCostSummary(job: CostJobLike, today?: string): JobCostSummary
   const revenue = currentContractValue(job.baseContract, job.changeOrders);
   const poSummary = summarizePurchaseOrders(job.purchaseOrders ?? [], today);
   const finalCost = job.finalCost ?? null;
-  const projectedCost = Math.max(finalCost ?? 0, poSummary.committed);
+  const projectedCost = finalCost === null ? poSummary.committed : finalCost + poSummary.openCommitment;
 
   return {
     revenue,
@@ -197,9 +205,9 @@ export function quarterLabel(value?: string) {
 }
 
 function isCompleteStatus(status: string) {
-  return ["Installed", "Complete", "Void"].includes(status);
+  return (BACKLOG_COMPLETE_STATUSES as readonly string[]).includes(status);
 }
 
 function isNotStartedStatus(status: string) {
-  return ["Awarded / Waiting", "Submittals", "Release Pending"].includes(status);
+  return (BACKLOG_NOT_STARTED_STATUSES as readonly string[]).includes(status);
 }

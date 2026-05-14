@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type { ChangeEvent, ElementType, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase-client";
 import { BidWorkbook } from "@/components/BidWorkbook";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "@/lib/change-order-workflow";
 import { calculateEstimateTotals } from "@/lib/estimate-math";
@@ -35,6 +36,7 @@ import {
 } from "@/lib/job-financials";
 import { fileSlots, estimates as seedEstimates, jobs as seedJobs, opportunities as seedOpportunities } from "@/lib/sample-data";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "@/lib/opportunity-import";
+import { listOpportunities, saveOpportunity } from "@/lib/opportunity-repository";
 import { filterOpportunitiesForView, suggestJobNumber, type RegisterView } from "@/lib/opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote, type PMActionItem } from "@/lib/pm-actions";
 import { buildProposalPdf } from "@/lib/proposal-pdf";
@@ -138,6 +140,10 @@ export default function Home() {
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
   const [mainNavCollapsed, setMainNavCollapsed] = useState(false);
   const [query, setQuery] = useState("");
+  const [opportunityPersistenceStatus, setOpportunityPersistenceStatus] = useState("Checking Supabase...");
+  const [loginEmail, setLoginEmail] = useState("escalador.evan@gmail.com");
+  const [sessionEmail, setSessionEmail] = useState("");
+  const [authStatus, setAuthStatus] = useState("Sign in to save live data.");
   const [pmNotes, setPmNotes] = useState<PMNote[]>([
     {
       id: "note-manny",
@@ -198,6 +204,61 @@ export default function Home() {
     };
   }, [jobs, opportunities]);
 
+  async function loadPersistedOpportunities(isMounted = true) {
+    try {
+      const persisted = await listOpportunities();
+      if (!isMounted) return;
+
+      if (persisted.length) {
+        setOpportunities(persisted);
+        setOpportunityPersistenceStatus(`Loaded ${persisted.length} opportunities from Supabase.`);
+        return;
+      }
+
+      setOpportunityPersistenceStatus("Supabase is connected. Using sample opportunities until real rows are added.");
+    } catch {
+      if (!isMounted) return;
+      setOpportunityPersistenceStatus("Local sample mode. Sign in before Supabase can read and save live records.");
+    }
+  }
+
+  useEffect(() => {
+    let isMounted = true;
+    void loadPersistedOpportunities(isMounted);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthStatus("Supabase env is not configured.");
+      return;
+    }
+
+    let isMounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) return;
+      const email = data.session?.user.email ?? "";
+      setSessionEmail(email);
+      setAuthStatus(email ? `Signed in as ${email}.` : "Sign in to save live data.");
+      if (email) void loadPersistedOpportunities();
+    });
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const email = session?.user.email ?? "";
+      setSessionEmail(email);
+      setAuthStatus(email ? `Signed in as ${email}.` : "Sign in to save live data.");
+      if (email) void loadPersistedOpportunities();
+    });
+
+    return () => {
+      isMounted = false;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
   useEffect(() => {
     function syncViewFromHash() {
       const hash = window.location.hash.replace("#", "") as View;
@@ -211,6 +272,54 @@ export default function Home() {
     return () => window.removeEventListener("hashchange", syncViewFromHash);
   }, []);
 
+  async function persistOpportunity(next: Opportunity) {
+    const localId = next.id;
+    setOpportunities((current) =>
+      current.map((opportunity) => (opportunity.id === localId ? next : opportunity))
+    );
+    setOpportunityPersistenceStatus("Saving opportunity...");
+
+    try {
+      const saved = await saveOpportunity(next);
+      setOpportunities((current) =>
+        current.map((opportunity) =>
+          opportunity.id === localId || opportunity.jobId === saved.jobId ? saved : opportunity
+        )
+      );
+      setSelectedOpportunityId((current) => (current === localId ? saved.id : current));
+      setOpportunityPersistenceStatus(`Saved ${saved.jobId || saved.projectName} to Supabase.`);
+      return saved;
+    } catch {
+      setOpportunityPersistenceStatus("Saved locally only. Supabase write is waiting on auth/session wiring.");
+      return next;
+    }
+  }
+
+  async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) {
+      setAuthStatus("Supabase env is not configured.");
+      return;
+    }
+
+    setAuthStatus("Sending sign-in link...");
+    const { error } = await supabase.auth.signInWithOtp({
+      email: loginEmail,
+      options: {
+        emailRedirectTo: window.location.origin
+      }
+    });
+
+    setAuthStatus(error ? error.message : `Check ${loginEmail} for the sign-in link.`);
+  }
+
+  async function signOut() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setSessionEmail("");
+    setAuthStatus("Signed out. Local sample mode remains available.");
+  }
+
   async function importMasterWorkbook(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -222,6 +331,7 @@ export default function Home() {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[bidSheetName], { defval: "" });
     const mapped = rows.map(mapEstimatingMasterRow).filter((opportunity) => opportunity.jobId || opportunity.projectName);
     setOpportunities(mapped);
+    setOpportunityPersistenceStatus(`Imported ${mapped.length} opportunities locally. Bulk Supabase import comes after auth.`);
   }
 
   async function exportProposalPdf() {
@@ -718,12 +828,31 @@ export default function Home() {
             <h1>{nav.find((item) => item.id === view)?.label}</h1>
             <p>Manual-first Supabase-ready rebuild of the FS bid, estimate, proposal, and job workflow.</p>
           </div>
-          <label className="import-button">
-            <Upload size={16} />
-            Import Master V4
-            <input accept=".xlsx,.xls" onChange={importMasterWorkbook} type="file" />
-          </label>
+          <div className="topbar-actions">
+            {sessionEmail ? (
+              <div className="auth-box">
+                <span>{authStatus}</span>
+                <button className="ghost-button compact" onClick={signOut} type="button">Sign out</button>
+              </div>
+            ) : (
+              <form className="auth-box" onSubmit={sendMagicLink}>
+                <input
+                  aria-label="Email for Supabase sign-in"
+                  onChange={(event) => setLoginEmail(event.target.value)}
+                  type="email"
+                  value={loginEmail}
+                />
+                <button className="ghost-button compact" type="submit">Sign in</button>
+              </form>
+            )}
+            <label className="import-button">
+              <Upload size={16} />
+              Import Master V4
+              <input accept=".xlsx,.xls" onChange={importMasterWorkbook} type="file" />
+            </label>
+          </div>
         </header>
+        <div className="persistence-strip">{opportunityPersistenceStatus}</div>
 
         {view === "dashboard" && (
           <HomeDashboard
@@ -799,14 +928,17 @@ export default function Home() {
         <OpportunityModal
           opportunity={selectedOpportunity}
           onClose={() => setSelectedOpportunityId(null)}
-          onUpdate={(next) =>
-            setOpportunities((current) =>
-              current.map((opportunity) => (opportunity.id === next.id ? next : opportunity))
-            )
-          }
+          onUpdate={(next) => void persistOpportunity(next)}
           existingJobs={jobs}
           onConvertToJob={(opportunity, award) => {
             const contractValue = award.contractValue || opportunity.initialContractValue || opportunity.estimatedValue;
+            const awardedOpportunity: Opportunity = {
+              ...opportunity,
+              status: "Won",
+              winLoss: "Won",
+              ntpReceived: true,
+              initialContractValue: contractValue
+            };
             const newJob: Job = {
               id: `job-${opportunity.id}`,
               jobNumber: award.jobNumber,
@@ -849,13 +981,7 @@ export default function Home() {
             };
 
             setJobs((current) => [newJob, ...current]);
-            setOpportunities((current) =>
-              current.map((item) =>
-                item.id === opportunity.id
-                  ? { ...item, status: "Won", winLoss: "Won", ntpReceived: true, initialContractValue: contractValue }
-                  : item
-              )
-            );
+            void persistOpportunity(awardedOpportunity);
             setSelectedJobId(newJob.id);
             setSelectedOpportunityId(null);
             goToView("jobs");
