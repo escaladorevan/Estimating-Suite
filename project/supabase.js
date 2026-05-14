@@ -188,121 +188,228 @@ async function updateBidTerms(bidId, columnName, jsonbArray) {
     .eq('id', bidId);
 }
 
-// ── Area helpers (V2) ─────────────────────────────────────────────────────────
+// ── Estimate bridge ───────────────────────────────────────────────────────────
+// Areas/sections/items/alternates now belong to an estimate record, not a bid.
+// These helpers transparently find or create the estimate so calling views
+// can still pass bidId (opportunity id) without knowing about estimate_id.
+
+const _estimateIdCache = {};
+
+async function getEstimateIdForBid(bidId) {
+  if (_estimateIdCache[bidId]) return { id: _estimateIdCache[bidId], error: null };
+  const { data, error } = await window.sb.from('estimates')
+    .select('id')
+    .eq('opportunity_id', bidId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (data?.id) _estimateIdCache[bidId] = data.id;
+  return { id: data?.id || null, error };
+}
+
+async function getOrCreateEstimateForBid(bidId) {
+  const { id, error } = await getEstimateIdForBid(bidId);
+  if (error) return { id: null, error };
+  if (id) return { id, error: null };
+
+  const { data: opp, error: oppErr } = await window.sb.from('opportunities')
+    .select('project_name, client')
+    .eq('id', bidId)
+    .single();
+  if (oppErr) return { id: null, error: oppErr };
+
+  const { data: est, error: estErr } = await window.sb.from('estimates')
+    .insert({ opportunity_id: bidId, project_name: opp.project_name, client: opp.client })
+    .select('id')
+    .single();
+  if (estErr) return { id: null, error: estErr };
+  _estimateIdCache[bidId] = est.id;
+  return { id: est.id, error: null };
+}
+
+// ── Area helpers ──────────────────────────────────────────────────────────────
 
 async function getAreas(bidId) {
-  return window.sb.from('areas').select('*').eq('bid_id', bidId).order('sort_order');
+  const { id: estId, error } = await getOrCreateEstimateForBid(bidId);
+  if (error) return { data: null, error };
+  return window.sb.from('estimate_areas').select('*').eq('estimate_id', estId).order('sort_order');
 }
 
 async function addArea(bidId, { name = 'New Area', qty = 1, sort_order = 0 } = {}) {
-  return window.sb.from('areas')
-    .insert({ bid_id: bidId, name, qty, sort_order })
+  const { id: estId, error } = await getOrCreateEstimateForBid(bidId);
+  if (error) return { data: null, error };
+  return window.sb.from('estimate_areas')
+    .insert({ estimate_id: estId, name, qty, sort_order })
     .select().single();
 }
 
 async function updateArea(areaId, fields) {
-  return window.sb.from('areas').update(fields).eq('id', areaId);
+  return window.sb.from('estimate_areas').update(fields).eq('id', areaId);
 }
 
 async function deleteArea(areaId) {
-  // Cascades to sections + line_items via FK ON DELETE CASCADE
-  return window.sb.from('areas').delete().eq('id', areaId);
+  return window.sb.from('estimate_areas').delete().eq('id', areaId);
 }
 
-// ── Section helpers (V2) ──────────────────────────────────────────────────────
+// ── Section helpers ───────────────────────────────────────────────────────────
 
 async function getSections(areaId) {
-  return window.sb.from('sections').select('*').eq('area_id', areaId).order('sort_order');
+  return window.sb.from('estimate_sections').select('*').eq('area_id', areaId).order('sort_order');
 }
 
 async function getAllSections(areaIds) {
-  // Load sections for multiple areas in one query (used when assembling full bid tree).
   if (!areaIds || !areaIds.length) return { data: [], error: null };
-  return window.sb.from('sections').select('*').in('area_id', areaIds).order('sort_order');
+  return window.sb.from('estimate_sections').select('*').in('area_id', areaIds).order('sort_order');
 }
 
 async function addSection(areaId, { name = 'New Section', sort_order = 0 } = {}) {
-  return window.sb.from('sections')
+  return window.sb.from('estimate_sections')
     .insert({ area_id: areaId, name, sort_order })
     .select().single();
 }
 
 async function updateSection(sectionId, fields) {
-  return window.sb.from('sections').update(fields).eq('id', sectionId);
+  return window.sb.from('estimate_sections').update(fields).eq('id', sectionId);
 }
 
 async function deleteSection(sectionId) {
-  // Cascades to line_items via FK ON DELETE CASCADE
-  return window.sb.from('sections').delete().eq('id', sectionId);
+  return window.sb.from('estimate_sections').delete().eq('id', sectionId);
 }
 
 // ── Line item helpers ─────────────────────────────────────────────────────────
+// estimate_items: section_id FK only; name (not description); ignored (not ignore).
+// bid_id and area_id no longer exist on this table.
 
 async function getLineItems(bidId) {
-  return window.sb.from('line_items').select('*').eq('bid_id', bidId).order('sort_order');
+  const { id: estId, error } = await getOrCreateEstimateForBid(bidId);
+  if (error) return { data: null, error };
+  const { data: areas } = await window.sb.from('estimate_areas').select('id').eq('estimate_id', estId);
+  if (!areas?.length) return { data: [], error: null };
+  const { data: secs } = await window.sb.from('estimate_sections').select('id').in('area_id', areas.map(a => a.id));
+  if (!secs?.length) return { data: [], error: null };
+  return window.sb.from('estimate_items').select('*').in('section_id', secs.map(s => s.id)).order('sort_order');
 }
 
-async function addLineItem({ bid_id, area_id, section_id, section, description, qty, unit, unit_cost, sort_order, drawing_ref, ignore, no_print }) {
-  // NEVER include 'total' — it is GENERATED ALWAYS AS (qty * unit_cost) STORED
+async function addLineItem({ section_id, description, qty, unit, unit_cost, sort_order, drawing_ref, ignore, no_print }) {
   const payload = {
-    bid_id,
-    description,
+    section_id,
+    name: description,
     qty: qty || 1,
     unit: unit || 'EA',
     unit_cost: unit_cost || 0,
     sort_order: sort_order || 0,
   };
-  if (area_id     !== undefined) payload.area_id     = area_id;
-  if (section_id  !== undefined) payload.section_id  = section_id;
-  if (section     !== undefined) payload.section     = section;
   if (drawing_ref !== undefined) payload.drawing_ref = drawing_ref;
-  if (ignore      !== undefined) payload.ignore      = ignore;
+  if (ignore      !== undefined) payload.ignored     = ignore;
   if (no_print    !== undefined) payload.no_print    = no_print;
-  return window.sb.from('line_items').insert(payload).select().single();
+  return window.sb.from('estimate_items').insert(payload).select().single();
 }
 
 async function updateLineItem(id, fields) {
-  // Strip 'total' defensively — it is a generated column and cannot be set
-  const { total: _t, ...safe } = fields;
-  return window.sb.from('line_items').update(safe).eq('id', id);
+  const { total: _t, bid_id: _b, area_id: _a, section: _s, description, ignore, ...rest } = fields;
+  const safe = { ...rest };
+  if (description !== undefined) safe.name    = description;
+  if (ignore      !== undefined) safe.ignored = ignore;
+  return window.sb.from('estimate_items').update(safe).eq('id', id);
 }
 
 async function deleteLineItem(id) {
-  return window.sb.from('line_items').delete().eq('id', id);
+  return window.sb.from('estimate_items').delete().eq('id', id);
 }
 
 // ── Library helpers ───────────────────────────────────────────────────────────
+// pricing_library_items: name (not description).
 
 async function getLibraryItems(filters = {}) {
-  let q = window.sb.from('library_items').select('*').order('category').order('description');
+  let q = window.sb.from('pricing_library_items').select('*').eq('active', true).order('category').order('name');
   if (filters.category) q = q.eq('category', filters.category);
-  return q;
+  const { data, error } = await q;
+  if (error) return { data: null, error };
+  return { data: data.map(r => ({ ...r, description: r.name })), error: null };
 }
 
 async function upsertLibraryItem(fields) {
-  return window.sb.from('library_items').upsert(fields).select().single();
+  const { description, ...rest } = fields;
+  const payload = { ...rest };
+  if (description !== undefined) payload.name = description;
+  return window.sb.from('pricing_library_items').upsert(payload).select().single();
 }
 
 // ── Job helpers ───────────────────────────────────────────────────────────────
+// jobs: job_number (not number), project_name (not name), client (not gc_name),
+//       base_contract (not contract_value), backlog_status (not status).
+// notes is in pm_notes — strip it from updates to avoid schema errors.
+
+const JOB_TO_LEGACY = {
+  job_number:     'number',
+  project_name:   'name',
+  client:         'gc_name',
+  base_contract:  'contract_value',
+  backlog_status: 'status',
+};
+
+const LEGACY_TO_JOB = {
+  number:         'job_number',
+  name:           'project_name',
+  gc_name:        'client',
+  contract_value: 'base_contract',
+  status:         'backlog_status',
+};
+
+const JOB_FIELDS_NOT_IN_TABLE = new Set(['notes', 'gc_name', 'name', 'number', 'contract_value', 'status']);
+
+function jobRowToLegacy(row) {
+  const out = { ...row };
+  for (const [newCol, oldCol] of Object.entries(JOB_TO_LEGACY)) {
+    out[oldCol] = row[newCol];
+  }
+  return out;
+}
+
+function translateJobFields(fields) {
+  const out = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (JOB_FIELDS_NOT_IN_TABLE.has(k)) continue;
+    out[LEGACY_TO_JOB[k] || k] = v;
+  }
+  return out;
+}
 
 async function getJobs() {
-  return window.sb.from('jobs').select('*').order('created_at', { ascending: false });
+  const { data, error } = await window.sb.from('jobs').select('*').order('created_at', { ascending: false });
+  if (error) return { data: null, error };
+  return { data: data.map(jobRowToLegacy), error: null };
 }
 
 async function getJob(id) {
-  return window.sb.from('jobs').select('*').eq('id', id).single();
+  const { data, error } = await window.sb.from('jobs').select('*').eq('id', id).single();
+  if (error) return { data: null, error };
+  return { data: jobRowToLegacy(data), error: null };
 }
 
 async function getJobByBidId(bidId) {
-  return window.sb.from('jobs').select('*').eq('opportunity_id', bidId).maybeSingle();
+  const { data, error } = await window.sb.from('jobs').select('*').eq('opportunity_id', bidId).maybeSingle();
+  if (error) return { data: null, error };
+  return { data: data ? jobRowToLegacy(data) : null, error: null };
 }
 
 async function updateJob(id, fields) {
-  return window.sb.from('jobs').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+  const translated = translateJobFields(fields);
+  const { data, error } = await window.sb.from('jobs')
+    .update({ ...translated, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) return { data: null, error };
+  return { data: jobRowToLegacy(data), error: null };
 }
 
-async function addChangeOrder({ job_id, description, amount, status = 'Submitted' }) {
-  return window.sb.from('change_orders').insert({ job_id, description, amount, status }).select().single();
+async function addChangeOrder({ job_id, description, amount, status = 'submitted' }) {
+  const number = `CO-${String(Date.now()).slice(-5)}`;
+  const normalizedStatus = status.toLowerCase();
+  return window.sb.from('change_orders')
+    .insert({ job_id, number, description, amount, status: normalizedStatus })
+    .select().single();
 }
 
 async function updateChangeOrder(id, fields) {
@@ -312,7 +419,6 @@ async function updateChangeOrder(id, fields) {
 // ── Contact helpers ───────────────────────────────────────────────────────────
 
 async function getContacts(role) {
-  // role: 'gc' | 'owner' | 'sub' | 'field' | undefined (returns all contacts)
   let q = window.sb.from('contacts').select('*').order('name');
   if (role) q = q.eq('role', role);
   return q;
@@ -331,36 +437,54 @@ async function updateContact(id, fields) {
 }
 
 // ── Alternate helpers ─────────────────────────────────────────────────────────
+// estimate_alternates: estimate_id (not bid_id); amount (not price); no qty/unit.
 
 async function getAlternates(bidId) {
-  return window.sb.from('bid_alternates').select('*').eq('bid_id', bidId).order('sort_order');
+  const { id: estId, error } = await getOrCreateEstimateForBid(bidId);
+  if (error) return { data: null, error };
+  return window.sb.from('estimate_alternates').select('*').eq('estimate_id', estId).order('sort_order');
 }
 
-async function addAlternate(bidId, { description = '', qty = 1, unit = 'lump sum', price = 0, sort_order = 0 } = {}) {
-  return window.sb.from('bid_alternates')
-    .insert({ bid_id: bidId, description, qty, unit, price, sort_order })
+async function addAlternate(bidId, { description = '', price = 0, amount, sort_order = 0 } = {}) {
+  const { id: estId, error } = await getOrCreateEstimateForBid(bidId);
+  if (error) return { data: null, error };
+  return window.sb.from('estimate_alternates')
+    .insert({ estimate_id: estId, description, amount: amount ?? price, sort_order })
     .select().single();
 }
 
 async function updateAlternate(id, fields) {
-  return window.sb.from('bid_alternates').update(fields).eq('id', id);
+  const { bid_id: _b, qty: _q, unit: _u, price, ...rest } = fields;
+  const payload = { ...rest };
+  if (price !== undefined && payload.amount === undefined) payload.amount = price;
+  return window.sb.from('estimate_alternates').update(payload).eq('id', id);
 }
 
 async function deleteAlternate(id) {
-  return window.sb.from('bid_alternates').delete().eq('id', id);
+  return window.sb.from('estimate_alternates').delete().eq('id', id);
 }
 
 // ── Estimate data helpers (iframe bridge) ─────────────────────────────────────
+// Old: stored as JSONB blob in bids.estimate_data.
+// New: stored as rows in estimate_snapshots with estimate_id FK.
 
 async function getEstimateData(bidId) {
-  const { data, error } = await window.sb.from('bids').select('estimate_data').eq('id', bidId).single();
-  return { data: data?.estimate_data, error };
+  const { id: estId, error: estErr } = await getEstimateIdForBid(bidId);
+  if (estErr || !estId) return { data: null, error: estErr };
+  const { data, error } = await window.sb.from('estimate_snapshots')
+    .select('snapshot')
+    .eq('estimate_id', estId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return { data: data?.snapshot || null, error };
 }
 
 async function saveEstimateData(bidId, estimateData) {
-  const { error } = await window.sb.from('bids')
-    .update({ estimate_data: estimateData, updated_at: new Date().toISOString() })
-    .eq('id', bidId);
+  const { id: estId, error: estErr } = await getOrCreateEstimateForBid(bidId);
+  if (estErr) return { error: estErr };
+  const { error } = await window.sb.from('estimate_snapshots')
+    .insert({ estimate_id: estId, snapshot: estimateData });
   return { error };
 }
 
