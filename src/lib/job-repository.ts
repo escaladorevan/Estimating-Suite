@@ -245,6 +245,7 @@ export function mapJobFromRow(
 ): Job {
   return {
     id: row.id,
+    opportunityId: row.opportunity_id ?? undefined,
     jobNumber: row.job_number ?? "",
     workType: normalizeWorkType(row.work_type),
     pm: row.pm ?? "",
@@ -281,7 +282,7 @@ export function mapJobFromRow(
   };
 }
 
-export function mapJobToUpsert(job: Job & { opportunityId?: string }): JobUpsert {
+export function mapJobToUpsert(job: Job): JobUpsert {
   return {
     id: isUuid(job.id) ? job.id : undefined,
     opportunity_id: nullableUuid(job.opportunityId),
@@ -488,6 +489,36 @@ export async function saveJobHeader(job: Job, client: SupabaseJobClient | null =
 
   if (error) throw error;
   return data ? mapJobFromRow(data) : job;
+}
+
+export async function saveChangeOrder(co: ChangeOrder, client: SupabaseJobClient | null = supabase): Promise<ChangeOrder> {
+  if (!client) return co;
+  const write = mapChangeOrderToWrite(co);
+  const { data, error } = write.id
+    ? await client.from("change_orders").upsert(write, { onConflict: "id" }).select("*").single()
+    : await client.from("change_orders").insert(write).select("*").single();
+  if (error) throw error;
+  return data ? mapChangeOrderFromRow(data as ChangeOrderRow) : co;
+}
+
+export async function savePurchaseOrder(po: PurchaseOrder, client: SupabaseJobClient | null = supabase): Promise<PurchaseOrder> {
+  if (!client) return po;
+  const write = mapPurchaseOrderToWrite(po);
+  const { data, error } = write.id
+    ? await client.from("purchase_orders").upsert(write, { onConflict: "id" }).select("*").single()
+    : await client.from("purchase_orders").insert(write).select("*").single();
+  if (error) throw error;
+  return data ? mapPurchaseOrderFromRow(data as PurchaseOrderRow) : po;
+}
+
+export async function saveSubmittal(submittal: SubmittalPackage, client: SupabaseJobClient | null = supabase): Promise<SubmittalPackage> {
+  if (!client) return submittal;
+  const write = mapSubmittalToWrite(submittal);
+  const { data, error } = write.id
+    ? await client.from("submittals").upsert(write, { onConflict: "id" }).select("*").single()
+    : await client.from("submittals").insert(write).select("*").single();
+  if (error) throw error;
+  return data ? mapSubmittalFromRow(data as SubmittalRow) : submittal;
 }
 
 function mapChangeOrderToWrite(changeOrder: ChangeOrder & { estimateId?: string }): ChangeOrderWrite {

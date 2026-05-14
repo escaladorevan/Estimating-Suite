@@ -216,8 +216,18 @@ export type PMNote = {
   completedAt?: string;
 };
 
+export type AppRole = "admin" | "estimator" | "pm" | "viewer" | "accounting";
+
+export type AppUserProfile = {
+  id: string;
+  fullName: string | null;
+  role: AppRole;
+  active: boolean;
+};
+
 export type Job = {
   id: string;
+  opportunityId?: string;
   jobNumber: string;
   workType?: WorkType;
   pm: string;
