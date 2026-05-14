@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { saveEstimateHeader } from "@/lib/estimate-repository";
 import { pruneProjectFileSlotMetadata, saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
+import { reconcilePersistedJobIdentity } from "@/lib/job-persistence-reconciliation";
 import {
   listJobs,
   listPMNotes,
@@ -17,7 +18,11 @@ import type { Dispatch, SetStateAction } from "react";
 import type { ActivityEvent, ChangeOrder, Estimate, Job, PMNote, ProjectFile, PurchaseOrder, SubmittalPackage } from "@/types";
 
 type UseJobsPersistenceInput = {
+  detailJobId: string | null;
   estimates: Estimate[];
+  jobs: Job[];
+  pmNotes: PMNote[];
+  selectedJobId: string;
   setDetailJobId: Dispatch<SetStateAction<string | null>>;
   setEstimates: Dispatch<SetStateAction<Estimate[]>>;
   setJobs: Dispatch<SetStateAction<Job[]>>;
@@ -26,7 +31,11 @@ type UseJobsPersistenceInput = {
 };
 
 export function useJobsPersistence({
+  detailJobId,
   estimates,
+  jobs,
+  pmNotes,
+  selectedJobId,
   setDetailJobId,
   setEstimates,
   setJobs,
@@ -41,11 +50,19 @@ export function useJobsPersistence({
       if (!isMounted) return;
 
       if (persisted.length) {
-        setJobs((current) => {
-          const byNumber = new Map(persisted.map((job) => [job.jobNumber, job]));
-          const localOnly = current.filter((job) => !byNumber.has(job.jobNumber));
-          return [...persisted, ...localOnly];
+        const reconciled = reconcilePersistedJobIdentity({
+          currentJobs: jobs,
+          persistedJobs: persisted,
+          estimates,
+          pmNotes,
+          selectedJobId,
+          detailJobId
         });
+        setJobs(reconciled.jobs);
+        setEstimates(reconciled.estimates);
+        setPmNotes(reconciled.pmNotes);
+        setSelectedJobId(reconciled.selectedJobId);
+        setDetailJobId(reconciled.detailJobId);
         setJobPersistenceStatus(`Loaded ${persisted.length} jobs from Supabase.`);
         return;
       }
@@ -55,7 +72,7 @@ export function useJobsPersistence({
       if (!isMounted) return;
       setJobPersistenceStatus("Local sample mode. Sign in before Supabase can read and save jobs.");
     }
-  }, [setJobs]);
+  }, [detailJobId, estimates, jobs, pmNotes, selectedJobId, setDetailJobId, setEstimates, setJobs, setPmNotes, setSelectedJobId]);
 
   const loadPersistedPMNotes = useCallback(async (isMounted = true) => {
     try {
@@ -78,13 +95,19 @@ export function useJobsPersistence({
 
     try {
       const saved = await saveJobHeader(job);
-      setJobs((current) =>
-        current.map((candidate) =>
-          candidate.id === localId || candidate.jobNumber === saved.jobNumber ? saved : candidate
-        )
-      );
-      setSelectedJobId((current) => (current === localId ? saved.id : current));
-      setDetailJobId((current) => (current === localId ? saved.id : current));
+      const reconciled = reconcilePersistedJobIdentity({
+        currentJobs: jobs,
+        persistedJobs: [saved],
+        estimates,
+        pmNotes,
+        selectedJobId,
+        detailJobId
+      });
+      setJobs(reconciled.jobs);
+      setEstimates(reconciled.estimates);
+      setPmNotes(reconciled.pmNotes);
+      setSelectedJobId(reconciled.selectedJobId);
+      setDetailJobId(reconciled.detailJobId);
       setJobPersistenceStatus(`Job ${saved.jobNumber} saved to Supabase.`);
 
       if (forceCreate && saved.opportunityId && isUuid(saved.id)) {
@@ -98,7 +121,7 @@ export function useJobsPersistence({
     } catch {
       setJobPersistenceStatus(`Job save failed. ${job.jobNumber} is local only.`);
     }
-  }, [estimates, setDetailJobId, setEstimates, setJobs, setSelectedJobId]);
+  }, [detailJobId, estimates, jobs, pmNotes, selectedJobId, setDetailJobId, setEstimates, setJobs, setPmNotes, setSelectedJobId]);
 
   const persistChangeOrder = useCallback(async (co: ChangeOrder) => {
     const localId = co.id;
@@ -156,7 +179,9 @@ export function useJobsPersistence({
 
   const persistPMNote = useCallback(async (note: PMNote) => {
     if (note.jobId && !isUuid(note.jobId)) {
-      setJobPersistenceStatus("PM note saved locally. Link it to a persisted job before saving the job reference.");
+      const blockedJob = jobs.find((job) => job.id === note.jobId);
+      const blockedLabel = blockedJob ? `${blockedJob.jobNumber} (${blockedJob.id})` : note.jobId;
+      setJobPersistenceStatus(`PM note saved locally. Job reference ${blockedLabel} is not a persisted Supabase UUID.`);
       return;
     }
 
@@ -167,7 +192,7 @@ export function useJobsPersistence({
     } catch {
       setJobPersistenceStatus("PM note save failed - local only.");
     }
-  }, [setPmNotes]);
+  }, [jobs, setPmNotes]);
 
   const persistActivity = useCallback(async (event: ActivityEvent) => {
     if (!isUuid(event.ownerId)) return;
