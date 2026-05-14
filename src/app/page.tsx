@@ -24,6 +24,8 @@ import { supabase } from "@/lib/supabase-client";
 import { BidWorkbook } from "@/components/BidWorkbook";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "@/lib/change-order-workflow";
 import { calculateEstimateTotals } from "@/lib/estimate-math";
+import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
+import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
 import {
   currentContractValue,
@@ -141,6 +143,7 @@ export default function Home() {
   const [mainNavCollapsed, setMainNavCollapsed] = useState(false);
   const [query, setQuery] = useState("");
   const [opportunityPersistenceStatus, setOpportunityPersistenceStatus] = useState("Checking Supabase...");
+  const [estimatePersistenceStatus, setEstimatePersistenceStatus] = useState("Workbook snapshots save after sign-in.");
   const [loginEmail, setLoginEmail] = useState("escalador.evan@gmail.com");
   const [sessionEmail, setSessionEmail] = useState("");
   const [authStatus, setAuthStatus] = useState("Sign in to save live data.");
@@ -292,6 +295,68 @@ export default function Home() {
     } catch {
       setOpportunityPersistenceStatus("Saved locally only. Supabase write is waiting on auth/session wiring.");
       return next;
+    }
+  }
+
+  async function persistEstimateSnapshot(estimate: Estimate) {
+    const localId = estimate.id;
+    setEstimatePersistenceStatus("Saving workbook header and snapshot...");
+
+    try {
+      const savedHeader = await saveEstimateHeader(estimate);
+      const persistedEstimate: Estimate = {
+        ...estimate,
+        id: savedHeader.id,
+        opportunityId: savedHeader.opportunityId ?? estimate.opportunityId,
+        jobId: savedHeader.jobId ?? estimate.jobId
+      };
+
+      setEstimates((current) =>
+        current.map((candidate) => (candidate.id === localId || candidate.id === persistedEstimate.id ? persistedEstimate : candidate))
+      );
+      setActiveEstimateId(persistedEstimate.id);
+
+      await saveEstimateSnapshot(persistedEstimate);
+      setEstimatePersistenceStatus(`Saved snapshot for ${persistedEstimate.proposalNumber || persistedEstimate.projectName}.`);
+    } catch {
+      setEstimatePersistenceStatus("Workbook is local only. Sign in and use persisted opportunity/job ids before saving snapshots.");
+    }
+  }
+
+  async function persistOpportunityFile(opportunity: Opportunity, slot: string, file: File) {
+    if (!isUuid(opportunity.id)) {
+      setOpportunityPersistenceStatus("File attached locally. Save the opportunity to Supabase before storing files.");
+      return null;
+    }
+
+    setOpportunityPersistenceStatus(`Uploading ${file.name}...`);
+
+    try {
+      const storagePath = await uploadProjectFile({
+        file,
+        ownerType: "opportunity",
+        ownerId: opportunity.id,
+        slot,
+        fileName: file.name,
+        mimeType: file.type
+      });
+      if (!storagePath) throw new Error("Upload did not return a storage path.");
+
+      const saved = await saveProjectFileMetadata({
+        ownerType: "opportunity",
+        ownerId: opportunity.id,
+        slot,
+        name: file.name,
+        storagePath,
+        mimeType: file.type || null,
+        sizeBytes: file.size
+      });
+
+      setOpportunityPersistenceStatus(saved ? `Stored ${file.name} in Supabase Storage.` : `Uploaded ${file.name}; metadata is local only.`);
+      return saved;
+    } catch {
+      setOpportunityPersistenceStatus("File attached locally only. Supabase Storage is waiting on sign-in or persisted owner id.");
+      return null;
     }
   }
 
@@ -879,6 +944,8 @@ export default function Home() {
             estimate={selectedEstimate}
             onChange={(next) => setEstimates((current) => current.map((estimate) => (estimate.id === next.id ? next : estimate)))}
             onExportPdf={exportProposalPdf}
+            onSaveSnapshot={(estimate) => void persistEstimateSnapshot(estimate)}
+            saveStatus={estimatePersistenceStatus}
             onSubmitChangeOrder={submitEstimateAsChangeOrder}
           />
         )}
@@ -927,6 +994,7 @@ export default function Home() {
       {selectedOpportunity ? (
         <OpportunityModal
           opportunity={selectedOpportunity}
+          onAttachFile={persistOpportunityFile}
           onClose={() => setSelectedOpportunityId(null)}
           onUpdate={(next) => void persistOpportunity(next)}
           existingJobs={jobs}
@@ -2597,6 +2665,7 @@ function AnalyticsView({
 
 function OpportunityModal({
   opportunity,
+  onAttachFile,
   onClose,
   onUpdate,
   onConvertToJob,
@@ -2604,6 +2673,7 @@ function OpportunityModal({
   existingJobs
 }: {
   opportunity: Opportunity;
+  onAttachFile?: (opportunity: Opportunity, slot: string, file: File) => Promise<ProjectFile | null>;
   onClose: () => void;
   onUpdate: (opportunity: Opportunity) => void;
   onConvertToJob: (opportunity: Opportunity, award: AwardDetails) => void;
@@ -2637,7 +2707,7 @@ function OpportunityModal({
     setDraft((current) => ({ ...current, links: { ...current.links, [key]: value } }));
   }
 
-  function attachFile(slot: string, file: File | undefined) {
+  async function attachFile(slot: string, file: File | undefined) {
     if (!file) return;
     const nextFile: ProjectFile = {
       id: `file-${slot}-${Date.now()}`,
@@ -2651,6 +2721,13 @@ function OpportunityModal({
       ...current,
       files: [...(current.files ?? []).filter((candidate) => candidate.slot !== slot), nextFile]
     }));
+    const saved = await onAttachFile?.(draft, slot, file);
+    if (saved) {
+      setDraft((current) => ({
+        ...current,
+        files: [...(current.files ?? []).filter((candidate) => candidate.slot !== slot), saved]
+      }));
+    }
   }
 
   return (
@@ -2810,4 +2887,8 @@ function Metric({ label, value, detail }: { label: string; value: string | numbe
 
 function Status({ value }: { value: string }) {
   return <span className={`status ${value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`}>{value}</span>;
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
