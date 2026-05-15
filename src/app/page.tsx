@@ -175,6 +175,7 @@ export default function Home() {
     persistActivity,
     persistChangeOrder,
     persistJobHeader,
+    persistDeletePMNote,
     persistPMNote,
     persistProjectFileAttachment,
     persistPurchaseOrder,
@@ -1097,6 +1098,21 @@ export default function Home() {
     if (updated) void persistPMNote(updated);
   }
 
+  function updatePmNoteText(noteId: string, text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const note = pmNotes.find((candidate) => candidate.id === noteId);
+    const updated = note ? { ...note, text: trimmed } : null;
+    setPmNotes((current) => current.map((note) => (note.id === noteId ? { ...note, text: trimmed } : note)));
+    if (updated) void persistPMNote(updated);
+  }
+
+  function deletePmNote(noteId: string) {
+    const note = pmNotes.find((candidate) => candidate.id === noteId);
+    setPmNotes((current) => current.filter((note) => note.id !== noteId));
+    if (note) void persistDeletePMNote(note);
+  }
+
   if (!hasMounted) {
     return <main className="app-shell" />;
   }
@@ -1185,6 +1201,8 @@ export default function Home() {
             jobs={jobs}
             onCreateOpportunity={createNewOpportunity}
             onCreatePmNote={createPmNote}
+            onDeletePmNote={deletePmNote}
+            onUpdatePmNoteText={updatePmNoteText}
             onUpdatePmNoteStatus={updatePmNoteStatus}
             opportunities={opportunities}
             pipelineOpportunities={pipelineOpportunities}
@@ -1221,7 +1239,9 @@ export default function Home() {
             onEditSubmittal={editJobSubmittal}
             onPurchaseOrderFile={attachPurchaseOrderFile}
             onUpdateJob={updateJobHeader}
+            onDeletePmNote={deletePmNote}
             onUpdatePmNoteStatus={updatePmNoteStatus}
+            onUpdatePmNoteText={updatePmNoteText}
             pmNotes={pmNotes}
             onOpenJob={setDetailJobId}
             onSubmittalChecklist={updateSubmittalChecklist}
@@ -1249,7 +1269,9 @@ export default function Home() {
           onPurchaseOrderFile={attachPurchaseOrderFile}
           onStartChangeOrder={startChangeOrderFromJob}
           onUpdateJob={updateJobHeader}
+          onDeletePmNote={deletePmNote}
           onUpdatePmNoteStatus={updatePmNoteStatus}
+          onUpdatePmNoteText={updatePmNoteText}
           pmNotes={detailJobData?.notes ?? []}
           onSubmittalChecklist={updateSubmittalChecklist}
           onSubmittalFile={attachSubmittalFile}
@@ -1381,6 +1403,8 @@ function HomeDashboard({
   pmNotes,
   onCreateOpportunity,
   onCreatePmNote,
+  onDeletePmNote,
+  onUpdatePmNoteText,
   onUpdatePmNoteStatus
 }: {
   analytics: DashboardAnalytics;
@@ -1390,6 +1414,8 @@ function HomeDashboard({
   pmNotes: PMNote[];
   onCreateOpportunity: () => void;
   onCreatePmNote: (text: string, jobId?: string) => void;
+  onDeletePmNote: (noteId: string) => void;
+  onUpdatePmNoteText: (noteId: string, text: string) => void;
   onUpdatePmNoteStatus: (noteId: string, status: PMNote["status"]) => void;
 }) {
   const activeJobs = jobs.filter((job) => !["Installed", "Void"].includes(job.installStatus));
@@ -1442,6 +1468,8 @@ function HomeDashboard({
         actions={pmActions}
         jobs={jobs}
         onCreateNote={onCreatePmNote}
+        onDeleteNote={onDeletePmNote}
+        onUpdateNoteText={onUpdatePmNoteText}
         onUpdateNoteStatus={onUpdatePmNoteStatus}
         title="PM action board"
       />
@@ -1538,6 +1566,8 @@ function PMActionBoard({
   compact = false,
   jobs,
   onCreateNote,
+  onDeleteNote,
+  onUpdateNoteText,
   onUpdateNoteStatus,
   title
 }: {
@@ -1545,11 +1575,15 @@ function PMActionBoard({
   compact?: boolean;
   jobs: Job[];
   onCreateNote: (text: string, jobId?: string) => void;
+  onDeleteNote: (noteId: string) => void;
+  onUpdateNoteText: (noteId: string, text: string) => void;
   onUpdateNoteStatus: (noteId: string, status: PMNote["status"]) => void;
   title: string;
 }) {
   const [noteText, setNoteText] = useState("");
   const [jobId, setJobId] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   function addNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1588,12 +1622,39 @@ function PMActionBoard({
       <div className="pm-action-list">
         {actions.length ? actions.map((action) => (
           <article className={`pm-action ${action.severity}`} key={action.id}>
-            <div>
-              <strong>{action.title}</strong>
-              <span>{action.detail}</span>
-            </div>
+            {editingNoteId === action.id ? (
+              <form
+                className="pm-note-edit"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  onUpdateNoteText(action.id, editingText);
+                  setEditingNoteId(null);
+                  setEditingText("");
+                }}
+              >
+                <input aria-label="Edit PM note" onChange={(event) => setEditingText(event.target.value)} value={editingText} />
+                <button type="submit">Save</button>
+                <button onClick={() => setEditingNoteId(null)} type="button">Cancel</button>
+              </form>
+            ) : (
+              <div>
+                <strong>{action.title}</strong>
+                <span>{action.detail}</span>
+              </div>
+            )}
             {action.kind === "manual" ? (
-              <button onClick={() => onUpdateNoteStatus(action.id, "Done")}>Done</button>
+              <div className="pm-action-buttons">
+                <button
+                  onClick={() => {
+                    setEditingNoteId(action.id);
+                    setEditingText(action.title);
+                  }}
+                >
+                  Edit
+                </button>
+                <button onClick={() => onUpdateNoteStatus(action.id, "Done")}>Done</button>
+                <button className="danger-text" onClick={() => onDeleteNote(action.id)}>Delete</button>
+              </div>
             ) : (
               <small>{action.jobNumber ?? "System"}</small>
             )}
@@ -1953,7 +2014,9 @@ function JobsView({
   onEditSubmittal,
   onPurchaseOrderFile,
   onUpdateJob,
+  onDeletePmNote,
   onUpdatePmNoteStatus,
+  onUpdatePmNoteText,
   pmNotes,
   onOpenJob,
   onSubmittalChecklist,
@@ -1970,7 +2033,9 @@ function JobsView({
   onEditSubmittal: (jobId: string, submittalId: string, updates: UpdateSubmittalInput) => void;
   onPurchaseOrderFile: (jobId: string, poId: string, file: File | undefined) => void;
   onUpdateJob: (jobId: string, updates: Partial<Job>) => void;
+  onDeletePmNote: (noteId: string) => void;
   onUpdatePmNoteStatus: (noteId: string, status: PMNote["status"]) => void;
+  onUpdatePmNoteText: (noteId: string, text: string) => void;
   pmNotes: PMNote[];
   onOpenJob: (jobId: string) => void;
   onSubmittalChecklist: (jobId: string, submittalId: string, updates: Parameters<typeof setSubmittalChecklistState>[1]) => void;
@@ -2223,7 +2288,9 @@ function JobDetailModal({
   onPurchaseOrderFile,
   onStartChangeOrder,
   onUpdateJob,
+  onDeletePmNote,
   onUpdatePmNoteStatus,
+  onUpdatePmNoteText,
   pmNotes,
   onSubmittalChecklist,
   onSubmittalFile,
@@ -2242,7 +2309,9 @@ function JobDetailModal({
   onPurchaseOrderFile: (jobId: string, poId: string, file: File | undefined) => void;
   onStartChangeOrder: (jobId: string) => void;
   onUpdateJob: (jobId: string, updates: Partial<Job>) => void;
+  onDeletePmNote: (noteId: string) => void;
   onUpdatePmNoteStatus: (noteId: string, status: PMNote["status"]) => void;
+  onUpdatePmNoteText: (noteId: string, text: string) => void;
   pmNotes: PMNote[];
   onSubmittalChecklist: (jobId: string, submittalId: string, updates: Parameters<typeof setSubmittalChecklistState>[1]) => void;
   onSubmittalFile: (jobId: string, submittalId: string, file: File | undefined) => void;
@@ -2479,6 +2548,8 @@ function JobDetailModal({
             compact
             jobs={[job]}
             onCreateNote={(text) => onCreatePmNote(text, job.id)}
+            onDeleteNote={onDeletePmNote}
+            onUpdateNoteText={onUpdatePmNoteText}
             onUpdateNoteStatus={onUpdatePmNoteStatus}
             title="Actions / Notes"
           />

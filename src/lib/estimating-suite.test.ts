@@ -6,6 +6,7 @@ import { calculateEstimateTotals } from "./estimate-math";
 import { mapEstimateFromRow, mapEstimateSnapshotToInsert, mapEstimateToUpsert } from "./estimate-repository";
 import { buildProjectFileStoragePath, mapProjectFileFromRow, mapProjectFileToInsert, pruneProjectFileSlotMetadata } from "./file-repository";
 import {
+  deletePMNote,
   mapActivityEventFromRow,
   mapActivityEventToInsert,
   mapChangeOrderFromRow,
@@ -990,6 +991,34 @@ describe("job repository mapping", () => {
       job_id: null,
       completed_at: "2026-05-15T12:00:00Z"
     });
+  });
+
+  it("deletes persisted PM notes and skips local-only note ids", async () => {
+    const calls: unknown[] = [];
+    const client = {
+      from(table: string) {
+        calls.push(["from", table]);
+        return {
+          delete() {
+            calls.push(["delete"]);
+            return {
+              eq(column: string, value: string) {
+                calls.push(["eq", column, value]);
+                return Promise.resolve({ error: null });
+              }
+            };
+          }
+        };
+      }
+    };
+
+    await expect(deletePMNote("note-local", client as never)).resolves.toBe(false);
+    await expect(deletePMNote("a603d881-b3c0-4ffb-bb1f-a27f1584770d", client as never)).resolves.toBe(true);
+    expect(calls).toEqual([
+      ["from", "pm_notes"],
+      ["delete"],
+      ["eq", "id", "a603d881-b3c0-4ffb-bb1f-a27f1584770d"]
+    ]);
   });
 });
 

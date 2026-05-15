@@ -566,6 +566,13 @@ export async function savePMNote(note: PMNote, client: SupabaseJobClient | null 
   return data ? mapPMNoteFromRow(data as PMNoteRow) : note;
 }
 
+export async function deletePMNote(noteId: string, client: SupabaseJobClient | null = supabase) {
+  if (!client || !isUuid(noteId)) return false;
+  const { error } = await client.from("pm_notes").delete().eq("id", noteId);
+  if (error) throw error;
+  return true;
+}
+
 export async function saveActivityEvent(event: ActivityEvent, client: SupabaseJobClient | null = supabase): Promise<ActivityEvent> {
   if (!client) return event;
   const write = mapActivityEventToInsert(event);

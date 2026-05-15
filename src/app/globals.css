@@ -587,6 +587,32 @@ p {
   white-space: nowrap;
 }
 
+.pm-action-buttons,
+.pm-note-edit {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.pm-action-buttons {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pm-note-edit {
+  flex: 1;
+}
+
+.pm-note-edit input {
+  min-height: 30px;
+  min-width: min(320px, 45vw);
+}
+
+.pm-action .danger-text {
+  border-color: #d8a99b;
+  color: var(--bad);
+}
+
 .pm-action small,
 .action-count {
   background: var(--accent-soft);

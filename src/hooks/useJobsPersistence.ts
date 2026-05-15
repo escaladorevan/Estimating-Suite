@@ -6,6 +6,7 @@ import { pruneProjectFileSlotMetadata, saveProjectFileMetadata, uploadProjectFil
 import { replaceJobDetail } from "@/lib/job-detail-data";
 import { reconcilePersistedJobIdentity } from "@/lib/job-persistence-reconciliation";
 import {
+  deletePMNote,
   listJobDetail,
   listJobs,
   listPMNotes,
@@ -227,6 +228,21 @@ export function useJobsPersistence({
     }
   }, [jobs, setPmNotes]);
 
+  const persistDeletePMNote = useCallback(async (note: PMNote) => {
+    if (!isUuid(note.id)) {
+      setJobPersistenceStatus("PM note removed locally.");
+      return;
+    }
+
+    try {
+      await deletePMNote(note.id);
+      setJobPersistenceStatus("PM note deleted.");
+    } catch (error) {
+      setPmNotes((current) => [note, ...current]);
+      setJobPersistenceStatus(`PM note delete failed. ${errorMessage(error)}`);
+    }
+  }, [setPmNotes]);
+
   const persistActivity = useCallback(async (event: ActivityEvent) => {
     if (!isUuid(event.ownerId)) return;
 
@@ -308,6 +324,7 @@ export function useJobsPersistence({
     persistActivity,
     persistChangeOrder,
     persistJobHeader,
+    persistDeletePMNote,
     persistPMNote,
     persistProjectFileAttachment,
     persistPurchaseOrder,
