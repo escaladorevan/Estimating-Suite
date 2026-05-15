@@ -1,4 +1,4 @@
-import type { ActivityEvent, Job, PMNote, PurchaseOrder, SubmittalPackage } from "@/types";
+import type { ActivityEvent, Job, PMNote, ProjectFile, PurchaseOrder, SubmittalPackage } from "@/types";
 import { summarizeSubmittals } from "./submittals";
 
 export type JobDetailData = {
@@ -82,6 +82,27 @@ export function applyPurchaseOrderToJobDetail({
     purchaseOrders: exists
       ? job.purchaseOrders.map((item) => (item.id === purchaseOrder.id ? purchaseOrder : item))
       : [...job.purchaseOrders, purchaseOrder],
+    activity: [activity, ...job.activity]
+  };
+}
+
+export function applyFileToJobDetail({
+  job,
+  file,
+  activity,
+  replaceSlot = false
+}: {
+  job: Job;
+  file: ProjectFile;
+  activity: ActivityEvent;
+  replaceSlot?: boolean;
+}): Job {
+  const matchingFileSlot = (candidate: ProjectFile) =>
+    candidate.ownerType === file.ownerType && candidate.ownerId === file.ownerId && candidate.slot === file.slot;
+
+  return {
+    ...job,
+    files: [...(replaceSlot ? job.files.filter((candidate) => !matchingFileSlot(candidate)) : job.files), file],
     activity: [activity, ...job.activity]
   };
 }

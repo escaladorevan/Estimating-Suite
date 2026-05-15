@@ -27,7 +27,7 @@ import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChange
 import { calculateEstimateTotals } from "@/lib/estimate-math";
 import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
 import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
-import { applyPurchaseOrderToJobDetail, applySubmittalToJobDetail, getJobDetailData } from "@/lib/job-detail-data";
+import { applyFileToJobDetail, applyPurchaseOrderToJobDetail, applySubmittalToJobDetail, getJobDetailData } from "@/lib/job-detail-data";
 import { resolvePersistedJobForPMNote } from "@/lib/job-persistence-reconciliation";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
 import {
@@ -829,15 +829,10 @@ export default function Home() {
         attachedFile = nextFile;
         attachedActivity = activity;
 
-        return {
-          ...job,
-          files: [...job.files, nextFile],
-          activity: [activity, ...job.activity]
-        };
+        return applyFileToJobDetail({ job, file: nextFile, activity });
       })
     );
-    if (attachedFile) void persistProjectFileAttachment(attachedFile, file);
-    if (attachedActivity) void persistActivity(attachedActivity);
+    if (attachedFile) void persistProjectFileAttachment(attachedFile, file, { activity: attachedActivity ?? undefined });
   }
 
   function attachSubmittalFile(jobId: string, submittalId: string, file: File | undefined) {
@@ -868,15 +863,10 @@ export default function Home() {
         attachedFile = nextFile;
         attachedActivity = activity;
 
-        return {
-          ...job,
-          files: [...job.files, nextFile],
-          activity: [activity, ...job.activity]
-        };
+        return applyFileToJobDetail({ job, file: nextFile, activity });
       })
     );
-    if (attachedFile) void persistProjectFileAttachment(attachedFile, file);
-    if (attachedActivity) void persistActivity(attachedActivity);
+    if (attachedFile) void persistProjectFileAttachment(attachedFile, file, { activity: attachedActivity ?? undefined });
   }
 
   function attachJobFile(jobId: string, slot: string, file: File | undefined) {
@@ -914,24 +904,16 @@ export default function Home() {
           ownerType: "job",
           ownerId: persistenceJobId,
           author: "System",
-          message: `${file.name} uploaded to ${slot}.`,
+          message: `${file.name} attached to ${slot}.`,
           createdAt: today
         };
         attachedFile = nextFile;
         attachedActivity = activity;
 
-        return {
-          ...job,
-          files: [
-            ...job.files.filter((candidate) => !(candidate.ownerType === "job" && candidate.slot === slot)),
-            nextFile
-          ],
-          activity: [activity, ...job.activity]
-        };
+        return applyFileToJobDetail({ job, file: nextFile, activity, replaceSlot: true });
       })
     );
-    if (attachedFile) void persistProjectFileAttachment(attachedFile, file, { replaceSlot: true });
-    if (attachedActivity && isUuid(persistenceJobId)) void persistActivity(attachedActivity);
+    if (attachedFile) void persistProjectFileAttachment(attachedFile, file, { activity: attachedActivity ?? undefined, replaceSlot: true });
   }
 
   function createServiceJob(input: {

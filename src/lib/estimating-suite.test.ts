@@ -25,6 +25,7 @@ import {
   mapSubmittalToUpdate
 } from "./job-repository";
 import {
+  applyFileToJobDetail,
   applyPurchaseOrderToJobDetail,
   applySubmittalToJobDetail,
   getJobDetailData,
@@ -60,7 +61,7 @@ import {
 } from "./submittals";
 import { estimateItemsToClipboardText, parseClipboardLineItems } from "./workbook-clipboard";
 import { cloneArea, cloneItems, cloneSection } from "./workbook-copy";
-import type { Job, PurchaseOrder } from "@/types";
+import type { Job, ProjectFile, PurchaseOrder } from "@/types";
 
 const productionSchema = () => readFileSync(join(process.cwd(), "supabase", "rebuild-production-schema.sql"), "utf8");
 
@@ -1422,6 +1423,118 @@ describe("job detail data boundary", () => {
     expect(updated.purchaseOrders).toHaveLength(1);
     expect(updated.purchaseOrders[0]).toMatchObject({ status: "Acknowledged", promisedDate: "2026-06-01" });
     expect(updated.activity.map((event) => event.id)).toEqual(["act-po-update", "act-po"]);
+  });
+
+  it("attaches files and activity through one detail helper", () => {
+    const job = {
+      id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      jobNumber: "G26-061",
+      workType: "Bid / ITB",
+      pm: "Geoff",
+      client: "Smoke GC",
+      projectName: "Smoke Test",
+      baseContract: 100000,
+      backlogStatus: "Awarded / Waiting",
+      forecastStart: "",
+      forecastEnd: "",
+      forecastQuarter: "",
+      expectedFabStart: "",
+      expectedCompletion: "",
+      fabStatus: "Not Started",
+      installStart: "",
+      installEnd: "",
+      installStatus: "Ready",
+      invoiceStatus: "Not Billed",
+      crewSize: 2,
+      gc: "",
+      notes: "",
+      changeOrders: [],
+      purchaseOrders: [],
+      submittals: [],
+      files: [],
+      activity: []
+    } satisfies Job;
+    const file = {
+      id: "file-contract",
+      ownerType: "job",
+      ownerId: job.id,
+      slot: "contract",
+      name: "Contract.pdf",
+      uploadedAt: "2026-05-14"
+    } satisfies ProjectFile;
+    const updated = applyFileToJobDetail({
+      job,
+      file,
+      activity: {
+        id: "act-file",
+        ownerType: "job",
+        ownerId: job.id,
+        author: "System",
+        message: "Contract.pdf attached to contract.",
+        createdAt: "2026-05-14"
+      }
+    });
+
+    expect(updated.files).toEqual([file]);
+    expect(updated.activity[0]).toMatchObject({ id: "act-file", ownerType: "job", ownerId: job.id });
+  });
+
+  it("replaces one file slot without removing files from other owners", () => {
+    const job = {
+      id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      jobNumber: "G26-061",
+      workType: "Bid / ITB",
+      pm: "Geoff",
+      client: "Smoke GC",
+      projectName: "Smoke Test",
+      baseContract: 100000,
+      backlogStatus: "Awarded / Waiting",
+      forecastStart: "",
+      forecastEnd: "",
+      forecastQuarter: "",
+      expectedFabStart: "",
+      expectedCompletion: "",
+      fabStatus: "Not Started",
+      installStart: "",
+      installEnd: "",
+      installStatus: "Ready",
+      invoiceStatus: "Not Billed",
+      crewSize: 2,
+      gc: "",
+      notes: "",
+      changeOrders: [],
+      purchaseOrders: [],
+      submittals: [],
+      files: [
+        { id: "old-contract", ownerType: "job", ownerId: "50f42d9f-b53f-4a97-b711-dc8b1cd13384", slot: "contract", name: "Old Contract.pdf", uploadedAt: "2026-05-13" },
+        { id: "drawing", ownerType: "job", ownerId: "50f42d9f-b53f-4a97-b711-dc8b1cd13384", slot: "drawings", name: "Drawings.pdf", uploadedAt: "2026-05-13" },
+        { id: "po-file", ownerType: "purchase_order", ownerId: "po-local", slot: "contract", name: "PO.pdf", uploadedAt: "2026-05-13" }
+      ],
+      activity: []
+    } satisfies Job;
+    const updated = applyFileToJobDetail({
+      job,
+      file: {
+        id: "new-contract",
+        ownerType: "job",
+        ownerId: job.id,
+        slot: "contract",
+        name: "New Contract.pdf",
+        uploadedAt: "2026-05-14"
+      },
+      activity: {
+        id: "act-replace",
+        ownerType: "job",
+        ownerId: job.id,
+        author: "System",
+        message: "New Contract.pdf attached to contract.",
+        createdAt: "2026-05-14"
+      },
+      replaceSlot: true
+    });
+
+    expect(updated.files.map((file) => file.id)).toEqual(["drawing", "po-file", "new-contract"]);
+    expect(updated.activity.map((event) => event.id)).toEqual(["act-replace"]);
   });
 });
 

@@ -283,7 +283,7 @@ export function useJobsPersistence({
   const persistProjectFileAttachment = useCallback(async (
     localFile: ProjectFile,
     file: File,
-    options: { replaceSlot?: boolean } = {}
+    options: { activity?: ActivityEvent; replaceSlot?: boolean } = {}
   ) => {
     if (!isUuid(localFile.ownerId)) {
       setJobPersistenceStatus("File attached locally. Save the job item before storing files.");
@@ -312,6 +312,16 @@ export function useJobsPersistence({
         mimeType: file.type || null,
         sizeBytes: file.size
       });
+      let persistedActivity: ActivityEvent | null = null;
+      let activityFailed = false;
+
+      if (options.activity && isUuid(options.activity.ownerId)) {
+        try {
+          persistedActivity = await saveActivityEvent(options.activity);
+        } catch {
+          activityFailed = true;
+        }
+      }
 
       if (saved) {
         if (options.replaceSlot) {
@@ -325,12 +335,26 @@ export function useJobsPersistence({
         setJobs((current) =>
           current.map((job) =>
             job.files.some((candidate) => candidate.id === localFile.id)
-              ? { ...job, files: job.files.map((candidate) => (candidate.id === localFile.id ? saved : candidate)) }
+              ? {
+                  ...job,
+                  files: job.files.map((candidate) => (candidate.id === localFile.id ? saved : candidate)),
+                  activity: options.activity
+                    ? job.activity.map((candidate) =>
+                        candidate.id === options.activity?.id ? persistedActivity ?? options.activity : candidate
+                      )
+                    : job.activity
+                }
               : job
           )
         );
       }
-      setJobPersistenceStatus(saved ? `Stored ${file.name} in Supabase Storage.` : `Uploaded ${file.name}; metadata is local only.`);
+      setJobPersistenceStatus(
+        saved
+          ? activityFailed
+            ? `Stored ${file.name}; activity is local only.`
+            : `Stored ${file.name} in Supabase Storage.`
+          : `Uploaded ${file.name}; metadata is local only.`
+      );
     } catch (error) {
       setJobPersistenceStatus(`File attached locally only. ${errorMessage(error)}`);
     }
