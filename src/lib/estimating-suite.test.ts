@@ -31,7 +31,10 @@ import {
   mapSubmittalToUpdate
 } from "./job-repository";
 import {
+  applyChangeOrderStatusToJobDetail,
+  applyChangeOrderToJobDetail,
   applyFileToJobDetail,
+  remapCoActivityOwner,
   applyPurchaseOrderToJobDetail,
   applySubmittalToJobDetail,
   getJobDetailData,
@@ -67,7 +70,7 @@ import {
 } from "./submittals";
 import { estimateItemsToClipboardText, parseClipboardLineItems } from "./workbook-clipboard";
 import { cloneArea, cloneItems, cloneSection } from "./workbook-copy";
-import type { Job, ProjectFile, PurchaseOrder } from "@/types";
+import type { ChangeOrder, Job, ProjectFile, PurchaseOrder } from "@/types";
 
 const productionSchema = () => readFileSync(join(process.cwd(), "supabase", "rebuild-production-schema.sql"), "utf8");
 
@@ -1612,6 +1615,120 @@ describe("job detail data boundary", () => {
 
     expect(updated.files.map((file) => file.id)).toEqual(["drawing", "po-file", "new-contract"]);
     expect(updated.activity.map((event) => event.id)).toEqual(["act-replace"]);
+  });
+
+  const baseJob: Job = {
+    id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+    jobNumber: "G26-061",
+    workType: "Bid / ITB",
+    pm: "Geoff",
+    client: "DPR",
+    projectName: "Smoke Test",
+    baseContract: 100000,
+    backlogStatus: "In Fabrication",
+    forecastStart: "",
+    forecastEnd: "",
+    forecastQuarter: "",
+    expectedFabStart: "",
+    expectedCompletion: "",
+    fabStatus: "In Fabrication",
+    installStart: "",
+    installEnd: "",
+    installStatus: "Ready",
+    invoiceStatus: "Not Billed",
+    crewSize: 3,
+    gc: "DPR",
+    notes: "",
+    changeOrders: [],
+    purchaseOrders: [],
+    submittals: [],
+    files: [],
+    activity: []
+  };
+
+  const submittedCo: ChangeOrder = {
+    id: "co-local-001",
+    jobId: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+    number: "CO-001",
+    description: "Additional nurse station scope",
+    amount: 8500,
+    status: "submitted",
+    dateSubmitted: "2026-05-15"
+  };
+
+  it("appends a new change order and prepends activity through the detail helper", () => {
+    const activity = { id: "act-co-add", ownerType: "job" as const, ownerId: baseJob.id, author: "System", message: "CO-001 submitted from Bid Workbook for $8,500.", createdAt: "2026-05-15" };
+    const updated = applyChangeOrderToJobDetail({ job: baseJob, changeOrder: submittedCo, activity });
+    expect(updated.changeOrders).toHaveLength(1);
+    expect(updated.changeOrders[0].number).toBe("CO-001");
+    expect(updated.activity[0].id).toBe("act-co-add");
+    expect(baseJob.changeOrders).toHaveLength(0);
+  });
+
+  it("approves one submitted CO, sets approvedDate, and leaves other submitted COs untouched", () => {
+    const secondCo: ChangeOrder = { ...submittedCo, id: "co-local-002", number: "CO-002", amount: 3200 };
+    const job = { ...baseJob, changeOrders: [submittedCo, secondCo] };
+    const activity = { id: "act-co-approve", ownerType: "change_order" as const, ownerId: "co-local-001", author: "System", message: "CO-001 approved and added to current contract.", createdAt: "2026-05-15" };
+
+    const updated = applyChangeOrderStatusToJobDetail({ job, changeOrderId: "co-local-001", status: "approved", approvedDate: "2026-05-15", activity });
+
+    expect(updated.changeOrders.find((c) => c.id === "co-local-001")).toMatchObject({ status: "approved", approvedDate: "2026-05-15" });
+    expect(updated.changeOrders.find((c) => c.id === "co-local-002")).toMatchObject({ status: "submitted" });
+    expect(updated.activity[0]).toMatchObject({ ownerType: "change_order", ownerId: "co-local-001" });
+  });
+
+  it("rejecting a CO does not set approvedDate", () => {
+    const job = { ...baseJob, changeOrders: [submittedCo] };
+    const activity = { id: "act-co-reject", ownerType: "change_order" as const, ownerId: "co-local-001", author: "System", message: "CO-001 rejected.", createdAt: "2026-05-15" };
+
+    const updated = applyChangeOrderStatusToJobDetail({ job, changeOrderId: "co-local-001", status: "rejected", approvedDate: undefined, activity });
+    expect(updated.changeOrders[0].status).toBe("rejected");
+    expect(updated.changeOrders[0].approvedDate).toBeUndefined();
+  });
+
+  it("voiding a CO does not set approvedDate", () => {
+    const job = { ...baseJob, changeOrders: [submittedCo] };
+    const activity = { id: "act-co-void", ownerType: "change_order" as const, ownerId: "co-local-001", author: "System", message: "CO-001 voided.", createdAt: "2026-05-15" };
+
+    const updated = applyChangeOrderStatusToJobDetail({ job, changeOrderId: "co-local-001", status: "void", approvedDate: undefined, activity });
+    expect(updated.changeOrders[0].status).toBe("void");
+    expect(updated.changeOrders[0].approvedDate).toBeUndefined();
+  });
+
+  it("current contract value increases only after a CO is approved", () => {
+    const job = { ...baseJob, changeOrders: [submittedCo] };
+    const activity = { id: "act-co-approve2", ownerType: "change_order" as const, ownerId: "co-local-001", author: "System", message: "CO-001 approved.", createdAt: "2026-05-15" };
+
+    expect(currentContractValue(job.baseContract, job.changeOrders)).toBe(100000);
+    const approved = applyChangeOrderStatusToJobDetail({ job, changeOrderId: "co-local-001", status: "approved", approvedDate: "2026-05-15", activity });
+    expect(currentContractValue(approved.baseContract, approved.changeOrders)).toBe(108500);
+  });
+
+  it("does not prepend activity when the changeOrderId is not found", () => {
+    const job = { ...baseJob, changeOrders: [submittedCo] };
+    const activity = { id: "act-noop", ownerType: "change_order" as const, ownerId: "co-not-here", author: "System", message: "ignored", createdAt: "2026-05-15" };
+    const updated = applyChangeOrderStatusToJobDetail({ job, changeOrderId: "co-not-here", status: "approved", approvedDate: "2026-05-15", activity });
+    expect(updated.activity).toHaveLength(0);
+    expect(updated.changeOrders[0].status).toBe("submitted");
+  });
+
+  it("remaps CO-owned activity ownerId from local id to saved UUID", () => {
+    const local = { id: "act-remap", ownerType: "change_order" as const, ownerId: "co-local-001", author: "System", message: "CO-001 approved.", createdAt: "2026-05-15" };
+    const remapped = remapCoActivityOwner(local, "co-local-001", "550e8400-e29b-41d4-a716-446655440000");
+    expect(remapped.ownerId).toBe("550e8400-e29b-41d4-a716-446655440000");
+    expect(remapped.id).toBe("act-remap");
+  });
+
+  it("does not remap job-owned activity from a workbook CO submission", () => {
+    const jobActivity = { id: "act-job", ownerType: "job" as const, ownerId: "job-uuid-abc", author: "System", message: "CO-001 submitted.", createdAt: "2026-05-15" };
+    const result = remapCoActivityOwner(jobActivity, "co-local-001", "550e8400-e29b-41d4-a716-446655440000");
+    expect(result.ownerId).toBe("job-uuid-abc");
+  });
+
+  it("does not remap when activity ownerId does not match the local CO id", () => {
+    const activity = { id: "act-other", ownerType: "change_order" as const, ownerId: "co-other-002", author: "System", message: "CO-002 rejected.", createdAt: "2026-05-15" };
+    const result = remapCoActivityOwner(activity, "co-local-001", "550e8400-e29b-41d4-a716-446655440000");
+    expect(result.ownerId).toBe("co-other-002");
   });
 });
 

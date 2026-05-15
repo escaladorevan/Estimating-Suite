@@ -1,4 +1,4 @@
-import type { ActivityEvent, Job, PMNote, ProjectFile, PurchaseOrder, SubmittalPackage } from "@/types";
+import type { ActivityEvent, ChangeOrder, ChangeOrderStatus, Job, PMNote, ProjectFile, PurchaseOrder, SubmittalPackage } from "@/types";
 import { summarizeSubmittals } from "./submittals";
 
 export type JobDetailData = {
@@ -105,6 +105,55 @@ export function applyFileToJobDetail({
     files: [...(replaceSlot ? job.files.filter((candidate) => !matchingFileSlot(candidate)) : job.files), file],
     activity: [activity, ...job.activity]
   };
+}
+
+export function applyChangeOrderToJobDetail({
+  job,
+  changeOrder,
+  activity
+}: {
+  job: Job;
+  changeOrder: ChangeOrder;
+  activity: ActivityEvent;
+}): Job {
+  return {
+    ...job,
+    changeOrders: [...job.changeOrders, changeOrder],
+    activity: [activity, ...job.activity]
+  };
+}
+
+export function applyChangeOrderStatusToJobDetail({
+  job,
+  changeOrderId,
+  status,
+  approvedDate,
+  activity
+}: {
+  job: Job;
+  changeOrderId: string;
+  status: ChangeOrderStatus;
+  approvedDate: string | undefined;
+  activity: ActivityEvent;
+}): Job {
+  const found = job.changeOrders.some((co) => co.id === changeOrderId);
+  return {
+    ...job,
+    changeOrders: job.changeOrders.map((co) =>
+      co.id === changeOrderId ? { ...co, status, approvedDate } : co
+    ),
+    activity: found ? [activity, ...job.activity] : job.activity
+  };
+}
+
+export function remapCoActivityOwner(
+  activity: ActivityEvent,
+  localCoId: string,
+  savedCoId: string
+): ActivityEvent {
+  return activity.ownerType === "change_order" && activity.ownerId === localCoId
+    ? { ...activity, ownerId: savedCoId }
+    : activity;
 }
 
 function normalizeJobNumber(value: string) {
