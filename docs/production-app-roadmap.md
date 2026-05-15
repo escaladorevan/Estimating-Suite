@@ -1,10 +1,11 @@
 # Production App Roadmap
 
-This roadmap is the working checklist for turning Estimating Suite from a high-fidelity Next/Supabase prototype into a production app. Use it with the product blueprint, not instead of it.
+This roadmap is the working checklist for turning Estimating Suite from a high-fidelity Next/Supabase prototype into a production app. Use it with the product lodestar and product blueprint, not instead of them.
 
 ## How To Use This Plan
 
 - Before starting production work, identify which roadmap slice the task advances.
+- Check `docs/product-lodestar.md` when making product, UX, integration, automation, or prioritization decisions.
 - Do not add isolated UI behavior unless the data model, persistence path, and verification story are clear.
 - Check completed work against the acceptance criteria in the relevant slice before committing.
 - Update this roadmap when scope, order, or acceptance criteria change.

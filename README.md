@@ -31,11 +31,12 @@ The only remaining `project/` content should be reference uploads under `project
 - Job, CO, PO, submittal persistence: `src/lib/job-repository.ts`
 - File metadata/storage helpers: `src/lib/file-repository.ts`
 - Production database reset: `supabase/rebuild-production-schema.sql`
+- Product lodestar and taste guide: `docs/product-lodestar.md`
 - Product blueprint: `docs/product-blueprint-v1.md`
 - Production roadmap and agent checklist: `docs/production-app-roadmap.md`
 - Agent handoff guardrails: `docs/agent-handoff.md`
 
-Before starting production work, check the roadmap slice and acceptance criteria in `docs/production-app-roadmap.md`.
+Before starting production work, check the product lodestar in `docs/product-lodestar.md` and the roadmap slice and acceptance criteria in `docs/production-app-roadmap.md`.
 
 ## Supabase Schema
 
