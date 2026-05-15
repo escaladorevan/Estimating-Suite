@@ -27,7 +27,7 @@ import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChange
 import { calculateEstimateTotals } from "@/lib/estimate-math";
 import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
 import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
-import { applyFileToJobDetail, applyPurchaseOrderToJobDetail, applySubmittalToJobDetail, getJobDetailData } from "@/lib/job-detail-data";
+import { applyChangeOrderStatusToJobDetail, applyChangeOrderToJobDetail, applyFileToJobDetail, applyPurchaseOrderToJobDetail, applySubmittalToJobDetail, getJobDetailData } from "@/lib/job-detail-data";
 import { resolvePersistedJobForPMNote } from "@/lib/job-persistence-reconciliation";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
 import {
@@ -608,18 +608,12 @@ export default function Home() {
     };
 
     setJobs((current) =>
-      current.map((job) => {
-        if (job.id !== estimate.jobId) return job;
-        return {
-          ...job,
-          changeOrders: [...job.changeOrders, changeOrder],
-          activity: [activity, ...job.activity]
-        };
-      })
+      current.map((job) =>
+        job.id !== estimate.jobId ? job : applyChangeOrderToJobDetail({ job, changeOrder, activity })
+      )
     );
     if (isUuid(sourceJob.id)) {
-      void persistChangeOrder(changeOrder);
-      void persistActivity(activity);
+      void persistChangeOrder(changeOrder, activity);
     }
     setSelectedJobId(estimate.jobId);
     setDetailJobId(estimate.jobId);
@@ -629,9 +623,9 @@ export default function Home() {
   function approveSubmittedCo(jobId: string) {
     const job = jobs.find((j) => j.id === jobId);
     if (!job) return;
-    const approvedCos = job.changeOrders
-      .filter((co) => co.status === "submitted")
-      .map((co) => ({ ...co, status: "approved" as ChangeOrderStatus, approvedDate: today }));
+    const submittedCos = job.changeOrders.filter((co) => co.status === "submitted");
+    if (!submittedCos.length) return;
+    const approvedCos = submittedCos.map((co) => ({ ...co, status: "approved" as ChangeOrderStatus, approvedDate: today }));
     const activity: ActivityEvent = {
       id: `act-${Date.now()}`,
       ownerType: "job",
@@ -657,6 +651,37 @@ export default function Home() {
     if (isUuid(jobId)) {
       for (const co of approvedCos) void persistChangeOrder(co);
       void persistActivity(activity);
+    }
+  }
+
+  function updateChangeOrderStatus(jobId: string, coId: string, status: ChangeOrderStatus) {
+    const job = jobs.find((j) => j.id === jobId);
+    const co = job?.changeOrders.find((c) => c.id === coId);
+    if (!job || !co) return;
+
+    const approvedDate = status === "approved" ? today : undefined;
+    const messages: Record<string, string> = {
+      approved: `${co.number} approved and added to current contract.`,
+      rejected: `${co.number} rejected.`,
+      void: `${co.number} voided.`
+    };
+    const activity: ActivityEvent = {
+      id: `act-${Date.now()}`,
+      ownerType: "change_order",
+      ownerId: coId,
+      author: "System",
+      message: messages[status] ?? `${co.number} status updated to ${status}.`,
+      createdAt: today
+    };
+    const updatedCo: ChangeOrder = { ...co, status, approvedDate };
+
+    setJobs((current) =>
+      current.map((j) =>
+        j.id !== jobId ? j : applyChangeOrderStatusToJobDetail({ job: j, changeOrderId: coId, status, approvedDate, activity })
+      )
+    );
+    if (isUuid(jobId)) {
+      void persistChangeOrder(updatedCo, activity);
     }
   }
 
@@ -1181,6 +1206,7 @@ export default function Home() {
         <JobDetailModal
           job={detailJob}
           onApproveCos={approveSubmittedCo}
+          onUpdateCoStatus={updateChangeOrderStatus}
           onClose={() => setDetailJobId(null)}
           onCreatePurchaseOrder={createPurchaseOrder}
           onCreatePmNote={createPmNote}
@@ -2200,6 +2226,7 @@ function InstallDayModal({
 function JobDetailModal({
   job,
   onApproveCos,
+  onUpdateCoStatus,
   onClose,
   onCreatePurchaseOrder,
   onCreatePmNote,
@@ -2221,6 +2248,7 @@ function JobDetailModal({
 }: {
   job: Job;
   onApproveCos: (id: string) => void;
+  onUpdateCoStatus: (jobId: string, coId: string, status: ChangeOrderStatus) => void;
   onClose: () => void;
   onCreatePurchaseOrder: (jobId: string, input: Omit<PurchaseOrder, "id" | "jobId">) => void;
   onCreatePmNote: (text: string, jobId?: string) => void;
@@ -2732,6 +2760,13 @@ function JobDetailModal({
                     <div><span>Submitted</span><strong>{co.dateSubmitted}</strong></div>
                     <div><span>Approved</span><strong>{co.approvedDate || "-"}</strong></div>
                   </div>
+                  {co.status === "submitted" ? (
+                    <div className="financial-card-actions">
+                      <button className="primary" onClick={() => onUpdateCoStatus(job.id, co.id, "approved")}>Approve</button>
+                      <button className="primary muted-action" onClick={() => onUpdateCoStatus(job.id, co.id, "rejected")}>Reject</button>
+                      <button className="primary muted-action" onClick={() => onUpdateCoStatus(job.id, co.id, "void")}>Void</button>
+                    </div>
+                  ) : null}
                 </article>
               )) : <div className="empty-card">No change orders yet.</div>}
             </div>

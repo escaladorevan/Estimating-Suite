@@ -152,19 +152,43 @@ export function useJobsPersistence({
     }
   }, [detailJobId, estimates, jobs, pmNotes, selectedJobId, setDetailJobId, setEstimates, setJobs, setPmNotes, setSelectedJobId]);
 
-  const persistChangeOrder = useCallback(async (co: ChangeOrder) => {
+  const persistChangeOrder = useCallback(async (co: ChangeOrder, activity?: ActivityEvent) => {
     const localId = co.id;
     setJobPersistenceStatus(`Saving CO ${co.number}...`);
     try {
       const saved = await saveChangeOrder(co);
+      const remappedActivity = activity
+        ? activity.ownerType === "change_order"
+          ? { ...activity, ownerId: saved.id }
+          : activity
+        : null;
+      let persistedActivity: ActivityEvent | null = null;
+      let activityFailed = false;
+
+      if (remappedActivity && isUuid(remappedActivity.ownerId)) {
+        try {
+          persistedActivity = await saveActivityEvent(remappedActivity);
+        } catch {
+          activityFailed = true;
+        }
+      }
+
       setJobs((current) =>
         current.map((job) =>
           job.id !== co.jobId
             ? job
-            : { ...job, changeOrders: job.changeOrders.map((candidate) => (candidate.id === localId ? saved : candidate)) }
+            : {
+                ...job,
+                changeOrders: job.changeOrders.map((candidate) => (candidate.id === localId ? saved : candidate)),
+                activity: remappedActivity
+                  ? job.activity.map((candidate) =>
+                      candidate.id === remappedActivity.id ? persistedActivity ?? remappedActivity : candidate
+                    )
+                  : job.activity
+              }
         )
       );
-      setJobPersistenceStatus(`CO ${co.number} saved.`);
+      setJobPersistenceStatus(activityFailed ? `CO ${co.number} saved; activity is local only.` : `CO ${co.number} saved.`);
     } catch {
       setJobPersistenceStatus(`CO ${co.number} save failed - local only.`);
     }
