@@ -25,6 +25,7 @@ import {
   mapSubmittalToUpdate
 } from "./job-repository";
 import {
+  applySubmittalToJobDetail,
   getJobDetailData,
   replaceJobDetail
 } from "./job-detail-data";
@@ -1290,6 +1291,65 @@ describe("job detail data boundary", () => {
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe(persistedJob.id);
     expect(result[0].files).toHaveLength(1);
+  });
+
+  it("updates submittals, activity, and release backlog status through one detail helper", () => {
+    const job = {
+      id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      jobNumber: "G26-061",
+      workType: "Bid / ITB",
+      pm: "Geoff",
+      client: "Smoke GC",
+      projectName: "Smoke Test",
+      baseContract: 100000,
+      backlogStatus: "Submittals",
+      forecastStart: "",
+      forecastEnd: "",
+      forecastQuarter: "",
+      expectedFabStart: "",
+      expectedCompletion: "",
+      fabStatus: "Not Started",
+      installStart: "",
+      installEnd: "",
+      installStatus: "Ready",
+      invoiceStatus: "Not Billed",
+      crewSize: 2,
+      gc: "",
+      notes: "",
+      changeOrders: [],
+      purchaseOrders: [],
+      submittals: [
+        {
+          id: "sub-shops",
+          jobId: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+          name: "Shop Drawings",
+          type: "Shop Drawings",
+          status: "Submitted",
+          revision: 1,
+          dueDate: "2026-05-10",
+          releaseBlocker: true
+        }
+      ],
+      files: [],
+      activity: []
+    } satisfies Job;
+    const updated = applySubmittalToJobDetail({
+      job,
+      submittal: { ...job.submittals[0], status: "Approved" },
+      activity: {
+        id: "act-submittal",
+        ownerType: "submittal",
+        ownerId: "sub-shops",
+        author: "System",
+        message: "Shop Drawings checklist updated.",
+        createdAt: "2026-05-14"
+      },
+      today: "2026-05-14"
+    });
+
+    expect(updated.backlogStatus).toBe("Release Pending");
+    expect(updated.submittals[0].status).toBe("Approved");
+    expect(updated.activity[0]).toMatchObject({ id: "act-submittal", ownerType: "submittal" });
   });
 });
 

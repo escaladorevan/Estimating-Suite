@@ -27,7 +27,7 @@ import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChange
 import { calculateEstimateTotals } from "@/lib/estimate-math";
 import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
 import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
-import { getJobDetailData } from "@/lib/job-detail-data";
+import { applySubmittalToJobDetail, getJobDetailData } from "@/lib/job-detail-data";
 import { resolvePersistedJobForPMNote } from "@/lib/job-persistence-reconciliation";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
 import {
@@ -666,36 +666,22 @@ export default function Home() {
     const currentSub = job.submittals.find((s) => s.id === submittalId);
     if (!currentSub) return;
     const updatedSub = applySubmittalAction(currentSub, action, today);
-    const submittals = job.submittals.map((s) => (s.id === submittalId ? updatedSub : s));
-    const submittalSummary = summarizeSubmittals(submittals, today);
-    const shouldMoveToRelease =
-      submittalSummary.releaseState === "Ready" && ["Awarded / Waiting", "Submittals"].includes(job.backlogStatus);
-    const shouldMoveToSubmittals =
-      submittalSummary.releaseState !== "Ready" && job.backlogStatus === "Awarded / Waiting";
-    const newBacklogStatus = shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus;
+    const activity: ActivityEvent = {
+      id: `act-${Date.now()}`,
+      ownerType: "submittal",
+      ownerId: updatedSub.id,
+      author: "System",
+      message: `${updatedSub.name} moved to ${updatedSub.status}.`,
+      createdAt: today
+    };
 
     setJobs((current) =>
-      current.map((j) => {
-        if (j.id !== jobId) return j;
-        return {
-          ...j,
-          backlogStatus: newBacklogStatus,
-          submittals: j.submittals.map((s) => (s.id === submittalId ? updatedSub : s)),
-          activity: [
-            {
-              id: `act-${Date.now()}`,
-              ownerType: "submittal",
-              ownerId: updatedSub.id,
-              author: "System",
-              message: `${updatedSub.name} moved to ${updatedSub.status}.`,
-              createdAt: today
-            },
-            ...j.activity
-          ]
-        };
-      })
+      current.map((j) => (j.id === jobId ? applySubmittalToJobDetail({ job: j, submittal: updatedSub, activity, today }) : j))
     );
-    if (isUuid(jobId)) void persistSubmittal(updatedSub);
+    if (isUuid(jobId)) {
+      void persistSubmittal(updatedSub);
+      void persistActivity(activity);
+    }
   }
 
   function createJobSubmittal(
@@ -733,36 +719,22 @@ export default function Home() {
     const current = job.submittals.find((s) => s.id === submittalId);
     if (!current) return;
     const updatedSub = updateSubmittalPackage(current, updates);
-    const submittals = job.submittals.map((s) => (s.id === submittalId ? updatedSub : s));
-    const submittalSummary = summarizeSubmittals(submittals, today);
-    const shouldMoveToRelease =
-      submittalSummary.releaseState === "Ready" && ["Awarded / Waiting", "Submittals"].includes(job.backlogStatus);
-    const shouldMoveToSubmittals =
-      submittalSummary.releaseState !== "Ready" && job.backlogStatus === "Awarded / Waiting";
-    const newBacklogStatus = shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus;
+    const activity: ActivityEvent = {
+      id: `act-${Date.now()}`,
+      ownerType: "submittal",
+      ownerId: updatedSub.id,
+      author: "System",
+      message: `${updatedSub.name} package updated.`,
+      createdAt: today
+    };
 
     setJobs((current) =>
-      current.map((j) => {
-        if (j.id !== jobId) return j;
-        return {
-          ...j,
-          backlogStatus: newBacklogStatus,
-          submittals: j.submittals.map((s) => (s.id === submittalId ? updatedSub : s)),
-          activity: [
-            {
-              id: `act-${Date.now()}`,
-              ownerType: "submittal",
-              ownerId: updatedSub.id,
-              author: "System",
-              message: `${updatedSub.name} package updated.`,
-              createdAt: today
-            },
-            ...j.activity
-          ]
-        };
-      })
+      current.map((j) => (j.id === jobId ? applySubmittalToJobDetail({ job: j, submittal: updatedSub, activity, today }) : j))
     );
-    if (isUuid(jobId)) void persistSubmittal(updatedSub);
+    if (isUuid(jobId)) {
+      void persistSubmittal(updatedSub);
+      void persistActivity(activity);
+    }
   }
 
   function updateSubmittalChecklist(
@@ -775,36 +747,22 @@ export default function Home() {
     const current = job.submittals.find((s) => s.id === submittalId);
     if (!current) return;
     const updatedSub = setSubmittalChecklistState(current, updates, today);
-    const submittals = job.submittals.map((s) => (s.id === submittalId ? updatedSub : s));
-    const submittalSummary = summarizeSubmittals(submittals, today);
-    const shouldMoveToRelease =
-      submittalSummary.releaseState === "Ready" && ["Awarded / Waiting", "Submittals"].includes(job.backlogStatus);
-    const shouldMoveToSubmittals =
-      submittalSummary.releaseState !== "Ready" && job.backlogStatus === "Awarded / Waiting";
-    const newBacklogStatus = shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus;
+    const activity: ActivityEvent = {
+      id: `act-${Date.now()}`,
+      ownerType: "submittal",
+      ownerId: updatedSub.id,
+      author: "System",
+      message: `${updatedSub.name} checklist updated.`,
+      createdAt: today
+    };
 
     setJobs((current) =>
-      current.map((j) => {
-        if (j.id !== jobId) return j;
-        return {
-          ...j,
-          backlogStatus: newBacklogStatus,
-          submittals: j.submittals.map((s) => (s.id === submittalId ? updatedSub : s)),
-          activity: [
-            {
-              id: `act-${Date.now()}`,
-              ownerType: "submittal",
-              ownerId: updatedSub.id,
-              author: "System",
-              message: `${updatedSub.name} checklist updated.`,
-              createdAt: today
-            },
-            ...j.activity
-          ]
-        };
-      })
+      current.map((j) => (j.id === jobId ? applySubmittalToJobDetail({ job: j, submittal: updatedSub, activity, today }) : j))
     );
-    if (isUuid(jobId)) void persistSubmittal(updatedSub);
+    if (isUuid(jobId)) {
+      void persistSubmittal(updatedSub);
+      void persistActivity(activity);
+    }
   }
 
   function createPurchaseOrder(jobId: string, input: Omit<PurchaseOrder, "id" | "jobId">) {

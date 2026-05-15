@@ -1,4 +1,5 @@
-import type { Job, PMNote } from "@/types";
+import type { ActivityEvent, Job, PMNote, SubmittalPackage } from "@/types";
+import { summarizeSubmittals } from "./submittals";
 
 export type JobDetailData = {
   job: Job;
@@ -37,6 +38,32 @@ export function replaceJobDetail(jobs: Job[], persistedJob: Job) {
   });
 
   return replaced ? nextJobs : [persistedJob, ...nextJobs];
+}
+
+export function applySubmittalToJobDetail({
+  job,
+  submittal,
+  activity,
+  today
+}: {
+  job: Job;
+  submittal: SubmittalPackage;
+  activity: ActivityEvent;
+  today: string;
+}): Job {
+  const nextSubmittals = job.submittals.map((item) => (item.id === submittal.id ? submittal : item));
+  const submittalSummary = summarizeSubmittals(nextSubmittals, today);
+  const shouldMoveToRelease =
+    submittalSummary.releaseState === "Ready" && ["Awarded / Waiting", "Submittals"].includes(job.backlogStatus);
+  const shouldMoveToSubmittals =
+    submittalSummary.releaseState !== "Ready" && job.backlogStatus === "Awarded / Waiting";
+
+  return {
+    ...job,
+    backlogStatus: shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus,
+    submittals: nextSubmittals,
+    activity: [activity, ...job.activity]
+  };
 }
 
 function normalizeJobNumber(value: string) {
