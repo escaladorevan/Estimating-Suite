@@ -36,6 +36,10 @@ import { mapOpportunityFromRow, mapOpportunityToUpsert } from "./opportunity-rep
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "./opportunity-import";
 import { CHANGE_ORDER_STATUSES, OPPORTUNITY_STATUSES } from "./status-constants";
 import { reconcilePersistedJobIdentity, resolvePersistedJobForPMNote } from "./job-persistence-reconciliation";
+import { bomComponentsToCsv } from "./takeoff-csv";
+import { expandTakeoff } from "./takeoff-engine";
+import { findTakeoffRule } from "./takeoff-rules";
+import { pricingLibrary } from "./pricing-library";
 import { filterOpportunitiesForView, suggestJobNumber } from "./opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote } from "./pm-actions";
 import { addMonthsToCalendarMonth, buildCapacityWeeks, buildInstallCalendarMonth } from "./schedule-capacity";
@@ -1292,6 +1296,57 @@ describe("change order workflow", () => {
       pendingCoTotal: 2500,
       currentContract: 105000
     });
+  });
+});
+
+describe("takeoff BOM library", () => {
+  it("matches only true upper cabinet run items for the upper cabinet BOM rule", () => {
+    const upperRun = pricingLibrary.find((item) => item.name === "Uppers w/Doors, 32\"-38\"h");
+    const lightValence = pricingLibrary.find((item) => item.name === "Light Valence");
+    const finishedEnd = pricingLibrary.find((item) => item.name === "Finished End @ Upper Cabinet");
+
+    expect(upperRun).toBeDefined();
+    expect(findTakeoffRule(upperRun!)).toMatchObject({ id: "upper-cab-plam" });
+    expect(lightValence).toBeDefined();
+    expect(findTakeoffRule(lightValence!)).toBeNull();
+    expect(finishedEnd).toBeDefined();
+    expect(findTakeoffRule(finishedEnd!)).toBeNull();
+  });
+
+  it("keeps imported pricing library ids unique even when descriptions repeat", () => {
+    const ids = new Set(pricingLibrary.map((item) => item.id));
+    expect(ids.size).toBe(pricingLibrary.length);
+
+    const duplicates = pricingLibrary.filter((item) => item.name === "Angled Plam Panels w/Painted Reveals @ DW");
+    expect(duplicates.length).toBeGreaterThan(1);
+    expect(new Set(duplicates.map((item) => item.id)).size).toBe(duplicates.length);
+    expect(new Set(duplicates.map((item) => `${item.category}:${item.unitCost}`)).size).toBeGreaterThan(1);
+  });
+
+  it("escapes quotes when exporting BOM components as CSV", () => {
+    const csv = bomComponentsToCsv([
+      {
+        label: "MDF 3/4\" - Door Substrate",
+        qty: 12.5,
+        unit: "SF",
+        unitCost: 0,
+        totalCost: 0,
+        category: "material"
+      }
+    ]);
+
+    expect(csv.split("\n")[1]).toBe("\"MDF 3/4\"\" - Door Substrate\",\"12.5\",\"SF\",\"0\",\"0\",\"material\"");
+  });
+
+  it("expands an upper cabinet takeoff into a purchase BOM", () => {
+    const upperRun = pricingLibrary.find((item) => item.name === "Uppers w/Doors, 32\"-38\"h");
+    const rule = upperRun ? findTakeoffRule(upperRun) : null;
+
+    expect(rule).not.toBeNull();
+    const components = expandTakeoff(rule!, { heightIn: 32, depthIn: 12, bayWidthIn: 18, exposedEnds: 1 }, 10);
+
+    expect(components.some((component) => component.label === "Blum Hinges (cups)" && component.qty > 0)).toBe(true);
+    expect(components.some((component) => component.label === "PLAM - Door Faces" && component.qty > 0)).toBe(true);
   });
 });
 

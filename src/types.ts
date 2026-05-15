@@ -41,6 +41,48 @@ export type Opportunity = {
   files?: ProjectFile[];
 };
 
+export type TakeoffParam = {
+  key: string;
+  label: string;
+  inputType: "number" | "integer";
+  default: number;
+  min: number;
+  max: number;
+};
+
+export type TakeoffComponentDef = {
+  label: string;
+  unit: string;
+  category: "hardware" | "material" | "labor";
+  formula: string;
+  unitCost: number;
+};
+
+export type TakeoffRule = {
+  id: string;
+  name: string;
+  matchCategoryFragment: string;
+  matchesItem?: (item: { category: string; name: string; description: string; unit: string }) => boolean;
+  params: TakeoffParam[];
+  derivedVars: Record<string, string>;
+  components: TakeoffComponentDef[];
+};
+
+export type BOMComponent = {
+  label: string;
+  unit: string;
+  qty: number;
+  unitCost: number;
+  totalCost: number;
+  category: "hardware" | "material" | "labor";
+};
+
+export type TakeoffExpansion = {
+  ruleId: string;
+  ruleName: string;
+  paramValues: Record<string, number>;
+};
+
 export type EstimateItem = {
   id?: string;
   name?: string;
@@ -53,6 +95,7 @@ export type EstimateItem = {
   unitCost: number;
   ignored?: boolean;
   noPrint?: boolean;
+  takeoffExpansion?: TakeoffExpansion;
 };
 
 export type EstimateSection = {

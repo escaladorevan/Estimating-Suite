@@ -4,12 +4,15 @@ import { Clipboard, ClipboardPaste, FileDown, FolderPlus, Library, Plus, Trash2 
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { calculateEstimateTotals } from "../lib/estimate-math";
-import { libraryItemToEstimateItem, pricingLibrary } from "../lib/pricing-library";
+import { libraryItemToEstimateItem, pricingLibrary, type PricingLibraryItem } from "../lib/pricing-library";
+import { bomComponentsToCsv } from "../lib/takeoff-csv";
+import { expandTakeoff } from "../lib/takeoff-engine";
+import { findTakeoffRule, takeoffRules } from "../lib/takeoff-rules";
 import { estimateItemsToClipboardText, parseClipboardLineItems } from "../lib/workbook-clipboard";
 import { cloneArea, cloneItems, cloneSection } from "../lib/workbook-copy";
-import type { Estimate, EstimateArea, EstimateDocumentType, EstimateItem, EstimateSection } from "../types";
+import type { BOMComponent, Estimate, EstimateArea, EstimateDocumentType, EstimateItem, EstimateSection, TakeoffRule } from "../types";
 
-type WorkbookView = "info" | "basebid" | "area" | "alternates" | "exclusions" | "clarifications";
+type WorkbookView = "info" | "basebid" | "area" | "alternates" | "exclusions" | "clarifications" | "takeoff";
 type PasteRowsTarget = { areaId: string; sectionId: string } | null;
 type PasteAreaTarget = "estimate" | null;
 type PasteSectionTarget = { areaId: string } | null;
@@ -45,7 +48,12 @@ export function BidWorkbook({
   const [pasteSectionTarget, setPasteSectionTarget] = useState<PasteSectionTarget>(null);
   const [pasteRowsTarget, setPasteRowsTarget] = useState<PasteRowsTarget>(null);
   const [focusAreaNameId, setFocusAreaNameId] = useState<string | null>(null);
+  const [takeoffModal, setTakeoffModal] = useState<{ item: PricingLibraryItem; rule: TakeoffRule } | null>(null);
+  const [takeoffParams, setTakeoffParams] = useState<Record<string, number>>({});
   const totals = calculateEstimateTotals(estimate);
+  const hasTakeoffItems = estimate.areas.some((area) =>
+    area.sections.some((section) => section.items.some((item) => item.takeoffExpansion))
+  );
   const selectedArea = estimate.areas.find((area) => area.id === selectedAreaId) ?? estimate.areas[0];
   const selectedSection = selectedArea?.sections.find((section) => section.id === selectedSectionId) ?? selectedArea?.sections[0];
 
@@ -247,7 +255,47 @@ export function BidWorkbook({
   function insertLibraryItem(itemId: string) {
     const item = pricingLibrary.find((candidate) => candidate.id === itemId);
     if (!item || !selectedArea || !selectedSection) return;
+    const rule = findTakeoffRule(item);
+    if (rule) {
+      const defaults: Record<string, number> = {};
+      rule.params.forEach((param) => {
+        defaults[param.key] = param.default;
+      });
+      setTakeoffParams(defaults);
+      setTakeoffModal({ item, rule });
+      return;
+    }
     addItem(selectedArea.id!, selectedSection.id!, libraryItemToEstimateItem(item));
+  }
+
+  function insertWithTakeoff() {
+    if (!takeoffModal || !selectedArea || !selectedSection) return;
+    const base = libraryItemToEstimateItem(takeoffModal.item);
+    addItem(selectedArea.id!, selectedSection.id!, {
+      ...base,
+      takeoffExpansion: {
+        ruleId: takeoffModal.rule.id,
+        ruleName: takeoffModal.rule.name,
+        paramValues: takeoffParams
+      }
+    });
+    setTakeoffModal(null);
+  }
+
+  function insertWithoutTakeoff() {
+    if (!takeoffModal || !selectedArea || !selectedSection) return;
+    addItem(selectedArea.id!, selectedSection.id!, libraryItemToEstimateItem(takeoffModal.item));
+    setTakeoffModal(null);
+  }
+
+  function exportBomCsv(components: BOMComponent[]) {
+    const blob = new Blob([bomComponentsToCsv(components)], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `takeoff-${estimate.projectName.replace(/\s+/g, "-")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -325,6 +373,9 @@ export function BidWorkbook({
           <button className={view === "alternates" ? "active" : ""} onClick={() => setView("alternates")}>Alternates</button>
           <button className={view === "exclusions" ? "active" : ""} onClick={() => setView("exclusions")}>Exclusions</button>
           <button className={view === "clarifications" ? "active" : ""} onClick={() => setView("clarifications")}>Clarifications</button>
+          {hasTakeoffItems ? (
+            <button className={view === "takeoff" ? "active takeoff-tab" : "takeoff-tab"} onClick={() => setView("takeoff")}>Takeoff</button>
+          ) : null}
         </aside>
 
         <section className="workbook-center">
@@ -358,18 +409,22 @@ export function BidWorkbook({
           {view === "alternates" && <Alternates estimate={estimate} patch={patch} />}
           {view === "exclusions" && <Terms title="Exclusions" values={estimate.exclusions} onChange={(exclusions) => patch({ exclusions })} />}
           {view === "clarifications" && <Terms title="Clarifications" values={estimate.clarifications} onChange={(clarifications) => patch({ clarifications })} />}
+          {view === "takeoff" && <TakeoffSummary estimate={estimate} onExport={exportBomCsv} onItemChange={updateItem} />}
         </section>
 
         <aside className="workbook-library">
           <div className="library-head"><Library size={15} /> Pricing Library</div>
           <input placeholder="Search item, category, description" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} />
           <div className="library-list">
-            {filteredLibrary.map((item) => (
+            {filteredLibrary.map((item) => {
+              const hasTakeoff = Boolean(findTakeoffRule(item));
+              return (
               <button key={item.id} onClick={() => insertLibraryItem(item.id)}>
-                <strong>{item.name}</strong>
+                <strong>{item.name}{hasTakeoff ? <span className="takeoff-badge" title="Has takeoff BOM rule">T</span> : null}</strong>
                 <span>{item.category} - {item.unit} - {money.format(item.unitCost)}</span>
               </button>
-            ))}
+              );
+            })}
           </div>
         </aside>
       </div>
@@ -395,6 +450,17 @@ export function BidWorkbook({
           count={copiedItems.length}
           onCancel={() => setPasteRowsTarget(null)}
           onPaste={(options) => pasteRows(pasteRowsTarget, options)}
+        />
+      ) : null}
+      {takeoffModal ? (
+        <TakeoffModal
+          item={takeoffModal.item}
+          onCancel={() => setTakeoffModal(null)}
+          onInsertWithTakeoff={insertWithTakeoff}
+          onInsertWithout={insertWithoutTakeoff}
+          onParamChange={(key, value) => setTakeoffParams((current) => ({ ...current, [key]: value }))}
+          params={takeoffParams}
+          rule={takeoffModal.rule}
         />
       ) : null}
     </div>
@@ -644,7 +710,15 @@ function AreaEditor({
               {section.items.map((item) => (
                 <tr className={item.id && selectedSet.has(item.id) ? "selected-row" : ""} key={item.id}>
                   <td><input checked={Boolean(item.id && selectedSet.has(item.id))} type="checkbox" onChange={(event) => item.id && onItemSelectionChange(item.id, event.target.checked)} /></td>
-                  <td><input value={item.name ?? ""} onChange={(event) => onItemChange(section.id!, item.id!, { name: event.target.value })} /></td>
+                  <td>
+                    <input value={item.name ?? ""} onChange={(event) => onItemChange(section.id!, item.id!, { name: event.target.value })} />
+                    {item.takeoffExpansion ? (
+                      <span className="takeoff-row-badge" title={`BOM attached: ${item.takeoffExpansion.ruleName}`}>
+                        T
+                        <button onClick={() => onItemChange(section.id!, item.id!, { takeoffExpansion: undefined })}>Detach</button>
+                      </span>
+                    ) : null}
+                  </td>
                   <td><input type="number" value={item.qty} onChange={(event) => onItemChange(section.id!, item.id!, { qty: Number(event.target.value) })} /></td>
                   <td><input value={item.unit ?? ""} onChange={(event) => onItemChange(section.id!, item.id!, { unit: event.target.value })} /></td>
                   <td><input type="number" value={item.unitCost} onChange={(event) => onItemChange(section.id!, item.id!, { unitCost: Number(event.target.value) })} /></td>
@@ -706,4 +780,229 @@ function Terms({ title, values, onChange }: { title: string; values: string[]; o
 
 function MetricLine({ label, value, strong }: { label: string; value: number; strong?: boolean }) {
   return <div className={strong ? "strong" : ""}><span>{label}</span><b>{money.format(value)}</b></div>;
+}
+
+function TakeoffModal({
+  item,
+  rule,
+  params,
+  onCancel,
+  onInsertWithTakeoff,
+  onInsertWithout,
+  onParamChange
+}: {
+  item: PricingLibraryItem;
+  rule: TakeoffRule;
+  params: Record<string, number>;
+  onCancel: () => void;
+  onInsertWithTakeoff: () => void;
+  onInsertWithout: () => void;
+  onParamChange: (key: string, value: number) => void;
+}) {
+  const preview = useMemo(() => {
+    try {
+      return expandTakeoff(rule, params, params.lengthLF ?? 1);
+    } catch {
+      return null;
+    }
+  }, [params, rule]);
+  const bomTotal = preview?.reduce((sum, component) => sum + component.totalCost, 0) ?? 0;
+  const groups = preview ? groupBomByCategory(preview) : [];
+
+  return (
+    <div className="takeoff-modal-overlay" role="dialog" aria-label="Attach takeoff BOM">
+      <div className="takeoff-modal">
+        <div className="takeoff-modal-head">
+          <div>
+            <h3>Attach Takeoff BOM</h3>
+            <p>{item.name}</p>
+          </div>
+          <button onClick={onCancel}>x</button>
+        </div>
+        <div className="takeoff-params">
+          {rule.params.map((param) => (
+            <label key={param.key}>
+              {param.label}
+              <input
+                max={param.max}
+                min={param.min}
+                onChange={(event) => onParamChange(param.key, Number(event.target.value))}
+                step={param.inputType === "integer" ? 1 : 0.25}
+                type="number"
+                value={params[param.key] ?? param.default}
+              />
+            </label>
+          ))}
+        </div>
+        <div className="takeoff-preview">
+          <table>
+            <thead><tr><th>Component</th><th>Qty</th><th>Unit</th><th>@ Cost</th><th>Total</th></tr></thead>
+            <tbody>
+              {groups.map(({ category, items }) => (
+                <FragmentRows category={category} items={items} key={category} />
+              ))}
+            </tbody>
+            <tfoot>
+              <tr><td colSpan={4}>BOM purchasing ref</td><td>{bomTotal ? money.format(bomTotal) : "Pricing TBD"}</td></tr>
+            </tfoot>
+          </table>
+        </div>
+        <div className="takeoff-modal-actions">
+          <button onClick={onCancel}>Cancel</button>
+          <button onClick={onInsertWithout}>Insert without Takeoff</button>
+          <button className="primary" onClick={onInsertWithTakeoff}>Insert with Takeoff</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FragmentRows({ category, items }: { category: BOMComponent["category"]; items: BOMComponent[] }) {
+  return (
+    <>
+      <tr className="takeoff-category-row"><td colSpan={5}>{category.toUpperCase()}</td></tr>
+      {items.map((component) => (
+        <tr key={component.label}>
+          <td>{component.label}</td>
+          <td>{component.qty}</td>
+          <td>{component.unit}</td>
+          <td>{component.unitCost ? money.format(component.unitCost) : "-"}</td>
+          <td>{component.totalCost ? money.format(component.totalCost) : "-"}</td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function TakeoffSummary({
+  estimate,
+  onExport,
+  onItemChange
+}: {
+  estimate: Estimate;
+  onExport: (components: BOMComponent[]) => void;
+  onItemChange: (areaId: string, sectionId: string, itemId: string, fields: Partial<EstimateItem>) => void;
+}) {
+  const [installPct, setInstallPct] = useState(6);
+  const [targetGpPct, setTargetGpPct] = useState(35);
+  const components = aggregateBom(estimate);
+  const groups = groupBomByCategory(components);
+  const takeoffLines = estimate.areas.flatMap((area) =>
+    area.sections.flatMap((section) =>
+      section.items
+        .filter((item) => item.takeoffExpansion)
+        .map((item) => ({ areaId: area.id!, sectionId: section.id!, item }))
+    )
+  );
+  const bidTotal = calculateEstimateTotals(estimate).bidTotal;
+  const bomTotal = components.reduce((sum, component) => sum + component.totalCost, 0);
+  const installCost = bidTotal * (installPct / 100);
+  const cogs = bomTotal + installCost;
+  const grossProfit = bidTotal - cogs;
+  const gpPct = bidTotal ? (grossProfit / bidTotal) * 100 : 0;
+
+  return (
+    <div className="workbook-panel takeoff-summary">
+      <div className="takeoff-header">
+        <div>
+          <h2>Takeoff</h2>
+          <p>BOM costs are a purchasing reference and are not added to estimate pricing.</p>
+        </div>
+        <button disabled={!components.length} onClick={() => onExport(components)}><FileDown size={14} /> Export BOM CSV</button>
+      </div>
+
+      <h3 className="takeoff-cat-head">Attached Line Items</h3>
+      {takeoffLines.length ? (
+        <table className="workbook-table takeoff-table">
+          <thead><tr><th>Item</th><th>Qty</th><th>Rule</th><th>Dimensions</th><th></th></tr></thead>
+          <tbody>
+            {takeoffLines.map(({ areaId, sectionId, item }) => (
+              <tr key={item.id}>
+                <td>{item.name}</td>
+                <td>{item.qty} {item.unit}</td>
+                <td>{item.takeoffExpansion!.ruleName}</td>
+                <td>{Object.entries(item.takeoffExpansion!.paramValues).map(([key, value]) => `${key}=${value}`).join(" / ")}</td>
+                <td><button onClick={() => onItemChange(areaId, sectionId, item.id!, { takeoffExpansion: undefined })}>Detach</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : <p className="takeoff-empty">No takeoff rules attached. Add items from the library with a T badge.</p>}
+
+      <h3 className="takeoff-cat-head">Bill of Materials</h3>
+      {groups.map(({ category, items }) => (
+        <div key={category}>
+          <h4 className="takeoff-subcat-head">{category.toUpperCase()}</h4>
+          <table className="workbook-table takeoff-table">
+            <thead><tr><th>Component</th><th>Qty</th><th>Unit</th><th>@ Cost</th><th>Total</th></tr></thead>
+            <tbody>
+              {items.map((component) => (
+                <tr key={component.label}>
+                  <td>{component.label}</td>
+                  <td>{component.qty}</td>
+                  <td>{component.unit}</td>
+                  <td>{component.unitCost ? money.format(component.unitCost) : "-"}</td>
+                  <td>{component.totalCost ? money.format(component.totalCost) : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+      <div className="takeoff-grand-total"><span>BOM Material Total</span><strong>{bomTotal ? money.format(bomTotal) : "Pricing TBD"}</strong></div>
+
+      <h3 className="takeoff-cat-head">Margin Calculus</h3>
+      <div className="margin-grid">
+        <div className="margin-row"><span>Base Bid Total</span><strong>{money.format(bidTotal)}</strong></div>
+        <div className="margin-row"><span>Material COGS (BOM)</span><span>{bomTotal ? money.format(bomTotal) : "Pending pricing"}</span></div>
+        <div className="margin-row">
+          <label>Install %<input min={0} onChange={(event) => setInstallPct(Number(event.target.value))} type="number" value={installPct} /></label>
+          <span>{money.format(installCost)}</span>
+        </div>
+        <div className="margin-row">
+          <label>Target GP %<input min={0} onChange={(event) => setTargetGpPct(Number(event.target.value))} type="number" value={targetGpPct} /></label>
+          <span>{targetGpPct}%</span>
+        </div>
+        <div className={gpPct >= targetGpPct ? "margin-row margin-good" : "margin-row margin-warn"}>
+          <span>Projected GP</span><strong>{bidTotal ? `${gpPct.toFixed(1)}% (${money.format(grossProfit)})` : "TBD"}</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function aggregateBom(estimate: Estimate): BOMComponent[] {
+  const byLabel = new Map<string, BOMComponent>();
+  for (const area of estimate.areas) {
+    for (const section of area.sections) {
+      for (const item of section.items) {
+        if (!item.takeoffExpansion || !item.qty) continue;
+        const rule = takeoffRules.find((candidate) => candidate.id === item.takeoffExpansion!.ruleId);
+        if (!rule) continue;
+        let components: BOMComponent[];
+        try {
+          components = expandTakeoff(rule, item.takeoffExpansion.paramValues, item.qty);
+        } catch {
+          continue;
+        }
+        for (const component of components) {
+          const key = `${component.label}-${component.unit}-${component.category}`;
+          const existing = byLabel.get(key);
+          if (existing) {
+            existing.qty = Math.round((existing.qty + component.qty) * 100) / 100;
+            existing.totalCost = Math.round(existing.qty * existing.unitCost * 100) / 100;
+          } else {
+            byLabel.set(key, { ...component });
+          }
+        }
+      }
+    }
+  }
+  return [...byLabel.values()];
+}
+
+function groupBomByCategory(components: BOMComponent[]) {
+  return (["hardware", "material", "labor"] as const)
+    .map((category) => ({ category, items: components.filter((component) => component.category === category) }))
+    .filter((group) => group.items.length);
 }
