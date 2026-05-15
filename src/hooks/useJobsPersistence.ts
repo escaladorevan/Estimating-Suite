@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { saveEstimateHeader } from "@/lib/estimate-repository";
 import { pruneProjectFileSlotMetadata, saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
-import { replaceJobDetail } from "@/lib/job-detail-data";
+import { remapCoActivityOwner, replaceJobDetail } from "@/lib/job-detail-data";
 import { reconcilePersistedJobIdentity } from "@/lib/job-persistence-reconciliation";
 import {
   deletePMNote,
@@ -157,11 +157,7 @@ export function useJobsPersistence({
     setJobPersistenceStatus(`Saving CO ${co.number}...`);
     try {
       const saved = await saveChangeOrder(co);
-      const remappedActivity = activity
-        ? activity.ownerType === "change_order"
-          ? { ...activity, ownerId: saved.id }
-          : activity
-        : null;
+      const remappedActivity = activity ? remapCoActivityOwner(activity, localId, saved.id) : null;
       let persistedActivity: ActivityEvent | null = null;
       let activityFailed = false;
 

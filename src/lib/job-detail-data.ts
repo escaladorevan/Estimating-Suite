@@ -136,13 +136,24 @@ export function applyChangeOrderStatusToJobDetail({
   approvedDate: string | undefined;
   activity: ActivityEvent;
 }): Job {
+  const found = job.changeOrders.some((co) => co.id === changeOrderId);
   return {
     ...job,
     changeOrders: job.changeOrders.map((co) =>
       co.id === changeOrderId ? { ...co, status, approvedDate } : co
     ),
-    activity: [activity, ...job.activity]
+    activity: found ? [activity, ...job.activity] : job.activity
   };
+}
+
+export function remapCoActivityOwner(
+  activity: ActivityEvent,
+  localCoId: string,
+  savedCoId: string
+): ActivityEvent {
+  return activity.ownerType === "change_order" && activity.ownerId === localCoId
+    ? { ...activity, ownerId: savedCoId }
+    : activity;
 }
 
 function normalizeJobNumber(value: string) {

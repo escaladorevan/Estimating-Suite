@@ -34,6 +34,7 @@ import {
   applyChangeOrderStatusToJobDetail,
   applyChangeOrderToJobDetail,
   applyFileToJobDetail,
+  remapCoActivityOwner,
   applyPurchaseOrderToJobDetail,
   applySubmittalToJobDetail,
   getJobDetailData,
@@ -1701,6 +1702,33 @@ describe("job detail data boundary", () => {
     expect(currentContractValue(job.baseContract, job.changeOrders)).toBe(100000);
     const approved = applyChangeOrderStatusToJobDetail({ job, changeOrderId: "co-local-001", status: "approved", approvedDate: "2026-05-15", activity });
     expect(currentContractValue(approved.baseContract, approved.changeOrders)).toBe(108500);
+  });
+
+  it("does not prepend activity when the changeOrderId is not found", () => {
+    const job = { ...baseJob, changeOrders: [submittedCo] };
+    const activity = { id: "act-noop", ownerType: "change_order" as const, ownerId: "co-not-here", author: "System", message: "ignored", createdAt: "2026-05-15" };
+    const updated = applyChangeOrderStatusToJobDetail({ job, changeOrderId: "co-not-here", status: "approved", approvedDate: "2026-05-15", activity });
+    expect(updated.activity).toHaveLength(0);
+    expect(updated.changeOrders[0].status).toBe("submitted");
+  });
+
+  it("remaps CO-owned activity ownerId from local id to saved UUID", () => {
+    const local = { id: "act-remap", ownerType: "change_order" as const, ownerId: "co-local-001", author: "System", message: "CO-001 approved.", createdAt: "2026-05-15" };
+    const remapped = remapCoActivityOwner(local, "co-local-001", "550e8400-e29b-41d4-a716-446655440000");
+    expect(remapped.ownerId).toBe("550e8400-e29b-41d4-a716-446655440000");
+    expect(remapped.id).toBe("act-remap");
+  });
+
+  it("does not remap job-owned activity from a workbook CO submission", () => {
+    const jobActivity = { id: "act-job", ownerType: "job" as const, ownerId: "job-uuid-abc", author: "System", message: "CO-001 submitted.", createdAt: "2026-05-15" };
+    const result = remapCoActivityOwner(jobActivity, "co-local-001", "550e8400-e29b-41d4-a716-446655440000");
+    expect(result.ownerId).toBe("job-uuid-abc");
+  });
+
+  it("does not remap when activity ownerId does not match the local CO id", () => {
+    const activity = { id: "act-other", ownerType: "change_order" as const, ownerId: "co-other-002", author: "System", message: "CO-002 rejected.", createdAt: "2026-05-15" };
+    const result = remapCoActivityOwner(activity, "co-local-001", "550e8400-e29b-41d4-a716-446655440000");
+    expect(result.ownerId).toBe("co-other-002");
   });
 });
 

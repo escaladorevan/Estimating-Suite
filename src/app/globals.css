@@ -1879,6 +1879,19 @@ td strong {
   white-space: nowrap;
 }
 
+.financial-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.financial-card-actions .primary {
+  flex: 1;
+  font-size: 12px;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
 .empty-card {
   align-items: center;
   background: var(--panel-alt);
