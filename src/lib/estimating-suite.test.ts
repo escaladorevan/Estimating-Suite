@@ -6,6 +6,7 @@ import { calculateEstimateTotals } from "./estimate-math";
 import { mapEstimateFromRow, mapEstimateSnapshotToInsert, mapEstimateToUpsert } from "./estimate-repository";
 import { buildProjectFileStoragePath, mapProjectFileFromRow, mapProjectFileToInsert } from "./file-repository";
 import {
+  getJobDetail,
   mapActivityEventFromRow,
   mapActivityEventToInsert,
   mapChangeOrderFromRow,
@@ -938,6 +939,177 @@ describe("job repository mapping", () => {
 describe("job detail tabs", () => {
   it("keeps the PM job workspace organized into stable tabs", () => {
     expect(jobDetailTabs.map((tab) => tab.id)).toEqual(["actions", "submittals", "financials", "files", "activity"]);
+  });
+});
+
+describe("isUuid utility", () => {
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const checkUuid = (value: string) => UUID_REGEX.test(value);
+
+  it("returns false for local sample ids", () => {
+    expect(checkUuid("job-g060")).toBe(false);
+    expect(checkUuid("co-local")).toBe(false);
+    expect(checkUuid("")).toBe(false);
+  });
+
+  it("returns true for valid UUIDs", () => {
+    expect(checkUuid("50f42d9f-b53f-4a97-b711-dc8b1cd13384")).toBe(true);
+    expect(checkUuid("2dd51464-96d7-4ed1-ae7e-35ab2e92f865")).toBe(true);
+  });
+});
+
+describe("getJobDetail", () => {
+  const jobUuid = "50f42d9f-b53f-4a97-b711-dc8b1cd13384";
+  const poUuid = "8f861063-22d2-4db4-8a0f-b5f8b8f70a1b";
+  const fileForJobUuid = "aaaaaaaa-0000-1000-8000-000000000001";
+  const fileForPoUuid = "bbbbbbbb-0000-1000-8000-000000000002";
+
+  function makeChain(result: { data: unknown; error: null }): Record<string, unknown> {
+    const proxy: Record<string, unknown> = {};
+    function makeMethod(name: string) {
+      return (..._args: unknown[]): unknown => {
+        if (name === "maybeSingle" || name === "single") return Promise.resolve(result);
+        if (name === "order") return Promise.resolve(result);
+        return proxy;
+      };
+    }
+    for (const method of ["select", "eq", "in", "order", "maybeSingle", "single"]) {
+      proxy[method] = makeMethod(method);
+    }
+    return proxy;
+  }
+
+  function makeMockClient(tableResponses: Record<string, { data: unknown; error: null }>) {
+    return {
+      from: (table: string) => {
+        const result = tableResponses[table] ?? { data: [], error: null };
+        return makeChain(result);
+      }
+    };
+  }
+
+  const baseJobRow = {
+    id: jobUuid,
+    opportunity_id: null,
+    job_number: "G26-060",
+    work_type: "Bid / ITB",
+    pm: "Geoff",
+    client: "DPR",
+    project_name: "Test Project",
+    base_contract: 100000,
+    bid_ref: null,
+    award_date: null,
+    ntp_date: null,
+    backlog_status: "Awarded / Waiting",
+    forecast_start: null,
+    forecast_end: null,
+    forecast_quarter: null,
+    expected_fab_start: null,
+    expected_completion: null,
+    fab_status: null,
+    install_start: null,
+    install_end: null,
+    install_status: null,
+    invoice_status: null,
+    crew_size: null,
+    gc: null,
+    service_scope: null,
+    requested_date: null,
+    scheduled_date: null,
+    assigned_to: null,
+    notes: null,
+    final_cost: null
+  };
+
+  it("returns null when client is null", async () => {
+    const result = await getJobDetail(jobUuid, null);
+    expect(result).toBeNull();
+  });
+
+  it("includes files owned directly by the job", async () => {
+    const client = makeMockClient({
+      jobs: { data: baseJobRow, error: null },
+      change_orders: { data: [], error: null },
+      purchase_orders: { data: [], error: null },
+      submittals: { data: [], error: null },
+      activity_events: { data: [], error: null },
+      files: {
+        data: [
+          {
+            id: fileForJobUuid,
+            owner_type: "job",
+            owner_id: jobUuid,
+            slot: "contract",
+            name: "Contract.pdf",
+            storage_bucket: "project-files",
+            storage_path: "job/contract/contract.pdf",
+            uploaded_at: "2026-05-01T00:00:00Z"
+          }
+        ],
+        error: null
+      }
+    });
+
+    const job = await getJobDetail(jobUuid, client as any);
+    expect(job).not.toBeNull();
+    expect(job!.files).toHaveLength(1);
+    expect(job!.files[0].slot).toBe("contract");
+    expect(job!.files[0].name).toBe("Contract.pdf");
+  });
+
+  it("includes files owned by a child PO", async () => {
+    const client = makeMockClient({
+      jobs: { data: baseJobRow, error: null },
+      change_orders: { data: [], error: null },
+      purchase_orders: {
+        data: [
+          {
+            id: poUuid,
+            job_id: jobUuid,
+            po_number: "PO-001",
+            vendor: "Cambria",
+            scope: "Cambria",
+            description: null,
+            status: "Issued",
+            committed_amount: 5000,
+            approved_change_amount: 0,
+            invoiced_amount: 0,
+            paid_amount: 0,
+            issue_date: null,
+            needed_by: null,
+            promised_date: null,
+            received_date: null,
+            owner: null,
+            notes: null
+          }
+        ],
+        error: null
+      },
+      submittals: { data: [], error: null },
+      activity_events: { data: [], error: null },
+      files: {
+        data: [
+          {
+            id: fileForPoUuid,
+            owner_type: "purchase_order",
+            owner_id: poUuid,
+            slot: "purchase orders",
+            name: "PO-001.pdf",
+            storage_bucket: "project-files",
+            storage_path: "purchase_order/po-001.pdf",
+            uploaded_at: "2026-05-02T00:00:00Z"
+          }
+        ],
+        error: null
+      }
+    });
+
+    const job = await getJobDetail(jobUuid, client as any);
+    expect(job).not.toBeNull();
+    expect(job!.files).toHaveLength(1);
+    expect(job!.files[0].ownerType).toBe("purchase_order");
+    expect(job!.files[0].ownerId).toBe(poUuid);
+    expect(job!.files[0].name).toBe("PO-001.pdf");
   });
 });
 

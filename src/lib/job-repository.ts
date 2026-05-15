@@ -440,6 +440,18 @@ export function mapActivityEventToInsert(event: ActivityEvent): ActivityEventIns
   };
 }
 
+function mapFileRow(row: Record<string, unknown>): Job["files"][number] {
+  return {
+    id: String(row.id ?? ""),
+    ownerType: (row.owner_type as Job["files"][number]["ownerType"]) ?? "job",
+    ownerId: String(row.owner_id ?? ""),
+    slot: String(row.slot ?? ""),
+    name: String(row.name ?? ""),
+    url: row.storage_path ? `${row.storage_bucket ?? "project-files"}/${row.storage_path}` : undefined,
+    uploadedAt: String(row.uploaded_at ?? "")
+  };
+}
+
 export async function listJobs(client: SupabaseJobClient | null = supabase) {
   if (!client) return [];
 
@@ -468,18 +480,49 @@ export async function listJobs(client: SupabaseJobClient | null = supabase) {
       changeOrders: ((coRows ?? []) as ChangeOrderRow[]).filter((row) => row.job_id === job.id).map(mapChangeOrderFromRow),
       purchaseOrders: ((poRows ?? []) as PurchaseOrderRow[]).filter((row) => row.job_id === job.id).map(mapPurchaseOrderFromRow),
       submittals: ((subRows ?? []) as SubmittalRow[]).filter((row) => row.job_id === job.id).map(mapSubmittalFromRow),
-      files: ((fileRows ?? []) as any[]).filter((row) => row.owner_id === job.id).map((row) => ({
-        id: row.id,
-        ownerType: "job",
-        ownerId: row.owner_id,
-        slot: row.slot,
-        name: row.name,
-        url: row.storage_path ? `${row.storage_bucket ?? "project-files"}/${row.storage_path}` : undefined,
-        uploadedAt: row.uploaded_at ?? ""
-      })),
+      files: ((fileRows ?? []) as Record<string, unknown>[]).filter((row) => row.owner_id === job.id).map(mapFileRow),
       activity: ((activityRows ?? []) as ActivityEventRow[]).filter((row) => row.owner_id === job.id).map(mapActivityEventFromRow)
     })
   );
+}
+
+export async function getJobDetail(jobId: string, client: SupabaseJobClient | null = supabase): Promise<Job | null> {
+  if (!client) return null;
+
+  const { data: jobRow, error: jobError } = await (client as any).from("jobs").select("*").eq("id", jobId).maybeSingle();
+  if (jobError) throw jobError;
+  if (!jobRow) return null;
+
+  const [{ data: coRows, error: coError }, { data: poRows, error: poError }, { data: subRows, error: subError }, { data: activityRows, error: activityError }] =
+    await Promise.all([
+      (client as any).from("change_orders").select("*").eq("job_id", jobId).order("number", { ascending: true }),
+      (client as any).from("purchase_orders").select("*").eq("job_id", jobId).order("po_number", { ascending: true }),
+      (client as any).from("submittals").select("*").eq("job_id", jobId).order("due_date", { ascending: true }),
+      (client as any).from("activity_events").select("*").eq("owner_id", jobId).eq("owner_type", "job").order("created_at", { ascending: false })
+    ]);
+
+  for (const error of [coError, poError, subError, activityError]) {
+    if (error) throw error;
+  }
+
+  const changeOrders = ((coRows ?? []) as ChangeOrderRow[]).map(mapChangeOrderFromRow);
+  const purchaseOrders = ((poRows ?? []) as PurchaseOrderRow[]).map(mapPurchaseOrderFromRow);
+  const submittals = ((subRows ?? []) as SubmittalRow[]).map(mapSubmittalFromRow);
+  const activity = ((activityRows ?? []) as ActivityEventRow[]).map(mapActivityEventFromRow);
+
+  const allIds = [
+    jobId,
+    ...changeOrders.map((co) => co.id).filter(isUuid),
+    ...purchaseOrders.map((po) => po.id).filter(isUuid),
+    ...submittals.map((sub) => sub.id).filter(isUuid)
+  ];
+
+  const { data: fileRows, error: fileError } = await (client as any).from("files").select("*").in("owner_id", allIds).order("uploaded_at", { ascending: false });
+  if (fileError) throw fileError;
+
+  const files = ((fileRows ?? []) as Record<string, unknown>[]).map(mapFileRow);
+
+  return mapJobFromRow(jobRow as JobRow, { changeOrders, purchaseOrders, submittals, files, activity });
 }
 
 export async function saveJobHeader(job: Job, client: SupabaseJobClient | null = supabase) {
