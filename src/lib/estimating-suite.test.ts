@@ -4,7 +4,13 @@ import { describe, expect, it } from "vitest";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "./change-order-workflow";
 import { calculateEstimateTotals } from "./estimate-math";
 import { mapEstimateFromRow, mapEstimateSnapshotToInsert, mapEstimateToUpsert } from "./estimate-repository";
-import { buildProjectFileStoragePath, mapProjectFileFromRow, mapProjectFileToInsert, pruneProjectFileSlotMetadata } from "./file-repository";
+import {
+  buildProjectFileStoragePath,
+  mapProjectFileFromRow,
+  mapProjectFileToInsert,
+  pruneProjectFileSlotMetadata,
+  signProjectFileUrl
+} from "./file-repository";
 import {
   deletePMNote,
   mapActivityEventFromRow,
@@ -581,8 +587,79 @@ describe("file repository mapping", () => {
       ownerId: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
       slot: "proposal",
       name: "Proposal.pdf",
-      url: "project-files/estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/proposal/Proposal.pdf",
+      storageBucket: "project-files",
+      storagePath: "estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/proposal/Proposal.pdf",
+      url: undefined,
       uploadedAt: "2026-06-01T12:00:00Z"
+    });
+  });
+
+  it("signs private project file URLs when storage metadata is available", async () => {
+    const file = mapProjectFileFromRow({
+      id: "file-1",
+      owner_type: "estimate",
+      owner_id: "2dd51464-96d7-4ed1-ae7e-35ab2e92f865",
+      slot: "proposal",
+      name: "Proposal.pdf",
+      storage_bucket: "project-files",
+      storage_path: "estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/proposal/Proposal.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 15000,
+      uploaded_at: "2026-06-01T12:00:00Z"
+    });
+    const client = {
+      storage: {
+        from: (bucket: string) => ({
+          createSignedUrl: async (path: string, expiresIn: number) => ({
+            data: {
+              signedUrl: `https://tapnbdorfxfdjmcwifzj.supabase.co/storage/v1/object/sign/${bucket}/${path}?token=signed-${expiresIn}`
+            },
+            error: null
+          })
+        })
+      }
+    };
+
+    await expect(signProjectFileUrl(file, client as any)).resolves.toMatchObject({
+      url: "https://tapnbdorfxfdjmcwifzj.supabase.co/storage/v1/object/sign/project-files/estimate/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/proposal/Proposal.pdf?token=signed-3600"
+    });
+  });
+
+  it("does not invent file URLs when storage metadata is missing or signing fails", async () => {
+    const withoutPath = mapProjectFileFromRow({
+      id: "file-1",
+      owner_type: "job",
+      owner_id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      slot: "contract",
+      name: "Contract.pdf",
+      storage_bucket: "project-files",
+      storage_path: null,
+      mime_type: "application/pdf",
+      size_bytes: 15000,
+      uploaded_at: "2026-06-01T12:00:00Z"
+    });
+    const failingClient = {
+      storage: {
+        from: () => ({
+          createSignedUrl: async () => ({
+            data: null,
+            error: new Error("private object not available")
+          })
+        })
+      }
+    };
+
+    await expect(signProjectFileUrl(withoutPath, failingClient as any)).resolves.toMatchObject({
+      name: "Contract.pdf",
+      storageBucket: "project-files",
+      storagePath: undefined,
+      url: undefined
+    });
+    await expect(signProjectFileUrl({ ...withoutPath, storagePath: "job/contract.pdf" }, failingClient as any)).resolves.toMatchObject({
+      name: "Contract.pdf",
+      storageBucket: "project-files",
+      storagePath: "job/contract.pdf",
+      url: undefined
     });
   });
 

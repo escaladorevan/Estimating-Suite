@@ -15,7 +15,7 @@ import type {
   WorkType
 } from "@/types";
 import { supabase } from "./supabase-client";
-import { mapProjectFileFromRow, type ProjectFileRow } from "./file-repository";
+import { mapProjectFileFromRow, signProjectFileUrl, type ProjectFileRow } from "./file-repository";
 import {
   BACKLOG_STATUSES,
   CHANGE_ORDER_STATUSES,
@@ -482,6 +482,10 @@ export async function listJobs(client: SupabaseJobClient | null = supabase) {
     if (error) throw error;
   }
 
+  const projectFiles = await Promise.all(
+    ((fileRows ?? []) as ProjectFileRow[]).map((row) => signProjectFileUrl(mapProjectFileFromRow(row), client))
+  );
+
   return jobs.map((job) =>
     {
       const jobChangeOrders = changeOrders.filter((row) => row.job_id === job.id);
@@ -498,7 +502,7 @@ export async function listJobs(client: SupabaseJobClient | null = supabase) {
         changeOrders: jobChangeOrders.map(mapChangeOrderFromRow),
         purchaseOrders: jobPurchaseOrders.map(mapPurchaseOrderFromRow),
         submittals: jobSubmittals.map(mapSubmittalFromRow),
-        files: ((fileRows ?? []) as ProjectFileRow[]).filter((row) => jobOwnerIds.has(row.owner_id)).map(mapProjectFileFromRow),
+        files: projectFiles.filter((file) => jobOwnerIds.has(file.ownerId)),
         activity: ((activityRows ?? []) as ActivityEventRow[]).filter((row) => row.owner_id && jobOwnerIds.has(row.owner_id)).map(mapActivityEventFromRow)
       });
     }

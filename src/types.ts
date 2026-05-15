@@ -241,6 +241,8 @@ export type ProjectFile = {
   ownerId: string;
   slot: string;
   name: string;
+  storageBucket?: string;
+  storagePath?: string;
   url?: string;
   uploadedAt: string;
 };

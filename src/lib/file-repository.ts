@@ -43,6 +43,10 @@ type SupabaseFileClient = {
   storage?: {
     from: (bucket: string) => {
       upload: (path: string, file: any, options?: { upsert?: boolean; contentType?: string }) => Promise<{ data: unknown; error: unknown }>;
+      createSignedUrl?: (
+        path: string,
+        expiresIn: number
+      ) => Promise<{ data: { signedUrl?: string; publicUrl?: string } | null; error: unknown }>;
     };
   };
 };
@@ -56,9 +60,31 @@ export function mapProjectFileFromRow(row: ProjectFileRow): ProjectFile {
     ownerId: row.owner_id,
     slot: row.slot,
     name: row.name,
-    url: storagePath ? `${bucket}/${storagePath}` : undefined,
+    storageBucket: bucket,
+    storagePath: storagePath || undefined,
+    url: undefined,
     uploadedAt: row.uploaded_at ?? ""
   };
+}
+
+export async function signProjectFileUrl(
+  file: ProjectFile,
+  client: SupabaseFileClient | null = supabase,
+  expiresInSeconds = 3600
+): Promise<ProjectFile> {
+  if (!client?.storage || !file.storagePath) return { ...file, url: undefined };
+
+  try {
+    const storage = client.storage.from(file.storageBucket ?? PROJECT_FILES_BUCKET);
+    if (!storage.createSignedUrl) return { ...file, url: undefined };
+
+    const { data, error } = await storage.createSignedUrl(file.storagePath, expiresInSeconds);
+
+    if (error || !data?.signedUrl) return { ...file, url: undefined };
+    return { ...file, url: data.signedUrl };
+  } catch {
+    return { ...file, url: undefined };
+  }
 }
 
 export function mapProjectFileToInsert(input: ProjectFileInsertInput): ProjectFileInsert {
@@ -104,7 +130,7 @@ export async function listProjectFiles(owner: Pick<ProjectFile, "ownerType" | "o
     .order("uploaded_at", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []).map(mapProjectFileFromRow);
+  return Promise.all(((data ?? []) as ProjectFileRow[]).map((row) => signProjectFileUrl(mapProjectFileFromRow(row), client)));
 }
 
 export async function saveProjectFileMetadata(input: ProjectFileInsertInput, client: SupabaseFileClient | null = supabase) {
@@ -112,7 +138,7 @@ export async function saveProjectFileMetadata(input: ProjectFileInsertInput, cli
   const { data, error } = await client.from("files").insert(mapProjectFileToInsert(input)).select("*").single();
 
   if (error) throw error;
-  return data ? mapProjectFileFromRow(data) : null;
+  return data ? signProjectFileUrl(mapProjectFileFromRow(data), client) : null;
 }
 
 export async function pruneProjectFileSlotMetadata(

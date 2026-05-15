@@ -2407,7 +2407,7 @@ function JobDetailModal({
               <span className="eyebrow">Job documents</span>
               {primaryDocumentSlots.map((slot) => {
                 const file = job.files.find((candidate) => candidate.slot === slot);
-                return <span className={file ? "filled" : ""} key={slot}>{slot}{file ? ` - ${file.name}` : " - missing"}</span>;
+                return <span className={file ? "filled" : ""} key={slot}>{slot}{file ? <> - <FileLink file={file} /></> : " - missing"}</span>;
               })}
             </div>
             <p>{job.notes}</p>
@@ -2612,7 +2612,7 @@ function JobDetailModal({
                       </div>
                     </details>
                     <div className="package-files">
-                      {packageFiles.map((file) => <span key={file.id}>{file.name}</span>)}
+                      {packageFiles.map((file) => <span key={file.id}><FileLink file={file} /></span>)}
                       <label>
                         Upload file
                         <input onChange={(event) => onSubmittalFile(job.id, item.id, event.target.files?.[0])} type="file" />
@@ -2692,7 +2692,7 @@ function JobDetailModal({
                       </div>
                     </details>
                     <div className="package-files">
-                      {poFiles.map((file) => <span key={file.id}>{file.name}</span>)}
+                      {poFiles.map((file) => <span key={file.id}><FileLink file={file} /></span>)}
                       <label>
                         Upload file
                         <input onChange={(event) => onPurchaseOrderFile(job.id, po.id, event.target.files?.[0])} type="file" />
@@ -2748,7 +2748,7 @@ function JobDetailModal({
                 return (
                   <label className={file ? "file-slot filled" : "file-slot"} key={slot}>
                     <span>{slot}</span>
-                    <strong>{file?.name ?? "Missing"}</strong>
+                    <strong>{file ? <FileLink file={file} /> : "Missing"}</strong>
                     <input
                       disabled={!canEditHeader}
                       onChange={(event) => {
@@ -2968,7 +2968,7 @@ function FilesView({ jobs, opportunities }: { jobs: Job[]; opportunities: Opport
         ))}
       </div>
       <h3>Linked files</h3>
-      {jobFiles.map((file) => <p className="file-line" key={file.id}>{file.project} - {file.slot} - {file.name}</p>)}
+      {jobFiles.map((file) => <p className="file-line" key={file.id}>{file.project} - {file.slot} - <FileLink file={file} /></p>)}
       <h3>Bid links</h3>
       {opportunities.map((opportunity) => (
         <p className="file-line" key={opportunity.id}>{opportunity.jobId} - drawings/specs/schedule links tracked from Master V4</p>
@@ -3173,7 +3173,7 @@ function OpportunityModal({
                   return (
                     <label className={attached ? "file-slot filled" : "file-slot"} key={slot}>
                       <span>{slot}</span>
-                      <strong>{attached?.name ?? "Missing"}</strong>
+                      <strong>{attached ? <FileLink file={attached} /> : "Missing"}</strong>
                       <input onChange={(event) => attachFile(slot, event.target.files?.[0])} type="file" />
                     </label>
                   );
@@ -3265,6 +3265,15 @@ function Metric({ label, value, detail }: { label: string; value: string | numbe
 
 function Status({ value }: { value: string }) {
   return <span className={`status ${value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`}>{value}</span>;
+}
+
+function FileLink({ file }: { file: ProjectFile }) {
+  if (!file.url) return <>{file.name}</>;
+  return (
+    <a href={file.url} rel="noreferrer" target="_blank">
+      {file.name}
+    </a>
+  );
 }
 
 function isUuid(value: string) {
