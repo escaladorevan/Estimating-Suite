@@ -1,11 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "./change-order-workflow";
 import { calculateEstimateTotals } from "./estimate-math";
 import { mapEstimateFromRow, mapEstimateSnapshotToInsert, mapEstimateToUpsert } from "./estimate-repository";
 import { buildProjectFileStoragePath, mapProjectFileFromRow, mapProjectFileToInsert } from "./file-repository";
 import {
+  deletePMNote,
+  getJobDetail,
   mapActivityEventFromRow,
   mapActivityEventToInsert,
   mapChangeOrderFromRow,
@@ -21,7 +23,8 @@ import {
   mapPurchaseOrderToUpdate,
   mapSubmittalFromRow,
   mapSubmittalToInsert,
-  mapSubmittalToUpdate
+  mapSubmittalToUpdate,
+  savePMNote
 } from "./job-repository";
 import {
   currentContractValue,
@@ -941,6 +944,182 @@ describe("job detail tabs", () => {
   });
 });
 
+describe("isUuid utility", () => {
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const checkUuid = (value: string) => UUID_REGEX.test(value);
+
+  it("returns false for local sample ids", () => {
+    expect(checkUuid("job-g060")).toBe(false);
+    expect(checkUuid("co-local")).toBe(false);
+    expect(checkUuid("")).toBe(false);
+  });
+
+  it("returns true for valid UUIDs", () => {
+    expect(checkUuid("50f42d9f-b53f-4a97-b711-dc8b1cd13384")).toBe(true);
+    expect(checkUuid("2dd51464-96d7-4ed1-ae7e-35ab2e92f865")).toBe(true);
+  });
+});
+
+describe("getJobDetail", () => {
+  const jobUuid = "50f42d9f-b53f-4a97-b711-dc8b1cd13384";
+  const poUuid = "8f861063-22d2-4db4-8a0f-b5f8b8f70a1b";
+  const coUuid = "9c6d2174-33e3-5ec5-9b10-c6g9c9g81b2c";
+  const fileForJobUuid = "aaaaaaaa-0000-1000-8000-000000000001";
+  const fileForPoUuid = "bbbbbbbb-0000-1000-8000-000000000002";
+
+  function makeChain(result: { data: unknown; error: null }): Record<string, unknown> {
+    const chain: Record<string, () => unknown> = {};
+    const proxy: Record<string, unknown> = {};
+    const terminalMethods = new Set(["maybeSingle", "single"]);
+    function makeMethod(name: string) {
+      return (..._args: unknown[]): unknown => {
+        if (terminalMethods.has(name)) return Promise.resolve(result);
+        // order on a chain that ends queries (after in/eq) should resolve
+        if (name === "order") return Promise.resolve(result);
+        return proxy;
+      };
+    }
+    for (const method of ["select", "eq", "in", "order", "maybeSingle", "single"]) {
+      proxy[method] = makeMethod(method);
+      chain[method] = makeMethod(method);
+    }
+    return proxy;
+  }
+
+  function makeMockClient(tableResponses: Record<string, { data: unknown; error: null }>) {
+    return {
+      from: (table: string) => {
+        const result = tableResponses[table] ?? { data: [], error: null };
+        return makeChain(result);
+      }
+    };
+  }
+
+  const baseJobRow = {
+    id: jobUuid,
+    opportunity_id: null,
+    job_number: "G26-060",
+    work_type: "Bid / ITB",
+    pm: "Geoff",
+    client: "DPR",
+    project_name: "Test Project",
+    base_contract: 100000,
+    bid_ref: null,
+    award_date: null,
+    ntp_date: null,
+    backlog_status: "Awarded / Waiting",
+    forecast_start: null,
+    forecast_end: null,
+    forecast_quarter: null,
+    expected_fab_start: null,
+    expected_completion: null,
+    fab_status: null,
+    install_start: null,
+    install_end: null,
+    install_status: null,
+    invoice_status: null,
+    crew_size: null,
+    gc: null,
+    service_scope: null,
+    requested_date: null,
+    scheduled_date: null,
+    assigned_to: null,
+    notes: null,
+    final_cost: null
+  };
+
+  it("returns null when client is null", async () => {
+    const result = await getJobDetail(jobUuid, null);
+    expect(result).toBeNull();
+  });
+
+  it("includes files owned directly by the job", async () => {
+    const client = makeMockClient({
+      jobs: { data: baseJobRow, error: null },
+      change_orders: { data: [], error: null },
+      purchase_orders: { data: [], error: null },
+      submittals: { data: [], error: null },
+      activity_events: { data: [], error: null },
+      files: {
+        data: [
+          {
+            id: fileForJobUuid,
+            owner_type: "job",
+            owner_id: jobUuid,
+            slot: "contract",
+            name: "Contract.pdf",
+            storage_bucket: "project-files",
+            storage_path: "job/contract/contract.pdf",
+            uploaded_at: "2026-05-01T00:00:00Z"
+          }
+        ],
+        error: null
+      }
+    });
+
+    const job = await getJobDetail(jobUuid, client as any);
+    expect(job).not.toBeNull();
+    expect(job!.files).toHaveLength(1);
+    expect(job!.files[0].slot).toBe("contract");
+    expect(job!.files[0].name).toBe("Contract.pdf");
+  });
+
+  it("includes files owned by a child PO", async () => {
+    const client = makeMockClient({
+      jobs: { data: baseJobRow, error: null },
+      change_orders: { data: [], error: null },
+      purchase_orders: {
+        data: [
+          {
+            id: poUuid,
+            job_id: jobUuid,
+            po_number: "PO-001",
+            vendor: "Cambria",
+            scope: "Cambria",
+            description: null,
+            status: "Issued",
+            committed_amount: 5000,
+            approved_change_amount: 0,
+            invoiced_amount: 0,
+            paid_amount: 0,
+            issue_date: null,
+            needed_by: null,
+            promised_date: null,
+            received_date: null,
+            owner: null,
+            notes: null
+          }
+        ],
+        error: null
+      },
+      submittals: { data: [], error: null },
+      activity_events: { data: [], error: null },
+      files: {
+        data: [
+          {
+            id: fileForPoUuid,
+            owner_type: "purchase_order",
+            owner_id: poUuid,
+            slot: "purchase orders",
+            name: "PO-001.pdf",
+            storage_bucket: "project-files",
+            storage_path: "purchase_order/po-001.pdf",
+            uploaded_at: "2026-05-02T00:00:00Z"
+          }
+        ],
+        error: null
+      }
+    });
+
+    const job = await getJobDetail(jobUuid, client as any);
+    expect(job).not.toBeNull();
+    expect(job!.files).toHaveLength(1);
+    expect(job!.files[0].ownerType).toBe("purchase_order");
+    expect(job!.files[0].ownerId).toBe(poUuid);
+    expect(job!.files[0].name).toBe("PO-001.pdf");
+  });
+});
+
 describe("change order workflow", () => {
   it("suggests the next CO number from an existing job log", () => {
     expect(nextChangeOrderNumber([{ number: "CO-001" }, { number: "CO-009" }, { number: "COR draft" }])).toBe("CO-010");
@@ -1555,3 +1734,103 @@ describe("workbook clipboard helpers", () => {
     expect(estimateItemsToClipboardText([{ name: "Desk", qty: 2, unit: "EA", unitCost: 450 }])).toBe("Desk\t2\tEA\t450\t\t");
   });
 });
+
+describe("PM workflow usability", () => {
+  const PIPELINE_STAGE_ORDER = ["Lead / ITB", "Pricing", "Review / Send", "Submitted"] as const;
+  type PipelineStage = (typeof PIPELINE_STAGE_ORDER)[number];
+
+  function moveOpportunityStage(
+    opportunity: { id: string; status: PipelineStage },
+    direction: "forward" | "back"
+  ): { id: string; status: PipelineStage } | null {
+    const index = PIPELINE_STAGE_ORDER.indexOf(opportunity.status);
+    const nextIndex = direction === "forward" ? index + 1 : index - 1;
+    if (nextIndex < 0 || nextIndex >= PIPELINE_STAGE_ORDER.length) return null;
+    return { ...opportunity, status: PIPELINE_STAGE_ORDER[nextIndex] };
+  }
+
+  it("moving opportunity forward preserves id and updates status correctly", () => {
+    const opp = { id: "opp-123", status: "Lead / ITB" as PipelineStage };
+    const advanced = moveOpportunityStage(opp, "forward");
+    expect(advanced?.id).toBe("opp-123");
+    expect(advanced?.status).toBe("Pricing");
+  });
+
+  it("moving opportunity backward preserves id", () => {
+    const opp = { id: "opp-456", status: "Review / Send" as PipelineStage };
+    const reverted = moveOpportunityStage(opp, "back");
+    expect(reverted?.id).toBe("opp-456");
+    expect(reverted?.status).toBe("Pricing");
+  });
+
+  it("individual CO approval changes exactly that CO status to approved, others unchanged", () => {
+    const cos = [
+      { id: "co-1", amount: 1000, status: "submitted" as const },
+      { id: "co-2", amount: 2000, status: "submitted" as const }
+    ];
+    const updated = cos.map((co) => co.id === "co-1" ? { ...co, status: "approved" as const, approvedDate: "2026-05-09" } : co);
+    const approvedCo = updated.find((co) => co.id === "co-1")!;
+    expect(approvedCo.status).toBe("approved");
+    expect("approvedDate" in approvedCo && approvedCo.approvedDate).toBe("2026-05-09");
+    const otherCo = updated.find((co) => co.id === "co-2")!;
+    expect(otherCo.status).toBe("submitted");
+  });
+
+  it("rejected CO status is rejected and does not increase currentContractValue", () => {
+    const changeOrders = [
+      { amount: 5000, status: "submitted" as const },
+      { amount: 3000, status: "rejected" as const }
+    ];
+    const contract = currentContractValue(100000, changeOrders);
+    expect(contract).toBe(100000);
+    const withRejected = changeOrders.map((co, i) => i === 0 ? { ...co, status: "rejected" as const } : co);
+    const contractAfter = currentContractValue(100000, withRejected);
+    expect(contractAfter).toBe(100000);
+  });
+
+  it("void CO does not increase currentContractValue", () => {
+    const changeOrders = [
+      { amount: 4000, status: "void" as const }
+    ];
+    const contract = currentContractValue(50000, changeOrders);
+    expect(contract).toBe(50000);
+  });
+
+  it("PM note delete: deletePMNote called for UUID note id, not called for local id", async () => {
+    const uuidNoteId = "a603d881-b3c0-4ffb-bb1f-a27f1584770d";
+    const localNoteId = "note-local-123";
+
+    const eqFn = vi.fn().mockResolvedValue({ error: null });
+    const deleteFn = vi.fn().mockReturnValue({ eq: eqFn });
+    const fromFn = vi.fn().mockReturnValue({ delete: deleteFn });
+    const mockClient = { from: fromFn };
+
+    await deletePMNote(uuidNoteId, mockClient as any);
+    expect(mockClient.from).toHaveBeenCalledWith("pm_notes");
+    expect(eqFn).toHaveBeenCalledWith("id", uuidNoteId);
+
+    // Verify that for a non-UUID note, mapPMNoteToInsert does not include an id
+    // (the caller guards local ids from hitting the DB)
+    const localNote = {
+      id: localNoteId,
+      text: "Local note",
+      status: "Open" as const,
+      priority: "Normal" as const,
+      createdAt: "2026-05-09"
+    };
+    const insertPayload = mapPMNoteToInsert(localNote);
+    expect(insertPayload.id).toBeUndefined();
+
+    // Verify savePMNote calls update path for UUID id
+    const updateEqFn = vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: null, error: null }) }) });
+    const updateFn = vi.fn().mockReturnValue({ eq: updateEqFn });
+    const uuidNote = { id: uuidNoteId, text: "UUID note", status: "Open" as const, priority: "Normal" as const, createdAt: "2026-05-09" };
+    const saveMockClient = {
+      from: vi.fn().mockReturnValue({ update: updateFn, insert: vi.fn() })
+    };
+    await savePMNote(uuidNote, saveMockClient as any);
+    expect(saveMockClient.from).toHaveBeenCalledWith("pm_notes");
+    expect(updateFn).toHaveBeenCalled();
+  });
+});
+

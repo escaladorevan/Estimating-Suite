@@ -41,6 +41,7 @@ export type PMActionItem = {
   projectName?: string;
   dueDate?: string;
   priority?: PMNotePriority;
+  sourceNote?: PMNote;
 };
 
 export function parseJobReferenceFromNote(text: string): string | undefined {
@@ -73,7 +74,8 @@ export function buildPmActionItems({
         jobNumber: linkedJob?.jobNumber,
         projectName: linkedJob?.projectName,
         dueDate: note.dueDate,
-        priority: note.priority
+        priority: note.priority,
+        sourceNote: note
       };
     });
 

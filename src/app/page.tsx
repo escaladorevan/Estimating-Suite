@@ -39,7 +39,7 @@ import {
 import { fileSlots, estimates as seedEstimates, jobs as seedJobs, opportunities as seedOpportunities } from "@/lib/sample-data";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "@/lib/opportunity-import";
 import { listOpportunities, saveOpportunity } from "@/lib/opportunity-repository";
-import { listJobs, saveJobHeader } from "@/lib/job-repository";
+import { deletePMNote, getJobDetail, listJobs, savePMNote, saveJobHeader } from "@/lib/job-repository";
 import { filterOpportunitiesForView, suggestJobNumber, type RegisterView } from "@/lib/opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote, type PMActionItem } from "@/lib/pm-actions";
 import { buildProposalPdf } from "@/lib/proposal-pdf";
@@ -140,6 +140,7 @@ export default function Home() {
   const [jobs, setJobs] = useState<Job[]>(seedJobs);
   const [selectedJobId, setSelectedJobId] = useState(seedJobs[0]?.id ?? "");
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
+  const [detailJobLoading, setDetailJobLoading] = useState(false);
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
   const [mainNavCollapsed, setMainNavCollapsed] = useState(false);
   const [query, setQuery] = useState("");
@@ -411,6 +412,25 @@ export default function Home() {
     }
   }
 
+  async function refreshJobDetail(jobId: string) {
+    setDetailJobLoading(true);
+    try {
+      const result = await getJobDetail(jobId);
+      if (result) {
+        setJobs((current) => current.map((candidate) => (candidate.id === jobId ? result : candidate)));
+      }
+    } finally {
+      setDetailJobLoading(false);
+    }
+  }
+
+  function openJobDetail(jobId: string) {
+    setDetailJobId(jobId);
+    if (isUuid(jobId)) {
+      void refreshJobDetail(jobId);
+    }
+  }
+
   function updateJobHeader(jobId: string, updates: Partial<Job>) {
     const job = jobs.find((candidate) => candidate.id === jobId);
     if (!job) return;
@@ -525,7 +545,7 @@ export default function Home() {
       })
     );
     setSelectedJobId(estimate.jobId);
-    setDetailJobId(estimate.jobId);
+    openJobDetail(estimate.jobId);
     goToView("jobs");
   }
 
@@ -785,6 +805,7 @@ export default function Home() {
         };
       })
     );
+    if (isUuid(jobId)) void refreshJobDetail(jobId);
   }
 
   function attachSubmittalFile(jobId: string, submittalId: string, file: File | undefined) {
@@ -820,6 +841,7 @@ export default function Home() {
         };
       })
     );
+    if (isUuid(jobId)) void refreshJobDetail(jobId);
   }
 
   function createServiceJob(input: {
@@ -915,6 +937,52 @@ export default function Home() {
     );
   }
 
+  async function persistPMNoteDelete(note: PMNote) {
+    setPmNotes((current) => current.filter((n) => n.id !== note.id));
+    if (!isUuid(note.id)) return;
+    try {
+      await deletePMNote(note.id);
+    } catch {
+      setPmNotes((current) => [note, ...current]);
+      setJobPersistenceStatus("Note delete failed. Note has been restored.");
+    }
+  }
+
+  async function persistPMNoteUpdate(note: PMNote) {
+    setPmNotes((current) => current.map((n) => (n.id === note.id ? note : n)));
+    if (!isUuid(note.id)) return;
+    try {
+      await savePMNote(note);
+    } catch {
+      setJobPersistenceStatus("Note update failed. Changes are local only.");
+    }
+  }
+
+  async function persistChangeOrderUpdate(co: ChangeOrder, jobId: string) {
+    setJobs((current) =>
+      current.map((job) =>
+        job.id === jobId
+          ? { ...job, changeOrders: job.changeOrders.map((c) => (c.id === co.id ? co : c)) }
+          : job
+      )
+    );
+    if (!supabase || !isUuid(co.id)) return;
+    try {
+      const { error } = await supabase
+        .from("change_orders")
+        .update({
+          status: co.status,
+          approved_date: co.approvedDate ?? null,
+          notes: co.notes ?? null
+        })
+        .eq("id", co.id);
+      if (error) throw error;
+      setJobPersistenceStatus(`CO ${co.number} updated.`);
+    } catch {
+      setJobPersistenceStatus("CO update failed. Change is local only.");
+    }
+  }
+
   return (
     <main className={mainNavCollapsed ? "app-shell main-nav-collapsed" : "app-shell"}>
       <aside className="side-nav">
@@ -985,6 +1053,8 @@ export default function Home() {
             jobs={jobs}
             onCreatePmNote={createPmNote}
             onUpdatePmNoteStatus={updatePmNoteStatus}
+            onDeletePmNote={persistPMNoteDelete}
+            onEditPmNote={persistPMNoteUpdate}
             opportunities={opportunities}
             pipelineOpportunities={pipelineOpportunities}
             pmNotes={pmNotes}
@@ -998,7 +1068,18 @@ export default function Home() {
             onOpenOpportunity={setSelectedOpportunityId}
           />
         )}
-        {view === "kanban" && <PipelineKanban opportunities={pipelineOpportunities} onOpenOpportunity={setSelectedOpportunityId} />}
+        {view === "kanban" && (
+          <PipelineKanban
+            opportunities={pipelineOpportunities}
+            onOpenOpportunity={setSelectedOpportunityId}
+            onMoveOpportunity={(id, newStatus) => {
+              const opportunity = opportunities.find((o) => o.id === id);
+              if (!opportunity) return;
+              const updated = { ...opportunity, status: newStatus };
+              void persistOpportunity(updated);
+            }}
+          />
+        )}
         {view === "estimator" && (
           <BidWorkbook
             estimate={selectedEstimate}
@@ -1022,7 +1103,7 @@ export default function Home() {
             onUpdateJob={updateJobHeader}
             onUpdatePmNoteStatus={updatePmNoteStatus}
             pmNotes={pmNotes}
-            onOpenJob={setDetailJobId}
+            onOpenJob={openJobDetail}
             onSubmittalChecklist={updateSubmittalChecklist}
             onSubmittalAction={updateSubmittal}
             onSubmittalFile={attachSubmittalFile}
@@ -1048,6 +1129,9 @@ export default function Home() {
           onStartChangeOrder={startChangeOrderFromJob}
           onUpdateJob={updateJobHeader}
           onUpdatePmNoteStatus={updatePmNoteStatus}
+          onDeletePmNote={persistPMNoteDelete}
+          onEditPmNote={persistPMNoteUpdate}
+          onUpdateChangeOrder={persistChangeOrderUpdate}
           pmNotes={pmNotes}
           onSubmittalChecklist={updateSubmittalChecklist}
           onSubmittalFile={attachSubmittalFile}
@@ -1174,7 +1258,9 @@ function HomeDashboard({
   jobs,
   pmNotes,
   onCreatePmNote,
-  onUpdatePmNoteStatus
+  onUpdatePmNoteStatus,
+  onDeletePmNote,
+  onEditPmNote
 }: {
   analytics: DashboardAnalytics;
   opportunities: Opportunity[];
@@ -1183,6 +1269,8 @@ function HomeDashboard({
   pmNotes: PMNote[];
   onCreatePmNote: (text: string, jobId?: string) => void;
   onUpdatePmNoteStatus: (noteId: string, status: PMNote["status"]) => void;
+  onDeletePmNote: (note: PMNote) => void;
+  onEditPmNote: (note: PMNote) => void;
 }) {
   const activeJobs = jobs.filter((job) => !["Installed", "Void"].includes(job.installStatus));
   const backlogSummary = summarizeBacklog(jobs);
@@ -1235,6 +1323,8 @@ function HomeDashboard({
         jobs={jobs}
         onCreateNote={onCreatePmNote}
         onUpdateNoteStatus={onUpdatePmNoteStatus}
+        onDeleteNote={onDeletePmNote}
+        onEditNote={onEditPmNote}
         title="PM action board"
       />
       <section className="home-grid">
@@ -1329,19 +1419,27 @@ function PMActionBoard({
   actions,
   compact = false,
   jobs,
+  notesSyncMessage,
   onCreateNote,
   onUpdateNoteStatus,
+  onDeleteNote,
+  onEditNote,
   title
 }: {
   actions: PMActionItem[];
   compact?: boolean;
   jobs: Job[];
+  notesSyncMessage?: string;
   onCreateNote: (text: string, jobId?: string) => void;
   onUpdateNoteStatus: (noteId: string, status: PMNote["status"]) => void;
+  onDeleteNote?: (note: PMNote) => void;
+  onEditNote?: (note: PMNote) => void;
   title: string;
 }) {
   const [noteText, setNoteText] = useState("");
   const [jobId, setJobId] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   function addNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1349,6 +1447,19 @@ function PMActionBoard({
     onCreateNote(noteText, jobId || undefined);
     setNoteText("");
     setJobId("");
+  }
+
+  function startEdit(action: PMActionItem) {
+    setEditingNoteId(action.id);
+    setEditingText(action.title);
+  }
+
+  function commitEdit(action: PMActionItem) {
+    if (onEditNote && action.sourceNote) {
+      onEditNote({ ...action.sourceNote, text: editingText });
+    }
+    setEditingNoteId(null);
+    setEditingText("");
   }
 
   return (
@@ -1360,32 +1471,56 @@ function PMActionBoard({
         </div>
         <span className="action-count">{actions.length}</span>
       </div>
-      <form className="pm-note-entry" onSubmit={addNote}>
-        <input
-          aria-label="PM note"
-          onChange={(event) => setNoteText(event.target.value)}
-          placeholder="Call Manny about G26-042, issue stone PO..."
-          value={noteText}
-        />
-        {!compact ? (
-          <select aria-label="Link job" onChange={(event) => setJobId(event.target.value)} value={jobId}>
-            <option value="">Auto-link job</option>
-            {jobs.map((job) => (
-              <option key={job.id} value={job.id}>{job.jobNumber}</option>
-            ))}
-          </select>
-        ) : null}
-        <button className="primary" type="submit">Add note</button>
-      </form>
+      {notesSyncMessage ? (
+        <p className="notes-sync-message">{notesSyncMessage}</p>
+      ) : (
+        <form className="pm-note-entry" onSubmit={addNote}>
+          <input
+            aria-label="PM note"
+            onChange={(event) => setNoteText(event.target.value)}
+            placeholder="Call Manny about G26-042, issue stone PO..."
+            value={noteText}
+          />
+          {!compact ? (
+            <select aria-label="Link job" onChange={(event) => setJobId(event.target.value)} value={jobId}>
+              <option value="">Auto-link job</option>
+              {jobs.map((job) => (
+                <option key={job.id} value={job.id}>{job.jobNumber}</option>
+              ))}
+            </select>
+          ) : null}
+          <button className="primary" type="submit">Add note</button>
+        </form>
+      )}
       <div className="pm-action-list">
         {actions.length ? actions.map((action) => (
           <article className={`pm-action ${action.severity}`} key={action.id}>
             <div>
-              <strong>{action.title}</strong>
+              {action.kind === "manual" && editingNoteId === action.id ? (
+                <input
+                  aria-label="Edit note"
+                  autoFocus
+                  className="inline-cell-input"
+                  onBlur={() => commitEdit(action)}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") commitEdit(action); if (e.key === "Escape") setEditingNoteId(null); }}
+                  value={editingText}
+                />
+              ) : (
+                <strong>{action.title}</strong>
+              )}
               <span>{action.detail}</span>
             </div>
             {action.kind === "manual" ? (
-              <button onClick={() => onUpdateNoteStatus(action.id, "Done")}>Done</button>
+              <div className="pm-note-actions">
+                <button onClick={() => onUpdateNoteStatus(action.id, "Done")}>Done</button>
+                {onEditNote ? (
+                  <button onClick={() => startEdit(action)} title="Edit note">✎</button>
+                ) : null}
+                {onDeleteNote && action.sourceNote ? (
+                  <button onClick={() => onDeleteNote(action.sourceNote!)} title="Delete note">✕</button>
+                ) : null}
+              </div>
             ) : (
               <small>{action.jobNumber ?? "System"}</small>
             )}
@@ -1627,12 +1762,16 @@ function coldArchiveLabel(opportunity: Opportunity) {
   return archiveDate.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
+const PIPELINE_STAGE_ORDER: OpportunityStatus[] = ["Lead / ITB", "Pricing", "Review / Send", "Submitted"];
+
 function PipelineKanban({
   opportunities,
-  onOpenOpportunity
+  onOpenOpportunity,
+  onMoveOpportunity
 }: {
   opportunities: Opportunity[];
   onOpenOpportunity: (id: string) => void;
+  onMoveOpportunity: (id: string, newStatus: OpportunityStatus) => void;
 }) {
   const columns: OpportunityStatus[] = ["Lead / ITB", "Pricing", "Review / Send"];
 
@@ -1643,14 +1782,43 @@ function PipelineKanban({
           <h2>{column}</h2>
           {opportunities
             .filter((opportunity) => opportunity.status === column)
-            .map((opportunity) => (
-              <article className="bid-card" key={opportunity.id} onClick={() => onOpenOpportunity(opportunity.id)}>
-                <span>{opportunity.jobId}</span>
-                <h3>{opportunity.projectName}</h3>
-                <p>{opportunity.client}</p>
-                <strong>{money.format(opportunity.estimatedValue)}</strong>
-              </article>
-            ))}
+            .map((opportunity) => {
+              const stageIndex = PIPELINE_STAGE_ORDER.indexOf(opportunity.status);
+              const canAdvance = stageIndex < PIPELINE_STAGE_ORDER.length - 1;
+              const canRevert = stageIndex > 0;
+              return (
+                <article className="bid-card" key={opportunity.id} onClick={() => onOpenOpportunity(opportunity.id)}>
+                  <span>{opportunity.jobId}</span>
+                  <h3>{opportunity.projectName}</h3>
+                  <p>{opportunity.client}</p>
+                  <strong>{money.format(opportunity.estimatedValue)}</strong>
+                  <div className="bid-card-stage-controls" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      aria-label="Move back one stage"
+                      className="stage-btn"
+                      disabled={!canRevert}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMoveOpportunity(opportunity.id, PIPELINE_STAGE_ORDER[stageIndex - 1]);
+                      }}
+                    >
+                      ←
+                    </button>
+                    <button
+                      aria-label="Move forward one stage"
+                      className="stage-btn"
+                      disabled={!canAdvance}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMoveOpportunity(opportunity.id, PIPELINE_STAGE_ORDER[stageIndex + 1]);
+                      }}
+                    >
+                      →
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
         </section>
       ))}
     </div>
@@ -1992,6 +2160,9 @@ function JobDetailModal({
   onStartChangeOrder,
   onUpdateJob,
   onUpdatePmNoteStatus,
+  onDeletePmNote,
+  onEditPmNote,
+  onUpdateChangeOrder,
   pmNotes,
   onSubmittalChecklist,
   onSubmittalFile,
@@ -2009,6 +2180,9 @@ function JobDetailModal({
   onStartChangeOrder: (jobId: string) => void;
   onUpdateJob: (jobId: string, updates: Partial<Job>) => void;
   onUpdatePmNoteStatus: (noteId: string, status: PMNote["status"]) => void;
+  onDeletePmNote: (note: PMNote) => void;
+  onEditPmNote: (note: PMNote) => void;
+  onUpdateChangeOrder: (co: ChangeOrder, jobId: string) => void;
   pmNotes: PMNote[];
   onSubmittalChecklist: (jobId: string, submittalId: string, updates: Parameters<typeof setSubmittalChecklistState>[1]) => void;
   onSubmittalFile: (jobId: string, submittalId: string, file: File | undefined) => void;
@@ -2026,6 +2200,9 @@ function JobDetailModal({
     today
   }).slice(0, 8);
   const [activeTab, setActiveTab] = useState<JobDetailTabId>("actions");
+  const [expandedCoId, setExpandedCoId] = useState<string | null>(null);
+  const [fileOpenStatus, setFileOpenStatus] = useState("");
+  const [activityStatus, setActivityStatus] = useState("");
   const [submittalDraft, setSubmittalDraft] = useState({
     name: "",
     type: "Shop Drawings" as SubmittalPackage["type"],
@@ -2243,8 +2420,11 @@ function JobDetailModal({
             actions={jobActions}
             compact
             jobs={[job]}
+            notesSyncMessage={!isUuid(job.id) ? "Save this job to sync notes." : undefined}
             onCreateNote={(text) => onCreatePmNote(text, job.id)}
             onUpdateNoteStatus={onUpdatePmNoteStatus}
+            onDeleteNote={onDeletePmNote}
+            onEditNote={onEditPmNote}
             title="Actions / Notes"
           />
           ) : null}
@@ -2487,25 +2667,62 @@ function JobDetailModal({
               </div>
             </div>
             <div className="financial-card-grid">
-              {job.changeOrders.length ? job.changeOrders.map((co) => (
-                <article className={`financial-card ${co.status === "approved" ? "approved" : co.status === "submitted" ? "warn" : ""}`} key={co.id}>
-                  <div className="financial-card-head">
-                    <div>
-                      <span>Change order</span>
-                      <h4>{co.number}</h4>
-                      <small>{co.dateSubmitted}</small>
+              {job.changeOrders.length ? job.changeOrders.map((co) => {
+                const isExpanded = expandedCoId === co.id;
+                return (
+                  <article className={`financial-card ${co.status === "approved" ? "approved" : co.status === "submitted" ? "warn" : ""}`} key={co.id}>
+                    <div className="financial-card-head" style={{ cursor: "pointer" }} onClick={() => setExpandedCoId(isExpanded ? null : co.id)}>
+                      <div>
+                        <span>Change order</span>
+                        <h4>{co.number}</h4>
+                        <small>{co.dateSubmitted}</small>
+                      </div>
+                      <Status value={co.status} />
                     </div>
-                    <Status value={co.status} />
-                  </div>
-                  <p>{co.description}</p>
-                  <div className="financial-card-meta">
-                    <div><span>Amount</span><strong>{money.format(co.amount)}</strong></div>
-                    <div><span>Status</span><strong>{co.status}</strong></div>
-                    <div><span>Submitted</span><strong>{co.dateSubmitted}</strong></div>
-                    <div><span>Approved</span><strong>{co.approvedDate || "-"}</strong></div>
-                  </div>
-                </article>
-              )) : <div className="empty-card">No change orders yet.</div>}
+                    <p>{co.description}</p>
+                    <div className="financial-card-meta">
+                      <div><span>Amount</span><strong>{money.format(co.amount)}</strong></div>
+                      <div><span>Status</span><strong>{co.status}</strong></div>
+                      <div><span>Submitted</span><strong>{co.dateSubmitted}</strong></div>
+                      <div><span>Approved</span><strong>{co.approvedDate || "-"}</strong></div>
+                    </div>
+                    {isExpanded ? (
+                      <div className="co-detail-panel">
+                        <div className="co-detail-actions">
+                          {co.status !== "approved" ? (
+                            <button
+                              className="primary"
+                              onClick={() => onUpdateChangeOrder({ ...co, status: "approved", approvedDate: today }, job.id)}
+                            >
+                              Approve
+                            </button>
+                          ) : null}
+                          {co.status !== "rejected" ? (
+                            <button
+                              onClick={() => onUpdateChangeOrder({ ...co, status: "rejected" }, job.id)}
+                            >
+                              Reject
+                            </button>
+                          ) : null}
+                          {co.status !== "void" ? (
+                            <button
+                              onClick={() => onUpdateChangeOrder({ ...co, status: "void" }, job.id)}
+                            >
+                              Void
+                            </button>
+                          ) : null}
+                          <button
+                            className="muted-action"
+                            onClick={() => onStartChangeOrder(job.id)}
+                          >
+                            Revise in workbook
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              }) : <div className="empty-card">No change orders yet.</div>}
             </div>
           </section>
           </>
@@ -2513,20 +2730,50 @@ function JobDetailModal({
           {activeTab === "files" ? (
           <section className="modal-section" id="job-files">
             <h3>Files</h3>
-            <div className="file-slots">
-              {fileSlots.map((slot) => {
-                const file = job.files.find((candidate) => candidate.slot === slot);
-                return <span className={file ? "filled" : ""} key={slot}>{slot}{file ? ` - ${file.name}` : " - missing"}</span>;
-              })}
+            {fileOpenStatus ? <p className="status-message">{fileOpenStatus}</p> : null}
+            <div className="file-card-grid">
+              {job.files.length ? job.files.map((file) => (
+                <article className="file-card" key={file.id}>
+                  <div className="file-card-meta">
+                    <span className="file-slot-label">{file.slot}</span>
+                    <strong className="file-name">{file.name}</strong>
+                    <small className="file-date">{file.uploadedAt}</small>
+                  </div>
+                  <button
+                    className="primary"
+                    onClick={async () => {
+                      if (!supabase) {
+                        setFileOpenStatus("Supabase is not configured — cannot generate signed URL.");
+                        return;
+                      }
+                      const storagePath = file.url ? file.url.replace(/^project-files\//, "") : "";
+                      if (!storagePath) {
+                        setFileOpenStatus(`No storage path for ${file.name}.`);
+                        return;
+                      }
+                      const { data, error } = await supabase.storage.from("project-files").createSignedUrl(storagePath, 3600);
+                      if (error || !data?.signedUrl) {
+                        setFileOpenStatus(`Could not open ${file.name}: ${(error as Error | null)?.message ?? "unknown error"}.`);
+                        return;
+                      }
+                      setFileOpenStatus("");
+                      window.open(data.signedUrl, "_blank");
+                    }}
+                  >
+                    Open
+                  </button>
+                </article>
+              )) : <div className="empty-card">No files attached yet.</div>}
             </div>
           </section>
           ) : null}
           {activeTab === "activity" ? (
           <section className="modal-section" id="job-activity">
             <h3>Activity</h3>
-            {job.activity.map((event) => (
+            {activityStatus ? <p className="status-message">{activityStatus}</p> : null}
+            {job.activity.length ? job.activity.map((event) => (
               <p className="activity" key={event.id}><strong>{event.author}</strong> {event.message} <span>{event.createdAt}</span></p>
-            ))}
+            )) : <div className="empty-note">No activity recorded yet.</div>}
           </section>
           ) : null}
           </div>
