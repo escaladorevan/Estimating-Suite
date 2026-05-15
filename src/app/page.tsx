@@ -636,14 +636,17 @@ export default function Home() {
     };
 
     setJobs((current) =>
-      current.map((j) => {
-        if (j.id !== jobId) return j;
-        const withCosApproved = submittedCos.reduce<Job>(
-          (acc, co) => applyChangeOrderStatusToJobDetail({ job: acc, changeOrderId: co.id, status: "approved", approvedDate: today, activity }),
-          j
-        );
-        return { ...withCosApproved, activity: [activity, ...j.activity] };
-      })
+      current.map((j) =>
+        j.id !== jobId
+          ? j
+          : {
+              ...j,
+              changeOrders: j.changeOrders.map((co) =>
+                co.status === "submitted" ? { ...co, status: "approved", approvedDate: today } : co
+              ),
+              activity: [activity, ...j.activity]
+            }
+      )
     );
     if (isUuid(jobId)) {
       for (const co of approvedCos) void persistChangeOrder(co);
