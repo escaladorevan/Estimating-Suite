@@ -1,0 +1,2132 @@
+﻿[
+  {
+    "cat": "Cab Adds - 5-Knuckle Hinges",
+    "desc": "Touch Latch Per Door, Installed",
+    "cost": 14,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - 5-Knuckle Hinges",
+    "desc": "5-Knuckle Hinges and Catches, FH",
+    "cost": 25,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Cab Adds - 5-Knuckle Hinges",
+    "desc": "5-Knuckle Hinges and Catches, Lower",
+    "cost": 19,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Cab Adds - 5-Knuckle Hinges",
+    "desc": "5-Knuckle Hinges and Catches, Upper",
+    "cost": 19,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Cab Adds - 5-Knuckle Hinges",
+    "desc": "5-Knuckle Hinges and Catches, FH Stainless Steel",
+    "cost": 31,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Cab Adds - 5-Knuckle Hinges",
+    "desc": "5-Knuckle Hinges and Catches, Lower Stainless Steel",
+    "cost": 27,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Cab Adds - 5-Knuckle Hinges",
+    "desc": "5-Knuckle Hinges and Catches, Upper Stainless Steel",
+    "cost": 27,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "z-DigiLock, Door",
+    "cost": 190,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "z-DigiLock, Drawer",
+    "cost": 214,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Kitlocks, Installed",
+    "cost": 148,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Best Locks, Installed",
+    "cost": 122,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Simplex locks, Installed",
+    "cost": 190,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Door Cam Locks, Installed",
+    "cost": 51,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Keyless 1 Locks, Installed",
+    "cost": 188,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Drawer Cam Locks, Installed",
+    "cost": 68,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Tot Lok Magnetic Locks, Drw",
+    "cost": 73,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Tot Lok Magnetic Locks, Door",
+    "cost": 62,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Olympus Door Locks, Installed",
+    "cost": 86,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Comb-Cam Door Locks, Installed",
+    "cost": 62,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "z-DigiLock, Shipping, One Lock",
+    "cost": 28,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Olympus Drawer Locks, Installed",
+    "cost": 98,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "Comb-Cam Drawer Locks, Installed",
+    "cost": 68,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "z-DigiLock, User Key (1 Req'd. per job)",
+    "cost": 24,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "z-DigiLock, Manager Key (1 Req'd. per job)",
+    "cost": 45,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Locks",
+    "desc": "z-DigiLock, Program Key (1 Req'd. per job)",
+    "cost": 53,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cab Adds - Tackboards",
+    "desc": "Tackboards, Installed",
+    "cost": 24,
+    "uom": "sq. ft."
+  },
+  {
+    "cat": "Cab Adds - Tackboards",
+    "desc": "Tacwall, Cut Charge, per lineal ft.",
+    "cost": 6,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Cab Adds - Tackboards",
+    "desc": "Tacwall #2166, 1/4\" x 48\"w (4 lb/lf.- ships by truck)",
+    "cost": 31,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Cabinets - Cabs Drawer Peds",
+    "desc": "Slide-Out Shelf",
+    "cost": 102,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Ped, 4 Drw.",
+    "cost": 554,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Ped, 5 Drw.",
+    "cost": 598,
+    "uom": "ea."
+  },
+  {
+    "cat": "Cabinets - Cabs Drawer Peds",
+    "desc": "Pencil drawer, 2\"-3\"h",
+    "cost": 116,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Oversize Drawer (36\"w)",
+    "cost": 37,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Ped, 2 Drw., F/F",
+    "cost": 466,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Ped, Finished Top",
+    "cost": 73,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Ped, 3 Drw., B/B/F",
+    "cost": 507,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Ped, Finished Back",
+    "cost": 73,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Ped, Hvy Duty Slides",
+    "cost": 37,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Pencil Drawer, Herman Miller",
+    "cost": 92,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Ped_1 Drw. Printer Cab",
+    "cost": 365,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Flat File, 5 drw., 48\"w x 30\"d",
+    "cost": 1219,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Flat File, 6 drw., 48\"w x 30\"d",
+    "cost": 1311,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Additional 6\" Drawer, Accuride Slide",
+    "cost": 79,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Base for Bench, 1 Drw., 36\"+/-w",
+    "cost": 487,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "2-Drawer Rolling Ped w/(2) Drawer Locks",
+    "cost": 829,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "3-Drawer Rolling Ped w/(3) Drawer Locks",
+    "cost": 896,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Ped, 4 Drw. w/Pull-Out Breadboard",
+    "cost": 591,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Lateral File Cabinet, 2 Drw. w/Suspended Files",
+    "cost": 563,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Lateral File Cabinet, 3 Drw. w/Suspended Files",
+    "cost": 636,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Drawer Ped, 3 Drw., B/B/F,w/Pull-Out Breadboard",
+    "cost": 518,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Drawer Peds",
+    "desc": "Lateral File Cabinet, 2 Drw.+2 Drw w/Suspended Files",
+    "cost": 665,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Fin. Sides @ FH Cab",
+    "cost": 182,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Full Ht. Cab over 24\"d",
+    "cost": 31,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "F.H. Open, Mel., 12\"-16\"d",
+    "cost": 122,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "F.H. Open, Plam, 12\"-16\"d",
+    "cost": 244,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Full Ht. Cab w/Doors, 12\"d",
+    "cost": 233,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "F.H. Open, Mel., 12\"d or less",
+    "cost": 116,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "F.H. Open, Mel., 16\"d or more",
+    "cost": 146,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "F.H. Open, Plam, 12\"d or less",
+    "cost": 201,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "F.H. Open, Plam, 16\"d or more",
+    "cost": 256,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Full Ht. Cab w/Doors, 12\"-16\"d",
+    "cost": 274,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Full Ht. Cab w/Doors, 16\"-24\"d",
+    "cost": 287,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Full Ht. Cab w/2-High Doors-ADD",
+    "cost": 61,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Locker FH w/Door & Key Lock, 12\"d",
+    "cost": 440,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Locker 2-high w/Doors & Key Lock, 12\"d",
+    "cost": 573,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Support/Divider Panel, FH, 3/4\"t, Plam",
+    "cost": 159,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Locker 3-high w/Doors w/Padlock Hasp, 12\"d",
+    "cost": 640,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Locker 4-high w/Doors w/Padlock Hasp, 12\"d",
+    "cost": 770,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Full Height",
+    "desc": "Refridgerator Trim Kit for Panels, Hardware Only, Installed",
+    "cost": 671,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lower - Open",
+    "desc": "CPU Shelf/Cabinet",
+    "cost": 121,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lower - Open",
+    "desc": "Open Lowers w/Plam Interior, 34\"-36\"h",
+    "cost": 165,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lower - Open",
+    "desc": "Open Lowers, Melamine Interior, DEDUCT",
+    "cost": 23,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lower - Open",
+    "desc": "Open Lowers w/Plam Interior w/Drawer, 34\"-36\"h",
+    "cost": 201,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lower - Open",
+    "desc": "Open Locker Cubbies, Plam Interior & Top 14\" tall",
+    "cost": 110,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "New 4\" Kick",
+    "cost": 37,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Lowers over 24\"d",
+    "cost": 13,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Lowers w/Doors, 34\"-36\"h",
+    "cost": 155,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Finished End @ Lower Cabinet",
+    "cost": 48,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Finished Back @ Lower Cabinet",
+    "cost": 48,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Lowers Sink Cab. Suspended ~6\"",
+    "cost": 61,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Lowers w/Doors & Drws, 34\"-36\"H",
+    "cost": 187,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Filler Panel @ Lower, 3/4\"t, Plam",
+    "cost": 61,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Lowers Sink Cab. w/Doors, 34\"-36\"h",
+    "cost": 152,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Rev-A-Shelf Pull-Out Hamper, Installed",
+    "cost": 609,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "155Lowers Sink Cab. w/Doors, 34\"-36\"h, ADA w/o Kick",
+    "cost": 189,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Lowers Sink Cab. w/Doors, 34\"-36\"h, ADA w/Attached Kick",
+    "cost": 217,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Lowers Sink Cab., 34\"-36\"h, ADA w/Removable Angled Panel",
+    "cost": 199,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Lowers w/Doors",
+    "desc": "Lowers Sink Cab. w/Doors, 34\"-36\"h, ADA w/Removable Shelf & Kick",
+    "cost": 199,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers - Open",
+    "desc": "Open Uppers, 24\"-32\"h",
+    "cost": 92,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers - Open",
+    "desc": "Open Uppers, 32\"-38\"h",
+    "cost": 98,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers - Open",
+    "desc": "Open Uppers, 24\"h or less",
+    "cost": 88,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers - Open",
+    "desc": "Open Uppers, 38\"h or more",
+    "cost": 102,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers - Open",
+    "desc": "Open Uppers, Melamine Interior, DEDUCT",
+    "cost": 20,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers - Open",
+    "desc": "Open Uppers, Microwave Shelf, Plam Interior",
+    "cost": 115,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Light Valence",
+    "cost": 13,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "12\"+ to 16\"d upper",
+    "cost": 11,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "16\"+ to 24\"d upper",
+    "cost": 16,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Soffit Panels, Angled",
+    "cost": 61,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Uppers, Plam Interior",
+    "cost": 23,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Uppers w/Doors, 24\"-32\"h",
+    "cost": 125,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Uppers w/Doors, 32\"-38\"h",
+    "cost": 135,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Upper Corner Cabinet Add-On",
+    "cost": 159,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Uppers w/Doors, 24\" or less",
+    "cost": 118,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Finished End @ Upper Cabinet",
+    "cost": 48,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Finished Top @ Upper Cabinet",
+    "cost": 48,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Uppers w/Doors, 38\"h or more",
+    "cost": 141,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Finished Bottom @ Upper Cabinet",
+    "cost": 48,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Soffit Panels, 12\"-18\" Straight",
+    "cost": 43,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Filler Panel @ Upper, 3/4\"t, Plam",
+    "cost": 61,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Soffit Panels, Jurgens' w/Reveals",
+    "cost": 48,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Soffit Panels, Angled w/Inside Corner",
+    "cost": 73,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Uppers w/Doors - Microwave Opening /Plam",
+    "cost": 232,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Soffit Panels, Vert. Wood Grain Plam -ADD",
+    "cost": 10,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Cabs Uppers w/Doors",
+    "desc": "Uppers w/Doors, 32\"-38\"h, Angled for Corner",
+    "cost": 238,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Closet Packs",
+    "desc": "Closet Pack, ADA",
+    "cost": 494,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Closet Packs",
+    "desc": "Closet Center Support",
+    "cost": 79,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Closet Packs",
+    "desc": "Closet Pack, Plam, 4'",
+    "cost": 305,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Closet Packs",
+    "desc": "Closet Pack Additional Footage",
+    "cost": 31,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Closet Packs",
+    "desc": "Closet Pack, Mel. w/Plam Edge, 4'",
+    "cost": 244,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Doors",
+    "desc": "Lower, Sliding Doors",
+    "cost": 25,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Doors",
+    "desc": "Upper, Sliding Doors",
+    "cost": 22,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Doors",
+    "desc": "Open Uppers_Plam Interior",
+    "cost": 116,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Doors",
+    "desc": "Lower, Simple Pocket Doors",
+    "cost": 427,
+    "uom": "set"
+  },
+  {
+    "cat": "Est-Cabinets - Doors",
+    "desc": "Upper, Simple Pocket Doors",
+    "cost": 427,
+    "uom": "set"
+  },
+  {
+    "cat": "Est-Cabinets - Doors",
+    "desc": "Glass Doors, per Door +Glass",
+    "cost": 117,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Doors",
+    "desc": "Glass Doors, FH, per Door +Glass",
+    "cost": 184,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Doors",
+    "desc": "Blum Flip-Up Hinge Kit, Installed",
+    "cost": 385,
+    "uom": "pair"
+  },
+  {
+    "cat": "Est-Cabinets - Doors",
+    "desc": "Gate W/Bommer Hinge 1\" to 1-1/2\", Installed",
+    "cost": 1092,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Doors",
+    "desc": "Flip-Up, Pocket-type Door Hardware, Swing-Up Fitting",
+    "cost": 79,
+    "uom": "pair"
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "Trash Opening, Short Door",
+    "cost": 49,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "File Bars, Set , Installed",
+    "cost": 31,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "1/4\" Plex Divider, Square edge",
+    "cost": 15,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "1/4\" P-Lam Divider, Square edge",
+    "cost": 13,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "1/4\" Masonite Divider, Square edge",
+    "cost": 10,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "Non-White Melamine Cabinet Interior",
+    "cost": 4,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "1/4\" Masonite Divider, Rad/Scoop edge",
+    "cost": 18,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "Trash Opening in Door Sq. w/St. Steel Channel",
+    "cost": 122,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "Trash Opening in Door, Rad./Plam Interior of Cab",
+    "cost": 102,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "Perforated Metal for AV Base Cabinet Door, Installed",
+    "cost": 122,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "Mail Slot, Wall Mt., ADD ON Adj. Dividers, 12\"d x 34\"h +dividers",
+    "cost": 103,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "Mail Slots @ T-Top ADD ON for Mel/Masonite Dividers, 12\"d x 15\"h",
+    "cost": 88,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Misc.",
+    "desc": "Mail Slot, Wall Mt., ADD ON Fixed Dividers, 12\"d x 34\"h +dividers",
+    "cost": 110,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Shelving",
+    "desc": "KV Brackets",
+    "cost": 14,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Shelving",
+    "desc": "Shelf, 18\"-24\"w, Plam",
+    "cost": 32,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Shelving",
+    "desc": "KV #87, Hvy Dty Standards",
+    "cost": 37,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Cabinets - Shelving",
+    "desc": "Shelf, 12\"+ to 18\"w, Plam",
+    "cost": 24,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Shelving",
+    "desc": "Shelf, 12\"-18\"w, Melamine",
+    "cost": 19,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Shelving",
+    "desc": "Shelf, 12\"w or Less, Plam",
+    "cost": 22,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Shelving",
+    "desc": "Shelf, 18\"-24\"w, Melamine",
+    "cost": 22,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Shelving",
+    "desc": "Shelf, 12\"w or less, Melamine",
+    "cost": 16,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Cabinets - Shelving",
+    "desc": "Installation, Standards & Brackets",
+    "cost": 106,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Add Angle",
+    "cost": 58,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Wood Edge",
+    "cost": 35,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Dropped Counter",
+    "cost": 122,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Add Plywood Core",
+    "cost": 7,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Skirt, 6\"h, Plam",
+    "cost": 24,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Add Radius Corner",
+    "cost": 37,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Add Radius/Curves",
+    "cost": 37,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Wood Edge, Radiused",
+    "cost": 75,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Add 45o Inside Corner",
+    "cost": 58,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Add-Chem Resistant Plam",
+    "cost": 6,
+    "uom": "sq. ft."
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "C-Top Height Change, ADA",
+    "cost": 180,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Wood Edge, Radiused Corner",
+    "cost": 122,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "C-Top - Add for Marine Grade Ply @ Sink",
+    "cost": 13,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Angles, Curves, Wood E",
+    "desc": "Bent 18ga. Stainless Steel Backsplash Cover, 48\"+/-, Installed",
+    "cost": 170,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Grommets",
+    "desc": "Grommet, Installed",
+    "cost": 19,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Grommets",
+    "desc": "Trash Rings, 4\"-6\"",
+    "cost": 92,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Grommets",
+    "desc": "Trash Rings, 8\" Installed",
+    "cost": 104,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Grommets",
+    "desc": "Trash Rings, 12\" Installed",
+    "cost": 152,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops",
+    "desc": "Full Height Splash",
+    "cost": 24,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops",
+    "desc": "C-Top w/4\" Splash, 36\"\"d",
+    "cost": 61,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops",
+    "desc": "C-Top w/4\" Splash, 25.5\"-33\"d",
+    "cost": 55,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops",
+    "desc": "C-Top w/4\" Splash, Up to 25.5\"d",
+    "cost": 55,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/3mm PV",
+    "desc": "C-Top w/Splash, 36\"d, 1\" w/3mm PVC/T-Mould Edge",
+    "cost": 68,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/3mm PV",
+    "desc": "C-Top w/o Splash, 36\"d, 1\" w/3mm PVC/T-Mould Edge",
+    "cost": 68,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/3mm PV",
+    "desc": "C-Top w/Splash, 25.5\"-33\"d, 1\" w/3mm PVC/T-Mould Edge",
+    "cost": 68,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/3mm PV",
+    "desc": "C-Top w/o Splash, 25.5\"-33\"d, 1\" w/3mm PVC/T-Mould Edge",
+    "cost": 55,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/3mm PV",
+    "desc": "C-Top w/o Splash, Up to 25\"d, 1\" w/3mm PVC/T-Mould Edge",
+    "cost": 55,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/3mm PV",
+    "desc": "C-Top w/4\" Splash, Up to 25.5\"d, 1\" w/3mm PVC/T-Mould Edge",
+    "cost": 55,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/3mm PV",
+    "desc": "Post Formed C-Top, 25\"w w/Splash, Str. Edge, 3mm PVC/T-Mould Edge",
+    "cost": 43,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/o Splash",
+    "desc": "C-Top w/o Splash, 36\"d",
+    "cost": 65,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/o Splash",
+    "desc": "C-Top w/o Splash, 25.5\"-33\"d",
+    "cost": 61,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/o Splash",
+    "desc": "C-Top w/o Splash, Up to 25.5\"d",
+    "cost": 55,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Plam C-Tops w/o Splash",
+    "desc": "C-Top w/o Splash, 25.5\"-33\"d - Linoleum",
+    "cost": 80,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Post Formed C-tops",
+    "desc": "Post-Formed Countertop Pick-Up",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Counters - Post Formed C-tops",
+    "desc": "Post Formed C-Top, 25\"w w/Splash, Str. Edge",
+    "cost": 35,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Post Formed C-tops",
+    "desc": "Post Formed C-Top, 25\"w w/Splash, Rad. Drop Edge",
+    "cost": 37,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Post Formed C-tops",
+    "desc": "Post Formed C-Top, 25\"w w/Splash, 180o Bullnose Edge",
+    "cost": 30,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Post Formed C-tops",
+    "desc": "Post Formed C-Top, 30\"w w/o Splash, 180o Bullnose Edge",
+    "cost": 32,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Post Formed C-tops",
+    "desc": "Post Formed C-Top, 36\"w w/o Splash, 180o Bullnose edge",
+    "cost": 39,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Post Formed C-tops",
+    "desc": "Post Formed C-Top, 25\"w w/Splash, No Drip Edge, Installed",
+    "cost": 30,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Skirt, 6\"h, Corian",
+    "cost": 88,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Corian, Integral Sink",
+    "cost": 696,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Corian Base, 4\", Installed",
+    "cost": 83,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Corian Countertop, Template",
+    "cost": 13,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Solid Surface Transaction Top",
+    "cost": 154,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Corian Countertop, Coved End Splash",
+    "cost": 385,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Corian Countertop w/Coved Backsplash",
+    "cost": 317,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Corian Countertop, No-Drip Front Edge",
+    "cost": 177,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Corian Countertop, Coved Backsplash Inside Corner",
+    "cost": 114,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Corian Countertop, Coved Backsplash Applied End Splash",
+    "cost": 108,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Corian Countertop, No-Drip Front Edge, Rad.Inside Corner",
+    "cost": 171,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Corian Counter, Undermount Stainless Steel Sink, Cut/Finish Hole",
+    "cost": 190,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Solid Surface",
+    "desc": "Solid Surface C-Top W/ Sub-top",
+    "cost": 255,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Sub-Tops",
+    "desc": "C-Top Sub-Top for Solid Surface or Stone",
+    "cost": 29,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Sub-Tops",
+    "desc": "T-Top Sub-Top for Solid Surface or Stone",
+    "cost": 24,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Sub-Tops",
+    "desc": "C-Top Sub-Top for Solid Surface or Stone, Radiused",
+    "cost": 37,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Sub-Tops",
+    "desc": "T-Top Sub-Top for Solid Surface or Stone, Radiused",
+    "cost": 30,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "Plam Corbel",
+    "cost": 121,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "Gambas Support Bracket",
+    "cost": 68,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "Support Panel, 3/4\"t, Plam",
+    "cost": 104,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "Metal Support Leg, Installed",
+    "cost": 222,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "Support Panel, 1-1/2\"t, Plam",
+    "cost": 146,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "Transaction Top Support Panel",
+    "cost": 55,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "In-Wall Bracket, Installed by GC",
+    "cost": 98,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "Support Panel, 3/4\" Plam, Angled",
+    "cost": 122,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "Support Panel, 3/4\" Plam, Curved",
+    "cost": 183,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "In-Die-Wall Bracket, Installed by F&S",
+    "cost": 98,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Supports",
+    "desc": "In-Wall, Bracket, 2.5x2.5x 1/4 Welded C-Top Support w/Foot",
+    "cost": 214,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Transaction Tops",
+    "desc": "T-Top, Add Angle",
+    "cost": 61,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Counters - Transaction Tops",
+    "desc": "T-Top, Add Radius/Curve",
+    "cost": 36,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Transaction Tops",
+    "desc": "T-Top, up to 16\"d, 1\" w/PVC Edge",
+    "cost": 46,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Transaction Tops",
+    "desc": "T-Top, Plam Self-Edge, up to 16\"w",
+    "cost": 44,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Transaction Tops",
+    "desc": "T-Top, Plam T-Mould edge, up to 16\"w",
+    "cost": 44,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Counters - Transaction Tops",
+    "desc": "T-Top, Rad. w/Wood Edges & 12\"h Face, Installed",
+    "cost": 262,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Access Panels",
+    "cost": 100,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Die Wall, Curved w/Plam",
+    "cost": 183,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Access Panels, Curved DW",
+    "cost": 168,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Plam Inlaid Squares @ DW",
+    "cost": 55,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Die Wall, Straight w/Plam",
+    "cost": 152,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "4'6x2'0x1 1/2\" Plam Divider",
+    "cost": 365,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "P-Lam Panels w/Reveals @ DW",
+    "cost": 207,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Modesty Panel, 2-Sided, Plam",
+    "cost": 61,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Metal Laminate Kick @ Die Wall",
+    "cost": 38,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Die Wall, T-Top Panel, Str. w/Plam",
+    "cost": 97,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Die Wall, T-Top Panel, Curved w/Plam",
+    "cost": 146,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "4'6x3'6x4\" Divider Panel w/TB on 2 Sides",
+    "cost": 740,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "In-Die-Wall Steel Post, Installed by F&S",
+    "cost": 183,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Angled Plam Panels w/Painted Reveals @ DW",
+    "cost": 101,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Stainless Steel Cornerguard @ Divider Panel",
+    "cost": 104,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Veneered Wood Panels w/Painted Reveals @ DW",
+    "cost": 287,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Aluminum Channel, 1/2\" Reveal, Curved, Installed",
+    "cost": 37,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Aluminum Channel, 1/2\" Reveal, Straight, Installed",
+    "cost": 25,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Angled Plam Panels w/Painted Reveals @ DW, Radiused",
+    "cost": 152,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Str. Plam Panels, \"3-Color Wave\" w/Painted Reveals @ DW",
+    "cost": 243,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Fixtures - Office",
+    "desc": "Curved Plam Panels, \"3-Color Wave\" w/Painted Reveals @ Curved DW",
+    "cost": 280,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Labor - Custom Fabrication",
+    "desc": "Custom Fabrication",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Custom Fabrication",
+    "desc": "Custom Fabrication, Labor, D/T",
+    "cost": 156,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Custom Fabrication",
+    "desc": "Custom Fabrication, Labor, O/T",
+    "cost": 156,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Custom Fabrication",
+    "desc": "Custom Fabrication, Apply Veneer",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Custom Fabrication",
+    "desc": "Custom Fabrication, Solid Surface",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Custom Fabrication",
+    "desc": "Custom Fabrication, Apply Plastic Laminate",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Custom Fabrication",
+    "desc": "Custom Fabrication, Solid Surface - Integral Sink",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Delivery, Load",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Delivery, Unload",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Downtown Parking",
+    "cost": 40,
+    "uom": "day"
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Union Installation",
+    "cost": 155,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Delivery, Drive, R/T",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Demo, Form & Structure",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Installation, D/T Hrs.",
+    "cost": 155,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Installation, O/T Hrs.",
+    "cost": 145,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Delivery Material Pick Up",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Installation, Travel, R/T",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Installation, Form & Structure",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Installation, Prevailing Wage Filing Fee",
+    "cost": 58,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Labor - Delivery & Installation",
+    "desc": "Installation, Prevailing Wage Hrs.+ Filing Fee",
+    "cost": 155,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Engineering/PM",
+    "desc": "CNC Pathing",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Engineering/PM",
+    "desc": "Site Survey",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Engineering/PM",
+    "desc": "Project Management",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Engineering/PM",
+    "desc": "Submittal Drawings",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Engineering/PM",
+    "desc": "Project Management - LEEDS Tracking",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Finishing",
+    "desc": "Finish / Sand",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Finishing",
+    "desc": "Finish / Stain",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Finishing",
+    "desc": "Finish / Coating",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Finishing",
+    "desc": "Finish / Samples / Color Matching",
+    "cost": 317,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Labor - Parts / Milling",
+    "desc": "Mold Stock",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Milling",
+    "desc": "Plane Stock",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Milling",
+    "desc": "Mill S4S Stock",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Milling",
+    "desc": "Equipment Setup",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Milling",
+    "desc": "Hand Sand Stock",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Milling",
+    "desc": "Cut Parts to Length",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Milling",
+    "desc": "Table Saw, Rip Stock",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Milling",
+    "desc": "Sand Stock, Wide Belt",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Milling",
+    "desc": "Edge Sand on Table Saw",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Panel",
+    "desc": "CNC Routing",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Panel",
+    "desc": "Wide Belt, 1 Man",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Panel",
+    "desc": "Edge Band, Machine",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Panel",
+    "desc": "Panel Cutting_Beam Saw",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Panel",
+    "desc": "Point to Point Machining",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Labor - Parts / Panel",
+    "desc": "Edge Band, Detailing/Hand Band",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Library Advantage - PeaceHealth",
+    "desc": "Plam Chart Holder",
+    "cost": 272,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Prov Irvington R",
+    "desc": "Loose Plam",
+    "cost": 69,
+    "uom": "lot"
+  },
+  {
+    "cat": "Est-Library Advantage - Prov Irvington R",
+    "desc": "Plam Door Faces",
+    "cost": 92,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Prov Irvington R",
+    "desc": "Plam Refer Shelf",
+    "cost": 92,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Prov Irvington R",
+    "desc": "Plam Drawer Faces",
+    "cost": 81,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Prov Irvington R",
+    "desc": "C-Top Edge Re-Glue",
+    "cost": 6,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Prov Irvington R",
+    "desc": "Demo, Form & Structure",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Library Advantage - Prov Irvington R",
+    "desc": "Misc. Repair Materials",
+    "cost": 29,
+    "uom": "lot"
+  },
+  {
+    "cat": "Est-Library Advantage - Prov Irvington R",
+    "desc": "End Panel, 3/4\"t, Plam, G2S",
+    "cost": 98,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Prov Irvington R",
+    "desc": "Installation, Form & Structure",
+    "cost": 100,
+    "uom": "hr."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Suite Entry A/Type B1",
+    "cost": 4508,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Suite Entry B/Type D1",
+    "cost": 3922,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Suite Entry C/Type F1",
+    "cost": 2910,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Suite Entry D/Type H1",
+    "cost": 3163,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Suite Entry E/Type K1",
+    "cost": 2740,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "3/4\"x12\" Plam Chair Rail",
+    "cost": 35,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Rad Plam Corner @ Die Wall",
+    "cost": 115,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "3/4\"x6\" Plam Coat Hook Board",
+    "cost": 23,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Uppers w/Doors, 50\"h or more",
+    "cost": 144,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Solid Surface T-Top w/Back Bevel",
+    "cost": 217,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Bobrick 76717 Coat Hook, Installed",
+    "cost": 29,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Dbl Plam Valence @ Upper Glass Track",
+    "cost": 58,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Solid Surface Trim @ DW w/Back Bevel",
+    "cost": 95,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "3-Drawer Rolling Ped w/(1) Drawer Lock",
+    "cost": 782,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Solid Surface T-Top w/Back Bevel, Rad.",
+    "cost": 288,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Solid Surface Edge Counter w/Back Bevel",
+    "cost": 179,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Angled Plam Panels w/Painted Reveals @ DW",
+    "cost": 96,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "3' Flip-Up Desk w/3mm C-Top Edge, Installed",
+    "cost": 518,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Die Wall, Curved w/Maple Veneer Ext/Plam Int",
+    "cost": 432,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Die Wall, Straight w/Maple Veneer Ext/Plam Int",
+    "cost": 288,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Solid Surface T-Top w/Back Bevel, Add Radius Corner",
+    "cost": 115,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Library Advantage - Providence Sta",
+    "desc": "Add Cut-Out on Upper Cabinet Bottom for PT Dispenser",
+    "cost": 46,
+    "uom": "ea."
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Base, Plam",
+    "cost": 23,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Stainless Steel Base",
+    "cost": 62,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Base, Maple, 4\" Stained",
+    "cost": 25,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Base, Maple, 6\" Stained",
+    "cost": 37,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Base, Cherry, 4\" Stained",
+    "cost": 31,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Base, Cherry, 6\" Stained",
+    "cost": 44,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Base, Maple, 4\" Clear Fin.",
+    "cost": 20,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Base, Maple, 6\" Clear Fin.",
+    "cost": 31,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Base, Cherry, 4\" Clear Fin.",
+    "cost": 25,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Base, Cherry, 6\" Clear Fin.",
+    "cost": 37,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Chair Rail, Maple, 4\" Clear Fin., Installed",
+    "cost": 31,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "PG Wood Base, Installed Raw, Putty & Paint by Others",
+    "cost": 19,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "MDF Pre Primed 11/16 x 5 1/2 x 16' pcs Square edge",
+    "cost": 1,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Pr-primed MDF Base, 4\", Installed, Putty & Paint by Others",
+    "cost": 19,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "Pr-primed MDF Base, 8\", Installed, Putty & Paint by Others",
+    "cost": 25,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Base",
+    "desc": "MDF Pre Primed 11/16 x 4 9/16 x 16' pcs Square edge",
+    "cost": 1.25,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Paneling",
+    "desc": "Plam Slatwall, w/Metal Inserts",
+    "cost": 62,
+    "uom": "sq. ft."
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Paneling",
+    "desc": "Plam Paneling, Installed, Basic",
+    "cost": 48,
+    "uom": "sq. ft."
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Paneling",
+    "desc": "MDF Paneling, Putty & Paint B.O.Installed",
+    "cost": 25,
+    "uom": "sq. ft."
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Paneling",
+    "desc": "Wood Paneling, Clear Fin, Installed, Low End",
+    "cost": 53,
+    "uom": "sq. ft."
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Paneling",
+    "desc": "Wood Paneling, Clear Fin, Installed, High End",
+    "cost": 64,
+    "uom": "sq. ft."
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Wall Cap",
+    "desc": "Wall Cap, 3/4\"",
+    "cost": 31,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Wall Cap",
+    "desc": "Wall Cap, 1 1/2\"",
+    "cost": 40,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Wall Cap",
+    "desc": "Solid Surface Wall Cap, 4\"w, Sq. Edges",
+    "cost": 168,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Wall Cap",
+    "desc": "Solid Surface Sill, 1/2\"x5\"w, Sq. Edges",
+    "cost": 122,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Wall Cap",
+    "desc": "Solid Surface Wall Cap, 6\"w, Bull Nose + Sq. Edge",
+    "cost": 215,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Window",
+    "desc": "MDF 3/4\" Primed Window Sill",
+    "cost": 24,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Est-Paneling/Base/Wall Cap - Window",
+    "desc": "MDF 3/4\" Primed Window Sill and Skirt",
+    "cost": 39,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Material-Edge Bands - ABS",
+    "desc": "3mm ABS Edgebanding",
+    "cost": 2,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Material-Edge Bands - ABS",
+    "desc": "3mm ABS Siesmic Shelf Edgebanding",
+    "cost": 2,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Material-Edge Bands - Plam",
+    "desc": "Plastic Laminte Edge Band",
+    "cost": 7,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Material-Edge Bands - PVC",
+    "desc": "3mm PVC",
+    "cost": 1.5,
+    "uom": "lin. ft"
+  },
+  {
+    "cat": "Material-Edge Bands - PVC",
+    "desc": "3mm PVC for 1-1/2\" C/T",
+    "cost": 2.75,
+    "uom": "lin. ft"
+  }
+]
