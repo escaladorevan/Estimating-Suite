@@ -32,7 +32,10 @@ The only remaining `project/` content should be reference uploads under `project
 - File metadata/storage helpers: `src/lib/file-repository.ts`
 - Production database reset: `supabase/rebuild-production-schema.sql`
 - Product blueprint: `docs/product-blueprint-v1.md`
+- Production roadmap and agent checklist: `docs/production-app-roadmap.md`
 - Agent handoff guardrails: `docs/agent-handoff.md`
+
+Before starting production work, check the roadmap slice and acceptance criteria in `docs/production-app-roadmap.md`.
 
 ## Supabase Schema
 

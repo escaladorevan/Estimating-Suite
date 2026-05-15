@@ -4,6 +4,8 @@
 
 Estimating Suite is a production-bound Next.js + Supabase app. The important work now is proving the database spine, not adding more isolated UI mockups.
 
+Before starting production work, read `docs/production-app-roadmap.md`, identify the roadmap slice being advanced, and check the completed work against that slice's acceptance criteria.
+
 ## Work In These Files
 
 - `src/app/page.tsx` for current app wiring until feature slices are split out.
@@ -14,6 +16,7 @@ Estimating Suite is a production-bound Next.js + Supabase app. The important wor
 - `src/lib/file-repository.ts` for Supabase Storage paths and file metadata.
 - `src/lib/status-constants.ts` for status unions shared by TypeScript and SQL checks.
 - `supabase/rebuild-production-schema.sql` for the reset schema of record.
+- `docs/production-app-roadmap.md` for production sequencing and agent checkpoints.
 
 ## Removed Legacy Surface
 
@@ -43,3 +46,5 @@ Finish the remaining persistence surface before new feature polish:
 3. Persist activity events for important workflow actions.
 4. Add role-matrix tests for RLS expectations.
 5. Browser-smoke the opportunity to estimate to job to CO path with Supabase enabled.
+
+In the next handoff or final summary, name the roadmap slice advanced by the work.
