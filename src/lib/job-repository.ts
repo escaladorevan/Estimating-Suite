@@ -505,6 +505,12 @@ export async function listJobs(client: SupabaseJobClient | null = supabase) {
   );
 }
 
+export async function listJobDetail(jobId: string, client: SupabaseJobClient | null = supabase) {
+  if (!client || !isUuid(jobId)) return null;
+  const jobs = await listJobs(client);
+  return jobs.find((job) => job.id === jobId) ?? null;
+}
+
 export async function saveJobHeader(job: Job, client: SupabaseJobClient | null = supabase) {
   if (!client) return job;
   const { data, error } = await client.from("jobs").upsert(mapJobToUpsert(job), { onConflict: "job_number" }).select("*").single();

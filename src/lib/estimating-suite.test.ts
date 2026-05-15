@@ -24,6 +24,10 @@ import {
   mapSubmittalToUpdate
 } from "./job-repository";
 import {
+  getJobDetailData,
+  replaceJobDetail
+} from "./job-detail-data";
+import {
   currentContractValue,
   jobCostSummary,
   summarizeBacklog,
@@ -1170,6 +1174,93 @@ describe("job persistence reconciliation", () => {
 describe("job detail tabs", () => {
   it("keeps the PM job workspace organized into stable tabs", () => {
     expect(jobDetailTabs.map((tab) => tab.id)).toEqual(["actions", "submittals", "financials", "files", "activity"]);
+  });
+});
+
+describe("job detail data boundary", () => {
+  it("returns a focused job detail record with only notes for that job", () => {
+    const job = {
+      id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      jobNumber: "G26-061",
+      workType: "Bid / ITB",
+      pm: "Geoff",
+      client: "Smoke GC",
+      projectName: "Smoke Test",
+      baseContract: 100000,
+      backlogStatus: "Awarded / Waiting",
+      forecastStart: "",
+      forecastEnd: "",
+      forecastQuarter: "",
+      expectedFabStart: "",
+      expectedCompletion: "",
+      fabStatus: "Not Started",
+      installStart: "",
+      installEnd: "",
+      installStatus: "Ready",
+      invoiceStatus: "Not Billed",
+      crewSize: 2,
+      gc: "",
+      notes: "",
+      changeOrders: [],
+      purchaseOrders: [],
+      submittals: [],
+      files: [],
+      activity: []
+    } satisfies Job;
+
+    const detail = getJobDetailData({
+      jobs: [job],
+      jobId: job.id,
+      pmNotes: [
+        { id: "note-one", text: "Call Manny", status: "Open", priority: "Pinned", jobId: job.id, createdAt: "2026-05-14" },
+        { id: "note-two", text: "Other job", status: "Open", priority: "Normal", jobId: "job-g060", createdAt: "2026-05-14" }
+      ]
+    });
+
+    expect(detail?.isPersisted).toBe(true);
+    expect(detail?.notes.map((note) => note.id)).toEqual(["note-one"]);
+  });
+
+  it("replaces matching local job detail with the persisted detail payload", () => {
+    const localJob = {
+      id: "job-g061",
+      jobNumber: "G26-061",
+      workType: "Bid / ITB",
+      pm: "Geoff",
+      client: "Smoke GC",
+      projectName: "Smoke Test",
+      baseContract: 100000,
+      backlogStatus: "Awarded / Waiting",
+      forecastStart: "",
+      forecastEnd: "",
+      forecastQuarter: "",
+      expectedFabStart: "",
+      expectedCompletion: "",
+      fabStatus: "Not Started",
+      installStart: "",
+      installEnd: "",
+      installStatus: "Ready",
+      invoiceStatus: "Not Billed",
+      crewSize: 2,
+      gc: "",
+      notes: "",
+      changeOrders: [],
+      purchaseOrders: [],
+      submittals: [],
+      files: [],
+      activity: []
+    } satisfies Job;
+    const persistedJob = {
+      ...localJob,
+      id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      files: [{ id: "file-1", ownerType: "job", ownerId: "50f42d9f-b53f-4a97-b711-dc8b1cd13384", slot: "contract", name: "Contract.pdf", uploadedAt: "2026-05-14" }]
+    } satisfies Job;
+
+    const result = replaceJobDetail([localJob], persistedJob);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(persistedJob.id);
+    expect(result[0].files).toHaveLength(1);
   });
 });
 

@@ -3,8 +3,10 @@
 import { useCallback, useState } from "react";
 import { saveEstimateHeader } from "@/lib/estimate-repository";
 import { pruneProjectFileSlotMetadata, saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
+import { replaceJobDetail } from "@/lib/job-detail-data";
 import { reconcilePersistedJobIdentity } from "@/lib/job-persistence-reconciliation";
 import {
+  listJobDetail,
   listJobs,
   listPMNotes,
   saveActivityEvent,
@@ -92,6 +94,22 @@ export function useJobsPersistence({
       setJobPersistenceStatus("Local sample mode. Sign in before Supabase can read and save PM notes.");
     }
   }, [setPmNotes]);
+
+  const loadPersistedJobDetail = useCallback(async (jobId: string, isMounted = true) => {
+    if (!isUuid(jobId)) return;
+    try {
+      const persisted = await listJobDetail(jobId);
+      if (!isMounted || !persisted) return;
+
+      setJobs((current) => replaceJobDetail(current, persisted));
+      setSelectedJobId((current) => (current === jobId ? persisted.id : current));
+      setDetailJobId((current) => (current === jobId ? persisted.id : current));
+      setJobPersistenceStatus(`Loaded job detail for ${persisted.jobNumber} from Supabase.`);
+    } catch {
+      if (!isMounted) return;
+      setJobPersistenceStatus("Job detail is showing local data. Supabase detail refresh failed.");
+    }
+  }, [setDetailJobId, setJobs, setSelectedJobId]);
 
   const persistJobHeader = useCallback(async (job: Job, forceCreate = false) => {
     if (!isUuid(job.id) && !forceCreate) return;
@@ -284,6 +302,7 @@ export function useJobsPersistence({
 
   return {
     jobPersistenceStatus,
+    loadPersistedJobDetail,
     loadPersistedJobs,
     loadPersistedPMNotes,
     persistActivity,

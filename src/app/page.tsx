@@ -27,6 +27,7 @@ import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChange
 import { calculateEstimateTotals } from "@/lib/estimate-math";
 import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
 import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
+import { getJobDetailData } from "@/lib/job-detail-data";
 import { resolvePersistedJobForPMNote } from "@/lib/job-persistence-reconciliation";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
 import {
@@ -168,6 +169,7 @@ export default function Home() {
   ]);
   const {
     jobPersistenceStatus,
+    loadPersistedJobDetail,
     loadPersistedJobs,
     loadPersistedPMNotes,
     persistActivity,
@@ -193,7 +195,8 @@ export default function Home() {
 
   const selectedEstimate = estimates.find((estimate) => estimate.id === activeEstimateId) ?? estimates[0];
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? jobs[0];
-  const detailJob = jobs.find((job) => job.id === detailJobId) ?? null;
+  const detailJobData = getJobDetailData({ jobs, pmNotes, jobId: detailJobId });
+  const detailJob = detailJobData?.job ?? null;
   const selectedOpportunity = opportunities.find((opportunity) => opportunity.id === selectedOpportunityId) ?? null;
   const totals = calculateEstimateTotals(selectedEstimate);
   const pipelineOpportunities = opportunities.filter((opportunity) =>
@@ -261,6 +264,17 @@ export default function Home() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (detailJobData?.isPersisted) {
+      void loadPersistedJobDetail(detailJobData.job.id, isMounted);
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [detailJobData?.job.id, detailJobData?.isPersisted, loadPersistedJobDetail]);
 
   useEffect(() => {
     if (!supabase) {
@@ -1236,7 +1250,7 @@ export default function Home() {
           onStartChangeOrder={startChangeOrderFromJob}
           onUpdateJob={updateJobHeader}
           onUpdatePmNoteStatus={updatePmNoteStatus}
-          pmNotes={pmNotes}
+          pmNotes={detailJobData?.notes ?? []}
           onSubmittalChecklist={updateSubmittalChecklist}
           onSubmittalFile={attachSubmittalFile}
           onSubmittalAction={updateSubmittal}
