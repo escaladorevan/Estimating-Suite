@@ -1,6 +1,6 @@
 # Agent Guardrails
 
-This repository has two eras of code. Work in the modern app unless the user explicitly asks for legacy prototype reference work.
+This repository is now the modern Next/Supabase app. The old CDN prototype code has been removed to prevent accidental work in the wrong architecture.
 
 ## Production App
 
@@ -11,11 +11,11 @@ This repository has two eras of code. Work in the modern app unless the user exp
 - Use repository helpers in `src/lib/*-repository.ts` for Supabase mapping and persistence.
 - Keep business math in shared lib modules so UI, PDFs, analytics, and snapshots agree.
 
-## Legacy Reference
+## Reference Uploads
 
-- `index.html` and `project/` are legacy CDN/prototype reference files.
-- Do not add production persistence, estimator, bid, job, or Supabase behavior to `project/*.js`.
-- If you need behavior from the old estimator/dashboard, port the idea into `src/` instead.
+- `project/uploads/` may contain old workbooks, PDFs, and standalone HTML tools used as source-system references.
+- Do not recreate `index.html`, `project/*.js`, or `project/*.jsx` as production app code.
+- If old estimator/dashboard behavior is useful, port the concept into `src/` and the repository helpers.
 
 ## Before Commit
 

@@ -2,7 +2,7 @@
 
 ## Current Direction
 
-Estimating Suite is moving from a high-fidelity prototype into a production Next.js + Supabase app. The important work now is proving the database spine, not adding more isolated UI mockups or patching the old CDN prototype.
+Estimating Suite is a production-bound Next.js + Supabase app. The important work now is proving the database spine, not adding more isolated UI mockups.
 
 ## Work In These Files
 
@@ -15,18 +15,20 @@ Estimating Suite is moving from a high-fidelity prototype into a production Next
 - `src/lib/status-constants.ts` for status unions shared by TypeScript and SQL checks.
 - `supabase/rebuild-production-schema.sql` for the reset schema of record.
 
-## Do Not Work Here Unless Explicitly Asked
+## Removed Legacy Surface
+
+The old CDN prototype files have been deleted. Do not recreate these as production surfaces:
 
 - `index.html`
 - `project/supabase.js`
 - `project/*.jsx`
 - `project/*.js`
 
-Those files are legacy reference material. They can help explain old behavior, but production changes should be ported into `src/`.
+The only remaining `project/` content should be `project/uploads/`, which stores reference workbooks, PDFs, and old standalone tools for import mapping or behavior comparison. If old behavior is useful, port the concept into `src/`.
 
 ## Current Verified State
 
-As of the guardrail pass, `main` had passing:
+As of the latest guardrail pass, `main` should be verified with:
 
 - `npm.cmd test`
 - `npm.cmd run typecheck`
