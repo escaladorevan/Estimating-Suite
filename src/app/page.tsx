@@ -149,6 +149,8 @@ export default function Home() {
   const [sessionEmail, setSessionEmail] = useState("");
   const [authStatus, setAuthStatus] = useState("Sign in to save live data.");
   const [currentUser, setCurrentUser] = useState<AppUserProfile | null>(null);
+  const [pendingLostConfirm, setPendingLostConfirm] = useState<{ linkedOpp: Opportunity; jobId: string } | null>(null);
+  const [pendingCoSubmit, setPendingCoSubmit] = useState<{ estimate: Estimate; amount: number; warnings: string[] } | null>(null);
   const [pmNotes, setPmNotes] = useState<PMNote[]>([
     {
       id: "note-manny",
@@ -427,16 +429,10 @@ export default function Home() {
     const updated = { ...job, ...updates };
     setJobs((current) => current.map((candidate) => (candidate.id === jobId ? updated : candidate)));
 
-    // Prompt to mark linked opportunity as Lost when voiding a job
     if (updates.backlogStatus === "Void" && updated.opportunityId) {
       const linkedOpp = opportunities.find((o) => o.id === updated.opportunityId);
       if (linkedOpp && linkedOpp.winLoss !== "Lost") {
-        const markLost = window.confirm(
-          `Mark linked opportunity "${linkedOpp.projectName}" as Lost?`
-        );
-        if (markLost) {
-          void persistOpportunity({ ...linkedOpp, status: "Lost", winLoss: "Lost" });
-        }
+        setPendingLostConfirm({ linkedOpp, jobId });
       }
     }
 
@@ -572,21 +568,7 @@ export default function Home() {
     goToView("estimator");
   }
 
-  function submitEstimateAsChangeOrder(estimate: Estimate, amount: number) {
-    if (estimate.documentType !== "Change Order" || !estimate.jobId) return;
-    const sourceJob = jobs.find((job) => job.id === estimate.jobId);
-    if (!sourceJob) return;
-
-    const warnings = validateChangeOrderSubmission({
-      estimate,
-      amount,
-      existingChangeOrders: sourceJob.changeOrders
-    });
-    if (warnings.length) {
-      const shouldContinue = window.confirm(`Review before submitting:\n\n${warnings.join("\n")}\n\nSubmit anyway?`);
-      if (!shouldContinue) return;
-    }
-
+  function commitChangeOrder(estimate: Estimate, amount: number, sourceJob: Job) {
     const number = estimate.proposalNumber || nextChangeOrderNumber(sourceJob.changeOrders);
     const changeOrder: ChangeOrder = {
       id: `co-${Date.now()}`,
@@ -618,6 +600,24 @@ export default function Home() {
     setSelectedJobId(estimate.jobId);
     setDetailJobId(estimate.jobId);
     goToView("jobs");
+  }
+
+  function submitEstimateAsChangeOrder(estimate: Estimate, amount: number) {
+    if (estimate.documentType !== "Change Order" || !estimate.jobId) return;
+    const sourceJob = jobs.find((job) => job.id === estimate.jobId);
+    if (!sourceJob) return;
+
+    const warnings = validateChangeOrderSubmission({
+      estimate,
+      amount,
+      existingChangeOrders: sourceJob.changeOrders
+    });
+    if (warnings.length) {
+      setPendingCoSubmit({ estimate, amount, warnings });
+      return;
+    }
+
+    commitChangeOrder(estimate, amount, sourceJob);
   }
 
   function approveSubmittedCo(jobId: string) {
@@ -1081,7 +1081,12 @@ export default function Home() {
           {nav.map((item) => {
             const Icon = item.icon;
             return (
-              <button className={renderedView === item.id ? "active" : ""} key={item.id} onClick={() => goToView(item.id)}>
+              <button
+                aria-current={renderedView === item.id ? "page" : undefined}
+                className={renderedView === item.id ? "active" : ""}
+                key={item.id}
+                onClick={() => goToView(item.id)}
+              >
                 <Icon size={18} />
                 {item.label}
               </button>
@@ -1140,6 +1145,59 @@ export default function Home() {
         <div className="persistence-strip">{opportunityPersistenceStatus}</div>
         {currentUser?.role === "viewer" && (
           <div className="viewer-banner">You are in read-only mode. Contact an admin to request edit access.</div>
+        )}
+
+        {pendingLostConfirm && (
+          <div className="confirm-strip" role="alert">
+            <p>Job voided. Mark linked bid <strong>{pendingLostConfirm.linkedOpp.projectName}</strong> as Lost?</p>
+            <div className="confirm-strip-actions">
+              <button
+                className="ghost-button compact"
+                onClick={() => {
+                  void persistOpportunity({ ...pendingLostConfirm.linkedOpp, status: "Lost", winLoss: "Lost" });
+                  setPendingLostConfirm(null);
+                }}
+              >
+                Yes, mark Lost
+              </button>
+              <button className="ghost-button compact" onClick={() => setPendingLostConfirm(null)}>Skip</button>
+            </div>
+          </div>
+        )}
+
+        {pendingCoSubmit && (
+          <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setPendingCoSubmit(null); }}>
+            <section className="opportunity-modal" style={{ maxWidth: 520 }}>
+              <header className="modal-head">
+                <div>
+                  <span className="eyebrow">Review before submitting</span>
+                  <h2>Change order warnings</h2>
+                </div>
+                <button className="modal-close" onClick={() => setPendingCoSubmit(null)}>×</button>
+              </header>
+              <div className="modal-body" style={{ padding: "18px 20px" }}>
+                <ul className="co-warning-list">
+                  {pendingCoSubmit.warnings.map((warning, i) => <li key={i}>{warning}</li>)}
+                </ul>
+                <p style={{ color: "var(--ink-3)", fontSize: 12, margin: "0 0 16px" }}>
+                  These issues were flagged. You can submit anyway or go back to the workbook to correct them.
+                </p>
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <button className="ghost-button compact" onClick={() => setPendingCoSubmit(null)}>Go back</button>
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      const sourceJob = jobs.find((job) => job.id === pendingCoSubmit.estimate.jobId);
+                      if (sourceJob) commitChangeOrder(pendingCoSubmit.estimate, pendingCoSubmit.amount, sourceJob);
+                      setPendingCoSubmit(null);
+                    }}
+                  >
+                    Submit anyway
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
         )}
 
         {renderedView === "dashboard" && (
