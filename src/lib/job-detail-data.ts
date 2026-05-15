@@ -1,4 +1,4 @@
-import type { ActivityEvent, Job, PMNote, SubmittalPackage } from "@/types";
+import type { ActivityEvent, Job, PMNote, PurchaseOrder, SubmittalPackage } from "@/types";
 import { summarizeSubmittals } from "./submittals";
 
 export type JobDetailData = {
@@ -62,6 +62,26 @@ export function applySubmittalToJobDetail({
     ...job,
     backlogStatus: shouldMoveToRelease ? "Release Pending" : shouldMoveToSubmittals ? "Submittals" : job.backlogStatus,
     submittals: nextSubmittals,
+    activity: [activity, ...job.activity]
+  };
+}
+
+export function applyPurchaseOrderToJobDetail({
+  job,
+  purchaseOrder,
+  activity
+}: {
+  job: Job;
+  purchaseOrder: PurchaseOrder;
+  activity: ActivityEvent;
+}): Job {
+  const exists = job.purchaseOrders.some((item) => item.id === purchaseOrder.id);
+
+  return {
+    ...job,
+    purchaseOrders: exists
+      ? job.purchaseOrders.map((item) => (item.id === purchaseOrder.id ? purchaseOrder : item))
+      : [...job.purchaseOrders, purchaseOrder],
     activity: [activity, ...job.activity]
   };
 }

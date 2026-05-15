@@ -25,6 +25,7 @@ import {
   mapSubmittalToUpdate
 } from "./job-repository";
 import {
+  applyPurchaseOrderToJobDetail,
   applySubmittalToJobDetail,
   getJobDetailData,
   replaceJobDetail
@@ -59,7 +60,7 @@ import {
 } from "./submittals";
 import { estimateItemsToClipboardText, parseClipboardLineItems } from "./workbook-clipboard";
 import { cloneArea, cloneItems, cloneSection } from "./workbook-copy";
-import type { Job } from "@/types";
+import type { Job, PurchaseOrder } from "@/types";
 
 const productionSchema = () => readFileSync(join(process.cwd(), "supabase", "rebuild-production-schema.sql"), "utf8");
 
@@ -1350,6 +1351,77 @@ describe("job detail data boundary", () => {
     expect(updated.backlogStatus).toBe("Release Pending");
     expect(updated.submittals[0].status).toBe("Approved");
     expect(updated.activity[0]).toMatchObject({ id: "act-submittal", ownerType: "submittal" });
+  });
+
+  it("upserts purchase orders and activity through one detail helper", () => {
+    const job = {
+      id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      jobNumber: "G26-061",
+      workType: "Bid / ITB",
+      pm: "Geoff",
+      client: "Smoke GC",
+      projectName: "Smoke Test",
+      baseContract: 100000,
+      backlogStatus: "Awarded / Waiting",
+      forecastStart: "",
+      forecastEnd: "",
+      forecastQuarter: "",
+      expectedFabStart: "",
+      expectedCompletion: "",
+      fabStatus: "Not Started",
+      installStart: "",
+      installEnd: "",
+      installStatus: "Ready",
+      invoiceStatus: "Not Billed",
+      crewSize: 2,
+      gc: "",
+      notes: "",
+      changeOrders: [],
+      purchaseOrders: [],
+      submittals: [],
+      files: [],
+      activity: []
+    } satisfies Job;
+    const purchaseOrder = {
+      id: "po-local",
+      jobId: job.id,
+      poNumber: "PO-G26-061-001",
+      vendor: "Cambria",
+      scope: "Stone / Quartz",
+      description: "Quartz tops",
+      status: "Issued",
+      committedAmount: 18000
+    } satisfies PurchaseOrder;
+
+    const created = applyPurchaseOrderToJobDetail({
+      job,
+      purchaseOrder,
+      activity: {
+        id: "act-po",
+        ownerType: "purchase_order",
+        ownerId: "po-local",
+        author: "System",
+        message: "PO-G26-061-001 added for Cambria.",
+        createdAt: "2026-05-14"
+      }
+    });
+    const updated = applyPurchaseOrderToJobDetail({
+      job: created,
+      purchaseOrder: { ...purchaseOrder, status: "Acknowledged", promisedDate: "2026-06-01" },
+      activity: {
+        id: "act-po-update",
+        ownerType: "purchase_order",
+        ownerId: "po-local",
+        author: "System",
+        message: "PO-G26-061-001 updated.",
+        createdAt: "2026-05-14"
+      }
+    });
+
+    expect(created.purchaseOrders).toHaveLength(1);
+    expect(updated.purchaseOrders).toHaveLength(1);
+    expect(updated.purchaseOrders[0]).toMatchObject({ status: "Acknowledged", promisedDate: "2026-06-01" });
+    expect(updated.activity.map((event) => event.id)).toEqual(["act-po-update", "act-po"]);
   });
 });
 

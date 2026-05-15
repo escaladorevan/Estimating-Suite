@@ -27,7 +27,7 @@ import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChange
 import { calculateEstimateTotals } from "@/lib/estimate-math";
 import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
 import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
-import { applySubmittalToJobDetail, getJobDetailData } from "@/lib/job-detail-data";
+import { applyPurchaseOrderToJobDetail, applySubmittalToJobDetail, getJobDetailData } from "@/lib/job-detail-data";
 import { resolvePersistedJobForPMNote } from "@/lib/job-persistence-reconciliation";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
 import {
@@ -767,27 +767,18 @@ export default function Home() {
 
   function createPurchaseOrder(jobId: string, input: Omit<PurchaseOrder, "id" | "jobId">) {
     const po: PurchaseOrder = { ...input, id: `po-${Date.now()}`, jobId };
+    const activity: ActivityEvent = {
+      id: `act-${Date.now()}`,
+      ownerType: "purchase_order",
+      ownerId: po.id,
+      author: "System",
+      message: `${po.poNumber} added for ${po.vendor}.`,
+      createdAt: today
+    };
     setJobs((current) =>
-      current.map((job) => {
-        if (job.id !== jobId) return job;
-        return {
-          ...job,
-          purchaseOrders: [...job.purchaseOrders, po],
-          activity: [
-            {
-              id: `act-${Date.now()}`,
-              ownerType: "purchase_order",
-              ownerId: po.id,
-              author: "System",
-              message: `${po.poNumber} added for ${po.vendor}.`,
-              createdAt: today
-            },
-            ...job.activity
-          ]
-        };
-      })
+      current.map((job) => (job.id === jobId ? applyPurchaseOrderToJobDetail({ job, purchaseOrder: po, activity }) : job))
     );
-    if (isUuid(jobId)) void persistPurchaseOrder(po);
+    if (isUuid(jobId)) void persistPurchaseOrder(po, activity);
   }
 
   function editPurchaseOrder(jobId: string, poId: string, updates: Partial<PurchaseOrder>) {
@@ -796,28 +787,19 @@ export default function Home() {
     const existing = job.purchaseOrders.find((p) => p.id === poId);
     if (!existing) return;
     const updatedPo = { ...existing, ...updates };
+    const activity: ActivityEvent = {
+      id: `act-${Date.now()}`,
+      ownerType: "purchase_order",
+      ownerId: poId,
+      author: "System",
+      message: `${updatedPo.poNumber} updated.`,
+      createdAt: today
+    };
 
     setJobs((current) =>
-      current.map((j) => {
-        if (j.id !== jobId) return j;
-        return {
-          ...j,
-          purchaseOrders: j.purchaseOrders.map((po) => (po.id === poId ? updatedPo : po)),
-          activity: [
-            {
-              id: `act-${Date.now()}`,
-              ownerType: "purchase_order",
-              ownerId: poId,
-              author: "System",
-              message: `${updatedPo.poNumber} updated.`,
-              createdAt: today
-            },
-            ...j.activity
-          ]
-        };
-      })
+      current.map((j) => (j.id === jobId ? applyPurchaseOrderToJobDetail({ job: j, purchaseOrder: updatedPo, activity }) : j))
     );
-    if (isUuid(jobId)) void persistPurchaseOrder(updatedPo);
+    if (isUuid(jobId)) void persistPurchaseOrder(updatedPo, activity);
   }
 
   function attachPurchaseOrderFile(jobId: string, poId: string, file: File | undefined) {

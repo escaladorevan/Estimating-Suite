@@ -170,19 +170,39 @@ export function useJobsPersistence({
     }
   }, [setJobs]);
 
-  const persistPurchaseOrder = useCallback(async (po: PurchaseOrder) => {
+  const persistPurchaseOrder = useCallback(async (po: PurchaseOrder, activity?: ActivityEvent) => {
     const localId = po.id;
     setJobPersistenceStatus(`Saving PO ${po.poNumber}...`);
     try {
       const saved = await savePurchaseOrder(po);
+      const remappedActivity = activity ? { ...activity, ownerId: saved.id } : null;
+      let persistedActivity: ActivityEvent | null = null;
+      let activityFailed = false;
+
+      if (remappedActivity && isUuid(saved.id)) {
+        try {
+          persistedActivity = await saveActivityEvent(remappedActivity);
+        } catch {
+          activityFailed = true;
+        }
+      }
+
       setJobs((current) =>
         current.map((job) =>
           job.id !== po.jobId
             ? job
-            : { ...job, purchaseOrders: job.purchaseOrders.map((candidate) => (candidate.id === localId ? saved : candidate)) }
+            : {
+                ...job,
+                purchaseOrders: job.purchaseOrders.map((candidate) => (candidate.id === localId ? saved : candidate)),
+                activity: remappedActivity
+                  ? job.activity.map((candidate) =>
+                      candidate.id === remappedActivity.id ? persistedActivity ?? remappedActivity : candidate
+                    )
+                  : job.activity
+              }
         )
       );
-      setJobPersistenceStatus(`PO ${po.poNumber} saved.`);
+      setJobPersistenceStatus(activityFailed ? `PO ${po.poNumber} saved; activity is local only.` : `PO ${po.poNumber} saved.`);
     } catch {
       setJobPersistenceStatus(`PO ${po.poNumber} save failed - local only.`);
     }
