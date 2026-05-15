@@ -968,20 +968,17 @@ describe("getJobDetail", () => {
   const fileForPoUuid = "bbbbbbbb-0000-1000-8000-000000000002";
 
   function makeChain(result: { data: unknown; error: null }): Record<string, unknown> {
-    const chain: Record<string, () => unknown> = {};
     const proxy: Record<string, unknown> = {};
     const terminalMethods = new Set(["maybeSingle", "single"]);
     function makeMethod(name: string) {
       return (..._args: unknown[]): unknown => {
         if (terminalMethods.has(name)) return Promise.resolve(result);
-        // order on a chain that ends queries (after in/eq) should resolve
         if (name === "order") return Promise.resolve(result);
         return proxy;
       };
     }
     for (const method of ["select", "eq", "in", "order", "maybeSingle", "single"]) {
       proxy[method] = makeMethod(method);
-      chain[method] = makeMethod(method);
     }
     return proxy;
   }

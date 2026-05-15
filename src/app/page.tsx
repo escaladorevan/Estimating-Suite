@@ -1110,7 +1110,7 @@ export default function Home() {
             saveStatus={jobPersistenceStatus}
           />
         )}
-        {view === "calendar" && <CalendarCapacityView jobs={jobs} onOpenJob={setDetailJobId} />}
+        {view === "calendar" && <CalendarCapacityView jobs={jobs} onOpenJob={openJobDetail} />}
         {view === "service" && <ServiceView jobs={jobs} onCreateServiceJob={createServiceJob} />}
         {view === "files" && <FilesView jobs={jobs} opportunities={opportunities} />}
         {view === "analytics" && <AnalyticsView analytics={analytics} jobs={jobs} opportunities={opportunities} />}
