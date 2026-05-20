@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { saveEstimateHeader } from "@/lib/estimate-repository";
+import { persistCarriedJobContacts } from "@/lib/contact-repository";
 import { pruneProjectFileSlotMetadata, saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
 import { remapCoActivityOwner, replaceJobDetail } from "@/lib/job-detail-data";
 import { reconcilePersistedJobIdentity } from "@/lib/job-persistence-reconciliation";
@@ -145,6 +146,25 @@ export function useJobsPersistence({
           const updated = { ...linked, jobId: saved.id };
           setEstimates((current) => current.map((estimate) => (estimate.id === linked.id ? updated : estimate)));
           void saveEstimateHeader(updated).catch(() => {});
+        }
+      }
+
+      if (forceCreate && isUuid(saved.id) && (job.contacts ?? []).length) {
+        const contactIdRemaps = await persistCarriedJobContacts(saved.id, job.contacts ?? []);
+        if (contactIdRemaps.size) {
+          setJobs((current) =>
+            current.map((candidate) =>
+              candidate.id === saved.id
+                ? {
+                    ...candidate,
+                    contacts: (candidate.contacts ?? job.contacts ?? []).map((contact) => ({
+                      ...contact,
+                      id: contactIdRemaps.get(contact.id) ?? contact.id
+                    }))
+                  }
+                : candidate
+            )
+          );
         }
       }
     } catch {

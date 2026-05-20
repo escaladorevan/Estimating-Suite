@@ -15,6 +15,7 @@ import {
   mapContactToUpsert,
   mapJobContactFromRow,
   mapOpportunityContactFromRow,
+  persistCarriedJobContacts,
   removeJobContact,
   removeOpportunityContact
 } from "./contact-repository";
@@ -2610,5 +2611,25 @@ describe("contact repository", () => {
 
     expect(jobs.get("job-1")?.[0]).toMatchObject({ id: "job-join", role: "GC PM", contact: roster[0] });
     expect(opportunities.get("opp-1")?.[0]).toMatchObject({ id: "opp-join", role: "Bid PM", contact: roster[0] });
+  });
+
+  it("persists carried opportunity contacts to a newly created job and returns local join remaps", async () => {
+    const carried = [
+      { id: "carry-1", contactId: "22222222-2222-4222-8222-222222222222", role: "GC PM" },
+      { id: "carry-local", contactId: "local-contact", role: "Estimator" }
+    ];
+    const calls: string[] = [];
+    const remap = await persistCarriedJobContacts(
+      "11111111-1111-4111-8111-111111111111",
+      carried,
+      async (_jobId, contactId, role) => {
+        calls.push(`${contactId}:${role}`);
+        return { id: "33333333-3333-4333-8333-333333333333", contactId, role };
+      }
+    );
+
+    expect(calls).toEqual(["22222222-2222-4222-8222-222222222222:GC PM"]);
+    expect(remap.get("carry-1")).toBe("33333333-3333-4333-8333-333333333333");
+    expect(remap.has("carry-local")).toBe(false);
   });
 });

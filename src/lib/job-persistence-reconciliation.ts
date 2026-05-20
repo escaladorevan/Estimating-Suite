@@ -32,8 +32,10 @@ export function reconcilePersistedJobIdentity({
 
   for (const job of currentJobs) {
     const persisted = persistedByNumber.get(normalizeJobNumber(job.jobNumber));
-    if (persisted && job.id !== persisted.id) {
-      localToPersistedJobIds.set(job.id, persisted.id);
+    if (persisted) {
+      if (job.id !== persisted.id) {
+        localToPersistedJobIds.set(job.id, persisted.id);
+      }
       localChildrenByPersistedId.set(persisted.id, remapJobReferences(job, job.id, persisted.id));
     }
   }
@@ -92,6 +94,7 @@ function mergePersistedJob(persisted: Job, local?: Job): Job {
     purchaseOrders: mergeById(persisted.purchaseOrders, local.purchaseOrders),
     submittals: mergeById(persisted.submittals, local.submittals),
     files: mergeById(persisted.files, local.files),
+    contacts: mergeById(persisted.contacts ?? [], local.contacts ?? []),
     activity: mergeById(persisted.activity, local.activity)
   };
 }

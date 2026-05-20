@@ -15,6 +15,7 @@ import type {
   WorkType
 } from "@/types";
 import { supabase } from "./supabase-client";
+import { listContacts, loadContactsForJobs } from "./contact-repository";
 import { mapProjectFileFromRow, signProjectFileUrl, type ProjectFileRow } from "./file-repository";
 import {
   BACKLOG_STATUSES,
@@ -37,6 +38,7 @@ export type JobRow = {
   work_type: WorkType | string | null;
   pm: string | null;
   client: string | null;
+  company_id?: string | null;
   project_name: string | null;
   base_contract: number | string | null;
   bid_ref: string | null;
@@ -70,6 +72,7 @@ export type JobUpsert = {
   work_type: WorkType;
   pm: string | null;
   client: string;
+  company_id: string | null;
   project_name: string;
   base_contract: number;
   bid_ref: string | null;
@@ -237,12 +240,12 @@ export type ActivityEventInsert = {
 };
 
 type SupabaseJobClient = {
-  from: (table: "jobs" | "change_orders" | "purchase_orders" | "submittals" | "files" | "pm_notes" | "activity_events") => any;
+  from: (table: string) => any;
 };
 
 export function mapJobFromRow(
   row: JobRow,
-  children: Partial<Pick<Job, "changeOrders" | "purchaseOrders" | "submittals" | "files" | "activity">> = {}
+  children: Partial<Pick<Job, "changeOrders" | "purchaseOrders" | "submittals" | "files" | "contacts" | "activity">> = {}
 ): Job {
   return {
     id: row.id,
@@ -251,6 +254,7 @@ export function mapJobFromRow(
     workType: normalizeWorkType(row.work_type),
     pm: row.pm ?? "",
     client: row.client ?? "",
+    companyId: row.company_id ?? undefined,
     projectName: row.project_name ?? "",
     baseContract: toNumber(row.base_contract),
     bidRef: row.bid_ref ?? "",
@@ -279,6 +283,7 @@ export function mapJobFromRow(
     purchaseOrders: children.purchaseOrders ?? [],
     submittals: children.submittals ?? [],
     files: children.files ?? [],
+    contacts: children.contacts ?? [],
     activity: children.activity ?? []
   };
 }
@@ -291,6 +296,7 @@ export function mapJobToUpsert(job: Job): JobUpsert {
     work_type: job.workType ?? "Bid / ITB",
     pm: nullableText(job.pm),
     client: job.client,
+    company_id: nullableUuid(job.companyId),
     project_name: job.projectName,
     base_contract: job.baseContract,
     bid_ref: nullableText(job.bidRef),
@@ -485,6 +491,8 @@ export async function listJobs(client: SupabaseJobClient | null = supabase) {
   const projectFiles = await Promise.all(
     ((fileRows ?? []) as ProjectFileRow[]).map((row) => signProjectFileUrl(mapProjectFileFromRow(row), client))
   );
+  const contacts = await listContacts(client);
+  const contactsByJob = await loadContactsForJobs(jobIds, contacts, client);
 
   return jobs.map((job) =>
     {
@@ -503,6 +511,7 @@ export async function listJobs(client: SupabaseJobClient | null = supabase) {
         purchaseOrders: jobPurchaseOrders.map(mapPurchaseOrderFromRow),
         submittals: jobSubmittals.map(mapSubmittalFromRow),
         files: projectFiles.filter((file) => jobOwnerIds.has(file.ownerId)),
+        contacts: contactsByJob.get(job.id) ?? [],
         activity: ((activityRows ?? []) as ActivityEventRow[]).filter((row) => row.owner_id && jobOwnerIds.has(row.owner_id)).map(mapActivityEventFromRow)
       });
     }
@@ -520,7 +529,16 @@ export async function saveJobHeader(job: Job, client: SupabaseJobClient | null =
   const { data, error } = await client.from("jobs").upsert(mapJobToUpsert(job), { onConflict: "job_number" }).select("*").single();
 
   if (error) throw error;
-  return data ? mapJobFromRow(data) : job;
+  return data
+    ? mapJobFromRow(data, {
+        changeOrders: job.changeOrders,
+        purchaseOrders: job.purchaseOrders,
+        submittals: job.submittals,
+        files: job.files,
+        contacts: job.contacts ?? [],
+        activity: job.activity
+      })
+    : job;
 }
 
 export async function saveChangeOrder(co: ChangeOrder, client: SupabaseJobClient | null = supabase): Promise<ChangeOrder> {

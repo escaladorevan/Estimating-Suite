@@ -68,7 +68,7 @@ export type ContactUpsert = {
 };
 
 type SupabaseContactClient = {
-  from: (table: "companies" | "contacts" | "job_contacts" | "opportunity_contacts") => any;
+  from: (table: string) => any;
 };
 
 const COMPANY_TYPES: CompanyType[] = ["GC", "Architect", "Owner", "Supplier", "Subcontractor", "Vendor", "Consultant", "Other"];
@@ -258,6 +258,27 @@ export async function loadContactsForOpportunities(
     result.get(row.opportunity_id)?.push(mapOpportunityContactFromRow(row, contactById.get(row.contact_id)));
   }
   return result;
+}
+
+export async function persistCarriedJobContacts(
+  jobId: string,
+  contacts: ProjectContact[],
+  addFn: (jobId: string, contactId: string, role: string) => Promise<ProjectContact> = addJobContact
+): Promise<Map<string, string>> {
+  const remap = new Map<string, string>();
+  if (!isUuid(jobId)) return remap;
+
+  for (const contact of contacts) {
+    if (!isUuid(contact.contactId)) continue;
+    try {
+      const saved = await addFn(jobId, contact.contactId, contact.role);
+      remap.set(contact.id, saved.id);
+    } catch {
+      // A duplicate or transient join failure should not block job creation.
+    }
+  }
+
+  return remap;
 }
 
 function normalizeCompanyType(value: CompanyType | string | null): CompanyType {
