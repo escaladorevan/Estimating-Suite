@@ -49,9 +49,13 @@ describe("production Supabase reset contract", () => {
   it("enables RLS for the core production tables", () => {
     const normalized = normalizeSql(productionSchema());
     const coreTables = [
+      "companies",
+      "contacts",
       "opportunities",
+      "opportunity_contacts",
       "estimates",
       "jobs",
+      "job_contacts",
       "change_orders",
       "purchase_orders",
       "submittals",
@@ -94,6 +98,25 @@ describe("production Supabase reset contract", () => {
     );
     expect(policyBlock(sql, "storage_project_files_delete", "storage.objects")).toContain(
       "using (bucket_id = 'project-files' and app_private.can_write_shared())"
+    );
+  });
+
+  it("keeps contact tables shared-read and shared-write through RLS", () => {
+    const sql = productionSchema();
+
+    expect(policyBlock(sql, "shared_select_companies", "public.companies")).toContain("for select to authenticated using (true)");
+    expect(policyBlock(sql, "shared_write_companies", "public.companies")).toContain(
+      "for all to authenticated using (app_private.can_write_shared()) with check (app_private.can_write_shared())"
+    );
+    expect(policyBlock(sql, "shared_select_contacts", "public.contacts")).toContain("for select to authenticated using (true)");
+    expect(policyBlock(sql, "shared_write_contacts", "public.contacts")).toContain(
+      "for all to authenticated using (app_private.can_write_shared()) with check (app_private.can_write_shared())"
+    );
+    expect(policyBlock(sql, "estimating_write_opportunity_contacts", "public.opportunity_contacts")).toContain(
+      "for all to authenticated using (app_private.can_write_estimating()) with check (app_private.can_write_estimating())"
+    );
+    expect(policyBlock(sql, "job_contacts_write", "public.job_contacts")).toContain(
+      "for all to authenticated using (app_private.can_write_shared()) with check (app_private.can_write_shared())"
     );
   });
 });

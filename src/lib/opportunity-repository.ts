@@ -1,5 +1,6 @@
 import type { Opportunity, OpportunityStatus, WinLoss, WorkType } from "@/types";
 import { supabase } from "./supabase-client";
+import { listContacts, loadContactsForOpportunities } from "./contact-repository";
 import { OPPORTUNITY_STATUSES, WIN_LOSS_VALUES, WORK_TYPES } from "./status-constants";
 
 export type OpportunityRow = {
@@ -8,6 +9,7 @@ export type OpportunityRow = {
   work_type: WorkType | string | null;
   month: string | null;
   client: string | null;
+  company_id?: string | null;
   project_name: string | null;
   bid_due_date: string | null;
   drawing_stage: string | null;
@@ -34,6 +36,7 @@ export type OpportunityUpsert = {
   work_type: WorkType;
   month: string | null;
   client: string;
+  company_id: string | null;
   project_name: string;
   bid_due_date: string | null;
   drawing_stage: string | null;
@@ -55,7 +58,7 @@ export type OpportunityUpsert = {
 };
 
 type SupabaseOpportunityClient = {
-  from: (table: "opportunities") => any;
+  from: (table: string) => any;
 };
 
 export function mapOpportunityFromRow(row: OpportunityRow): Opportunity {
@@ -65,6 +68,7 @@ export function mapOpportunityFromRow(row: OpportunityRow): Opportunity {
     workType: normalizeWorkType(row.work_type),
     month: row.month ?? "",
     client: row.client ?? "",
+    companyId: row.company_id ?? undefined,
     projectName: row.project_name ?? "",
     bidDueDate: row.bid_due_date ?? "",
     drawingStage: row.drawing_stage ?? "",
@@ -85,7 +89,8 @@ export function mapOpportunityFromRow(row: OpportunityRow): Opportunity {
     ntpReceived: Boolean(row.ntp_received),
     initialContractValue: toNullableNumber(row.initial_contract_value),
     finalCost: toNullableNumber(row.final_cost),
-    files: []
+    files: [],
+    contacts: []
   };
 }
 
@@ -96,6 +101,7 @@ export function mapOpportunityToUpsert(opportunity: Opportunity): OpportunityUps
     work_type: opportunity.workType ?? "Bid / ITB",
     month: nullableText(opportunity.month),
     client: opportunity.client,
+    company_id: nullableUuid(opportunity.companyId),
     project_name: opportunity.projectName,
     bid_due_date: nullableText(opportunity.bidDueDate),
     drawing_stage: nullableText(opportunity.drawingStage),
@@ -125,7 +131,17 @@ export async function listOpportunities(client: SupabaseOpportunityClient | null
     .order("bid_due_date", { ascending: true });
 
   if (error) throw error;
-  return (data ?? []).map(mapOpportunityFromRow);
+
+  const opportunities = ((data ?? []) as OpportunityRow[]).map(mapOpportunityFromRow);
+  const opportunityIds = opportunities.map((opportunity) => opportunity.id).filter(isUuid);
+  if (!opportunityIds.length) return opportunities;
+
+  const contacts = await listContacts(client);
+  const contactsByOpportunity = await loadContactsForOpportunities(opportunityIds, contacts, client);
+  return opportunities.map((opportunity) => ({
+    ...opportunity,
+    contacts: contactsByOpportunity.get(opportunity.id) ?? []
+  }));
 }
 
 export async function saveOpportunity(opportunity: Opportunity, client: SupabaseOpportunityClient | null = supabase) {
@@ -137,7 +153,7 @@ export async function saveOpportunity(opportunity: Opportunity, client: Supabase
     .single();
 
   if (error) throw error;
-  return data ? mapOpportunityFromRow(data) : opportunity;
+  return data ? { ...mapOpportunityFromRow(data), files: opportunity.files ?? [], contacts: opportunity.contacts ?? [] } : opportunity;
 }
 
 function normalizeWorkType(value: OpportunityRow["work_type"]): WorkType {
@@ -166,6 +182,10 @@ function toNullableNumber(value: number | string | null) {
 function nullableText(value?: string) {
   const trimmed = value?.trim() ?? "";
   return trimmed ? trimmed : null;
+}
+
+function nullableUuid(value?: string) {
+  return value && isUuid(value) ? value : null;
 }
 
 function isUuid(value: string) {
