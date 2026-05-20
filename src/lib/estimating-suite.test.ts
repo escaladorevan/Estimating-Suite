@@ -2,6 +2,22 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "./change-order-workflow";
+import {
+  addJobContact,
+  addOpportunityContact,
+  listCompanies,
+  listContacts,
+  loadContactsForJobs,
+  loadContactsForOpportunities,
+  mapCompanyFromRow,
+  mapCompanyToUpsert,
+  mapContactFromRow,
+  mapContactToUpsert,
+  mapJobContactFromRow,
+  mapOpportunityContactFromRow,
+  removeJobContact,
+  removeOpportunityContact
+} from "./contact-repository";
 import { calculateEstimateTotals } from "./estimate-math";
 import { mapEstimateFromRow, mapEstimateSnapshotToInsert, mapEstimateToUpsert } from "./estimate-repository";
 import {
@@ -2443,5 +2459,156 @@ describe("workbook clipboard helpers", () => {
 
   it("serializes selected estimate items as tab-delimited clipboard rows", () => {
     expect(estimateItemsToClipboardText([{ name: "Desk", qty: 2, unit: "EA", unitCost: 450 }])).toBe("Desk\t2\tEA\t450\t\t");
+  });
+});
+
+describe("contact repository", () => {
+  const companyRow = {
+    id: "11111111-1111-4111-8111-111111111111",
+    name: "Hensel Phelps",
+    company_type: "GC",
+    main_address: "123 Builder Way",
+    billing_address: null,
+    website: "https://example.com",
+    phone: "555-1000",
+    notes: "Healthcare work",
+    tags: ["GC"],
+    active: true
+  };
+
+  const contactRow = {
+    id: "22222222-2222-4222-8222-222222222222",
+    company_id: companyRow.id,
+    name: "Pat Manager",
+    title: "Project Manager",
+    email: "pat@example.com",
+    phone: null,
+    mobile: "555-2222",
+    notes: null,
+    tags: ["Portland"],
+    active: true
+  };
+
+  it("maps company and contact rows into the shared directory domain model", () => {
+    const company = mapCompanyFromRow(companyRow);
+    const contact = mapContactFromRow(contactRow, company);
+
+    expect(company).toMatchObject({
+      id: companyRow.id,
+      name: "Hensel Phelps",
+      companyType: "GC",
+      mainAddress: "123 Builder Way",
+      active: true
+    });
+    expect(contact).toMatchObject({
+      id: contactRow.id,
+      companyId: companyRow.id,
+      company,
+      name: "Pat Manager",
+      title: "Project Manager",
+      email: "pat@example.com",
+      mobile: "555-2222",
+      active: true
+    });
+    expect(contact.phone).toBeUndefined();
+  });
+
+  it("maps directory records into Supabase upserts without sending local ids", () => {
+    expect(mapCompanyToUpsert({ id: "local-co", name: "Lease Crutcher Lewis", companyType: "GC", tags: [], active: true })).toMatchObject({
+      id: undefined,
+      name: "Lease Crutcher Lewis",
+      company_type: "GC"
+    });
+    expect(mapContactToUpsert({ id: "local-contact", companyId: "local-company", name: "Sam Super", tags: [], active: true })).toMatchObject({
+      id: undefined,
+      company_id: null,
+      name: "Sam Super"
+    });
+    expect(mapContactToUpsert({ id: contactRow.id, companyId: companyRow.id, name: "Pat Manager", tags: [], active: true })).toMatchObject({
+      id: contactRow.id,
+      company_id: companyRow.id
+    });
+  });
+
+  it("maps job and opportunity contact joins with hydrated contacts", () => {
+    const contact = mapContactFromRow(contactRow);
+    expect(mapJobContactFromRow({ id: "33333333-3333-4333-8333-333333333333", job_id: "job-1", contact_id: contact.id, role: "GC PM" }, contact)).toMatchObject({
+      contactId: contact.id,
+      role: "GC PM",
+      contact
+    });
+    expect(mapOpportunityContactFromRow({ id: "44444444-4444-4444-8444-444444444444", opportunity_id: "opp-1", contact_id: contact.id, role: "Estimator" }, contact)).toMatchObject({
+      contactId: contact.id,
+      role: "Estimator",
+      contact
+    });
+  });
+
+  it("lists companies and contacts through the repository", async () => {
+    const mockClient = {
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => ({
+            order: () =>
+              table === "companies"
+                ? Promise.resolve({ data: [companyRow], error: null })
+                : Promise.resolve({ data: [contactRow], error: null })
+          })
+        })
+      })
+    };
+
+    await expect(listCompanies(mockClient as any)).resolves.toMatchObject([{ name: "Hensel Phelps" }]);
+    await expect(listContacts(mockClient as any)).resolves.toMatchObject([{ name: "Pat Manager" }]);
+  });
+
+  it("adds and removes contact joins through idempotent repository helpers", async () => {
+    const calls: Array<{ table: string; payload?: unknown; onConflict?: string; deleted?: string }> = [];
+    const mockClient = {
+      from: (table: string) => ({
+        upsert: (payload: unknown, options: { onConflict: string }) => {
+          calls.push({ table, payload, onConflict: options.onConflict });
+          return { select: () => ({ single: () => Promise.resolve({ data: { id: "join-1", job_id: "job-1", opportunity_id: "opp-1", contact_id: "contact-1", role: "PM" }, error: null }) }) };
+        },
+        delete: () => ({
+          eq: (_column: string, value: string) => {
+            calls.push({ table, deleted: value });
+            return Promise.resolve({ error: null });
+          }
+        })
+      })
+    };
+
+    await expect(addJobContact("job-1", "contact-1", "PM", mockClient as any)).resolves.toMatchObject({ id: "join-1", contactId: "contact-1", role: "PM" });
+    await expect(addOpportunityContact("opp-1", "contact-1", "PM", mockClient as any)).resolves.toMatchObject({ id: "join-1", contactId: "contact-1", role: "PM" });
+    await expect(removeJobContact("join-1", mockClient as any)).resolves.toBeUndefined();
+    await expect(removeOpportunityContact("join-2", mockClient as any)).resolves.toBeUndefined();
+    expect(calls.map((call) => call.table)).toEqual(["job_contacts", "opportunity_contacts", "job_contacts", "opportunity_contacts"]);
+    expect(calls[0].onConflict).toBe("job_id,contact_id,role");
+    expect(calls[1].onConflict).toBe("opportunity_id,contact_id,role");
+  });
+
+  it("hydrates contact joins for jobs and opportunities from a roster", async () => {
+    const roster = [mapContactFromRow(contactRow)];
+    const jobJoin = { id: "job-join", job_id: "job-1", contact_id: contactRow.id, role: "GC PM" };
+    const oppJoin = { id: "opp-join", opportunity_id: "opp-1", contact_id: contactRow.id, role: "Bid PM" };
+    const mockClient = {
+      from: (table: string) => ({
+        select: () => ({
+          in: () => ({
+            order: () =>
+              table === "job_contacts"
+                ? Promise.resolve({ data: [jobJoin], error: null })
+                : Promise.resolve({ data: [oppJoin], error: null })
+          })
+        })
+      })
+    };
+
+    const jobs = await loadContactsForJobs(["job-1"], roster, mockClient as any);
+    const opportunities = await loadContactsForOpportunities(["opp-1"], roster, mockClient as any);
+
+    expect(jobs.get("job-1")?.[0]).toMatchObject({ id: "job-join", role: "GC PM", contact: roster[0] });
+    expect(opportunities.get("opp-1")?.[0]).toMatchObject({ id: "opp-join", role: "Bid PM", contact: roster[0] });
   });
 });

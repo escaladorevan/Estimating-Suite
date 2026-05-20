@@ -2332,6 +2332,61 @@ td strong {
   padding-bottom: 7px;
 }
 
+.directory-layout {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 260px minmax(0, 1fr);
+  margin-top: 16px;
+}
+
+.directory-sidebar {
+  align-content: start;
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.directory-sidebar label,
+.compact-form {
+  color: var(--ink-3);
+  display: grid;
+  font-size: 11px;
+  gap: 6px;
+}
+
+.directory-contact-form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1.15fr 1fr 1.25fr 0.8fr 0.8fr auto;
+  margin-bottom: 10px;
+}
+
+.directory-table {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.directory-table th,
+.directory-table td {
+  font-size: 12px;
+  padding: 9px 10px;
+}
+
+.directory-table th:nth-child(1),
+.directory-table td:nth-child(1),
+.directory-table th:nth-child(2),
+.directory-table td:nth-child(2) {
+  width: 22%;
+}
+
+.directory-table a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 .file-slots,
 .file-board {
   display: grid;
@@ -3718,7 +3773,9 @@ td strong {
   .submittal-card-meta,
   .financial-card-grid,
   .financial-card-meta,
-  .service-layout {
+  .service-layout,
+  .directory-layout,
+  .directory-contact-form {
     grid-template-columns: 1fr;
   }
 

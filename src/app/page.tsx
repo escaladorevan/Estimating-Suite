@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Search,
   Upload,
+  Users,
   WalletCards,
   Wrench
 } from "lucide-react";
@@ -27,6 +28,7 @@ import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChange
 import { calculateEstimateTotals } from "@/lib/estimate-math";
 import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
 import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
+import { listCompanies, listContacts, saveCompany, saveContact } from "@/lib/contact-repository";
 import { applyChangeOrderStatusToJobDetail, applyChangeOrderToJobDetail, applyFileToJobDetail, applyPurchaseOrderToJobDetail, applySubmittalToJobDetail, getJobDetailData } from "@/lib/job-detail-data";
 import { resolvePersistedJobForPMNote } from "@/lib/job-persistence-reconciliation";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
@@ -56,9 +58,9 @@ import {
   type SubmittalAction,
   type UpdateSubmittalInput
 } from "@/lib/submittals";
-import type { ActivityEvent, AppUserProfile, ChangeOrder, ChangeOrderStatus, Estimate, Job, Opportunity, OpportunityStatus, PMNote, ProjectFile, PurchaseOrder, PurchaseOrderScope, PurchaseOrderStatus, SubmittalPackage } from "@/types";
+import type { ActivityEvent, AppUserProfile, ChangeOrder, ChangeOrderStatus, Company, CompanyType, Contact, Estimate, Job, Opportunity, OpportunityStatus, PMNote, ProjectFile, PurchaseOrder, PurchaseOrderScope, PurchaseOrderStatus, SubmittalPackage } from "@/types";
 
-type View = "dashboard" | "opportunities" | "kanban" | "estimator" | "jobs" | "calendar" | "service" | "files" | "analytics";
+type View = "dashboard" | "opportunities" | "kanban" | "estimator" | "jobs" | "calendar" | "service" | "files" | "directory" | "analytics";
 type DashboardAnalytics = {
   submitted: number;
   won: number;
@@ -84,6 +86,7 @@ const nav: { id: View; label: string; icon: ElementType }[] = [
   { id: "calendar", label: "Calendar / Capacity", icon: CalendarDays },
   { id: "service", label: "Service", icon: Wrench },
   { id: "files", label: "Files", icon: Files },
+  { id: "directory", label: "Directory", icon: Users },
   { id: "analytics", label: "Analytics", icon: BarChart3 }
 ];
 const viewIds = nav.map((item) => item.id);
@@ -149,6 +152,9 @@ export default function Home() {
   const [sessionEmail, setSessionEmail] = useState("");
   const [authStatus, setAuthStatus] = useState("Sign in to save live data.");
   const [currentUser, setCurrentUser] = useState<AppUserProfile | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactPersistenceStatus, setContactPersistenceStatus] = useState("Directory loads after sign-in.");
   const [pendingLostConfirm, setPendingLostConfirm] = useState<{ linkedOpp: Opportunity; jobId: string } | null>(null);
   const [pendingCoSubmit, setPendingCoSubmit] = useState<{ estimate: Estimate; amount: number; warnings: string[] } | null>(null);
   const [pmNotes, setPmNotes] = useState<PMNote[]>([
@@ -257,11 +263,25 @@ export default function Home() {
     }
   }
 
+  async function loadPersistedContacts(isMounted = true) {
+    try {
+      const [persistedCompanies, persistedContacts] = await Promise.all([listCompanies(), listContacts()]);
+      if (!isMounted) return;
+      setCompanies(persistedCompanies);
+      setContacts(persistedContacts);
+      setContactPersistenceStatus(`Loaded ${persistedCompanies.length} companies and ${persistedContacts.length} contacts from Supabase.`);
+    } catch {
+      if (!isMounted) return;
+      setContactPersistenceStatus("Directory is local only until Supabase contact reads succeed.");
+    }
+  }
+
   useEffect(() => {
     let isMounted = true;
     void loadPersistedOpportunities(isMounted);
     void loadPersistedJobs(isMounted);
     void loadPersistedPMNotes(isMounted);
+    void loadPersistedContacts(isMounted);
 
     return () => {
       isMounted = false;
@@ -295,6 +315,7 @@ export default function Home() {
         void loadPersistedOpportunities();
         void loadPersistedJobs();
         void loadPersistedPMNotes();
+        void loadPersistedContacts();
         void getCurrentUserProfile().then((profile) => { if (isMounted) setCurrentUser(profile); });
       }
     });
@@ -307,6 +328,7 @@ export default function Home() {
         void loadPersistedOpportunities();
         void loadPersistedJobs();
         void loadPersistedPMNotes();
+        void loadPersistedContacts();
         void getCurrentUserProfile().then(setCurrentUser);
       } else {
         setCurrentUser(null);
@@ -357,6 +379,52 @@ export default function Home() {
       return saved;
     } catch {
       setOpportunityPersistenceStatus("Saved locally only. Supabase write is waiting on auth/session wiring.");
+      return next;
+    }
+  }
+
+  async function persistCompany(next: Company) {
+    const localId = next.id;
+    setCompanies((current) =>
+      current.some((company) => company.id === localId)
+        ? current.map((company) => (company.id === localId ? next : company))
+        : [next, ...current]
+    );
+    setContactPersistenceStatus("Saving company...");
+
+    try {
+      const saved = await saveCompany(next);
+      setCompanies((current) => current.map((company) => (company.id === localId || company.id === saved.id ? saved : company)));
+      setContacts((current) => current.map((contact) => (contact.companyId === localId ? { ...contact, companyId: saved.id, company: saved } : contact)));
+      setContactPersistenceStatus(`Saved ${saved.name} to Supabase.`);
+      return saved;
+    } catch {
+      setContactPersistenceStatus(`${next.name} is local only. Supabase company save failed.`);
+      return next;
+    }
+  }
+
+  async function persistContact(next: Contact) {
+    const localId = next.id;
+    const hydrated = {
+      ...next,
+      company: next.companyId ? companies.find((company) => company.id === next.companyId) : undefined
+    };
+    setContacts((current) =>
+      current.some((contact) => contact.id === localId)
+        ? current.map((contact) => (contact.id === localId ? hydrated : contact))
+        : [hydrated, ...current]
+    );
+    setContactPersistenceStatus("Saving contact...");
+
+    try {
+      const saved = await saveContact(hydrated);
+      const company = saved.companyId ? companies.find((candidate) => candidate.id === saved.companyId) : undefined;
+      setContacts((current) => current.map((contact) => (contact.id === localId || contact.id === saved.id ? { ...saved, company } : contact)));
+      setContactPersistenceStatus(`Saved ${saved.name} to Supabase.`);
+      return saved;
+    } catch {
+      setContactPersistenceStatus(`${next.name} is local only. Supabase contact save failed.`);
       return next;
     }
   }
@@ -597,8 +665,8 @@ export default function Home() {
     if (isUuid(sourceJob.id)) {
       void persistChangeOrder(changeOrder, activity);
     }
-    setSelectedJobId(estimate.jobId);
-    setDetailJobId(estimate.jobId);
+    setSelectedJobId(sourceJob.id);
+    setDetailJobId(sourceJob.id);
     goToView("jobs");
   }
 
@@ -1258,6 +1326,15 @@ export default function Home() {
         {renderedView === "calendar" && <CalendarCapacityView jobs={jobs} onOpenJob={setDetailJobId} />}
         {renderedView === "service" && <ServiceView jobs={jobs} onCreateServiceJob={createServiceJob} />}
         {renderedView === "files" && <FilesView jobs={jobs} opportunities={opportunities} />}
+        {renderedView === "directory" && (
+          <DirectoryView
+            companies={companies}
+            contacts={contacts}
+            onSaveCompany={(company) => void persistCompany(company)}
+            onSaveContact={(contact) => void persistContact(contact)}
+            persistenceStatus={contactPersistenceStatus}
+          />
+        )}
         {renderedView === "analytics" && <AnalyticsView analytics={analytics} jobs={jobs} opportunities={opportunities} />}
       </section>
       {detailJob ? (
@@ -3070,6 +3147,135 @@ function FilesView({ jobs, opportunities }: { jobs: Job[]; opportunities: Opport
   );
 }
 
+function DirectoryView({
+  companies,
+  contacts,
+  onSaveCompany,
+  onSaveContact,
+  persistenceStatus
+}: {
+  companies: Company[];
+  contacts: Contact[];
+  onSaveCompany: (company: Company) => void;
+  onSaveContact: (contact: Contact) => void;
+  persistenceStatus: string;
+}) {
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [newContact, setNewContact] = useState({ name: "", title: "", email: "", phone: "", mobile: "" });
+  const visibleContacts = selectedCompanyId ? contacts.filter((contact) => contact.companyId === selectedCompanyId) : contacts;
+  const sortedCompanies = [...companies].sort((a, b) => a.name.localeCompare(b.name));
+
+  function createCompany(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = newCompanyName.trim();
+    if (!name) return;
+    const company: Company = { id: makeLocalId("company"), name, companyType: "GC", tags: [], active: true };
+    onSaveCompany(company);
+    setNewCompanyName("");
+    setSelectedCompanyId(company.id);
+  }
+
+  function createContact(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = newContact.name.trim();
+    if (!name) return;
+    onSaveContact({
+      id: makeLocalId("contact"),
+      companyId: selectedCompanyId || undefined,
+      name,
+      title: nullableInput(newContact.title),
+      email: nullableInput(newContact.email),
+      phone: nullableInput(newContact.phone),
+      mobile: nullableInput(newContact.mobile),
+      tags: [],
+      active: true
+    });
+    setNewContact({ name: "", title: "", email: "", phone: "", mobile: "" });
+  }
+
+  return (
+    <div className="stack">
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Directory</h2>
+            <p>Shared GC, owner, architect, vendor, and project contact roster.</p>
+            <small className="persistence-note">{persistenceStatus}</small>
+          </div>
+          <Users size={28} />
+        </div>
+        <div className="metric-grid small">
+          <Metric label="Companies" value={String(companies.length)} />
+          <Metric label="Contacts" value={String(contacts.length)} />
+          <Metric label="GC contacts" value={String(contacts.filter((contact) => contact.companyId && companies.find((company) => company.id === contact.companyId)?.companyType === "GC").length)} />
+          <Metric label="Unassigned" value={String(contacts.filter((contact) => !contact.companyId).length)} />
+        </div>
+        <div className="directory-layout">
+          <aside className="directory-sidebar">
+            <label>
+              Company
+              <select value={selectedCompanyId} onChange={(event) => setSelectedCompanyId(event.target.value)}>
+                <option value="">All companies</option>
+                {sortedCompanies.map((company) => (
+                  <option key={company.id} value={company.id}>{company.name}</option>
+                ))}
+              </select>
+            </label>
+            <form className="compact-form" onSubmit={createCompany}>
+              <input value={newCompanyName} onChange={(event) => setNewCompanyName(event.target.value)} placeholder="New company" />
+              <button className="primary" type="submit">Add company</button>
+            </form>
+          </aside>
+          <div className="directory-main">
+            <form className="directory-contact-form" onSubmit={createContact}>
+              <input value={newContact.name} onChange={(event) => setNewContact((current) => ({ ...current, name: event.target.value }))} placeholder="Contact name" />
+              <input value={newContact.title} onChange={(event) => setNewContact((current) => ({ ...current, title: event.target.value }))} placeholder="Role / title" />
+              <input value={newContact.email} onChange={(event) => setNewContact((current) => ({ ...current, email: event.target.value }))} placeholder="Email" />
+              <input value={newContact.phone} onChange={(event) => setNewContact((current) => ({ ...current, phone: event.target.value }))} placeholder="Office" />
+              <input value={newContact.mobile} onChange={(event) => setNewContact((current) => ({ ...current, mobile: event.target.value }))} placeholder="Mobile" />
+              <button className="primary" type="submit">Add contact</button>
+            </form>
+            <div className="table-wrap">
+              <table className="jobs-table directory-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Company</th>
+                    <th>Role</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Mobile</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleContacts.length ? visibleContacts.map((contact) => {
+                    const company = contact.company ?? companies.find((candidate) => candidate.id === contact.companyId);
+                    return (
+                      <tr key={contact.id}>
+                        <td><strong>{contact.name}</strong></td>
+                        <td>{company?.name ?? "-"}</td>
+                        <td>{contact.title ?? "-"}</td>
+                        <td>{contact.email ? <a href={`mailto:${contact.email}`}>{contact.email}</a> : "-"}</td>
+                        <td>{contact.phone ?? "-"}</td>
+                        <td>{contact.mobile ?? "-"}</td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan={6}>No contacts yet. Add a company, then add the GC PM, super, estimator, or vendor contact.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function AnalyticsView({
   analytics,
   jobs,
@@ -3112,6 +3318,15 @@ function AnalyticsView({
       </section>
     </div>
   );
+}
+
+function makeLocalId(prefix: string) {
+  return `${prefix}-${Date.now()}`;
+}
+
+function nullableInput(value: string) {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function OpportunityModal({

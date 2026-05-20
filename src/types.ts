@@ -12,9 +12,58 @@ export type { BacklogStatus, ChangeOrderStatus, OpportunityStatus, PurchaseOrder
 
 export type EstimateDocumentType = "Proposal" | "Quote" | "Budget" | "Change Order" | "Service Quote" | "Revision";
 
+export type CompanyType = "GC" | "Architect" | "Owner" | "Supplier" | "Subcontractor" | "Vendor" | "Consultant" | "Other";
+
+export type ContactRole =
+  | "GC"
+  | "Owner"
+  | "Architect"
+  | "Engineer"
+  | "PM"
+  | "Estimator"
+  | "Superintendent"
+  | "Vendor"
+  | "Subcontractor"
+  | "Other";
+
+export type Company = {
+  id: string;
+  name: string;
+  companyType: CompanyType;
+  mainAddress?: string;
+  billingAddress?: string;
+  website?: string;
+  phone?: string;
+  notes?: string;
+  tags: string[];
+  active: boolean;
+};
+
+export type Contact = {
+  id: string;
+  companyId?: string;
+  company?: Company;
+  name: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  notes?: string;
+  tags: string[];
+  active: boolean;
+};
+
+export type ProjectContact = {
+  id: string;
+  contactId: string;
+  contact?: Contact;
+  role: string;
+};
+
 export type Opportunity = {
   id: string;
   jobId: string;
+  companyId?: string;
   month: string;
   client: string;
   projectName: string;
@@ -39,6 +88,7 @@ export type Opportunity = {
   initialContractValue: number | null;
   finalCost: number | null;
   files?: ProjectFile[];
+  contacts?: ProjectContact[];
 };
 
 export type TakeoffParam = {
@@ -273,6 +323,7 @@ export type AppUserProfile = {
 export type Job = {
   id: string;
   opportunityId?: string;
+  companyId?: string;
   jobNumber: string;
   workType?: WorkType;
   pm: string;
@@ -305,6 +356,7 @@ export type Job = {
   purchaseOrders: PurchaseOrder[];
   submittals: SubmittalPackage[];
   files: ProjectFile[];
+  contacts?: ProjectContact[];
   activity: ActivityEvent[];
 };
 
