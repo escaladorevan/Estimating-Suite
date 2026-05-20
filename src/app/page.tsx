@@ -26,7 +26,15 @@ import { BidWorkbook } from "@/components/BidWorkbook";
 import { useJobsPersistence } from "@/hooks/useJobsPersistence";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "@/lib/change-order-workflow";
 import { calculateEstimateTotals } from "@/lib/estimate-math";
-import { saveEstimateHeader, saveEstimateSnapshot } from "@/lib/estimate-repository";
+import { reconcilePersistedEstimateIdentity } from "@/lib/estimate-persistence-reconciliation";
+import {
+  listEstimates,
+  saveEstimateAlternates,
+  saveEstimateAreas,
+  saveEstimateHeader,
+  saveEstimateSnapshot,
+  saveEstimateSubItems
+} from "@/lib/estimate-repository";
 import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
 import {
   addJobContact,
@@ -285,10 +293,31 @@ export default function Home() {
     }
   }
 
+  async function loadPersistedEstimates(isMounted = true) {
+    try {
+      const persisted = await listEstimates();
+      if (!isMounted) return;
+      if (!persisted.length) return;
+
+      const reconciled = reconcilePersistedEstimateIdentity({
+        currentEstimates: estimates,
+        persistedEstimates: persisted,
+        activeEstimateId
+      });
+      setEstimates(reconciled.estimates);
+      setActiveEstimateId(reconciled.activeEstimateId);
+      setEstimatePersistenceStatus(`Loaded ${persisted.length} workbook${persisted.length === 1 ? "" : "s"} from Supabase.`);
+    } catch {
+      if (!isMounted) return;
+      setEstimatePersistenceStatus("Workbook is local only until Supabase estimate reads succeed.");
+    }
+  }
+
   useEffect(() => {
     let isMounted = true;
     void loadPersistedOpportunities(isMounted);
     void loadPersistedJobs(isMounted);
+    void loadPersistedEstimates(isMounted);
     void loadPersistedPMNotes(isMounted);
     void loadPersistedContacts(isMounted);
 
@@ -323,6 +352,7 @@ export default function Home() {
       if (email) {
         void loadPersistedOpportunities();
         void loadPersistedJobs();
+        void loadPersistedEstimates();
         void loadPersistedPMNotes();
         void loadPersistedContacts();
         void getCurrentUserProfile().then((profile) => { if (isMounted) setCurrentUser(profile); });
@@ -336,6 +366,7 @@ export default function Home() {
       if (email) {
         void loadPersistedOpportunities();
         void loadPersistedJobs();
+        void loadPersistedEstimates();
         void loadPersistedPMNotes();
         void loadPersistedContacts();
         void getCurrentUserProfile().then(setCurrentUser);
@@ -568,7 +599,7 @@ export default function Home() {
 
   async function persistEstimateSnapshot(estimate: Estimate) {
     const localId = estimate.id;
-    setEstimatePersistenceStatus("Saving workbook header and snapshot...");
+    setEstimatePersistenceStatus("Saving workbook, line items, and snapshot...");
 
     try {
       const savedHeader = await saveEstimateHeader(estimate);
@@ -584,10 +615,13 @@ export default function Home() {
       );
       setActiveEstimateId(persistedEstimate.id);
 
+      await saveEstimateAreas(persistedEstimate.id, persistedEstimate.areas);
+      await saveEstimateSubItems(persistedEstimate.id, persistedEstimate.subItems);
+      await saveEstimateAlternates(persistedEstimate.id, persistedEstimate.alternates);
       await saveEstimateSnapshot(persistedEstimate);
-      setEstimatePersistenceStatus(`Saved snapshot for ${persistedEstimate.proposalNumber || persistedEstimate.projectName}.`);
+      setEstimatePersistenceStatus(`Saved workbook and snapshot for ${persistedEstimate.proposalNumber || persistedEstimate.projectName}.`);
     } catch {
-      setEstimatePersistenceStatus("Workbook is local only. Sign in and use persisted opportunity/job ids before saving snapshots.");
+      setEstimatePersistenceStatus("Workbook is local only. Sign in and use persisted opportunity/job ids before saving.");
     }
   }
 

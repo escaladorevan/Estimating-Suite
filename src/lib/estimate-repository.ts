@@ -1,4 +1,4 @@
-import type { Estimate, EstimateDocumentType } from "@/types";
+import type { Estimate, EstimateAlternate, EstimateArea, EstimateDocumentType, EstimateItem, EstimateSection, SubcontractorItem } from "@/types";
 import { calculateEstimateTotals } from "./estimate-math";
 import { supabase } from "./supabase-client";
 
@@ -37,6 +37,58 @@ export type EstimateRow = {
   clarifications: unknown;
   terms: unknown;
   change_order_context: Estimate["changeOrderContext"] | null;
+};
+
+type EstimateAreaRow = {
+  id: string;
+  estimate_id: string;
+  name: string | null;
+  qty: number | string | null;
+  ignored: boolean | null;
+  no_print: boolean | null;
+  sort_order: number | string | null;
+};
+
+type EstimateSectionRow = {
+  id: string;
+  area_id: string;
+  name: string | null;
+  ignored: boolean | null;
+  no_print: boolean | null;
+  sort_order: number | string | null;
+};
+
+type EstimateItemRow = {
+  id: string;
+  section_id: string;
+  name: string | null;
+  description: string | null;
+  drawing_ref: string | null;
+  category: string | null;
+  material_type: string | null;
+  qty: number | string | null;
+  unit: string | null;
+  unit_cost: number | string | null;
+  ignored: boolean | null;
+  no_print: boolean | null;
+  sort_order: number | string | null;
+};
+
+type EstimateSubItemRow = {
+  id: string;
+  estimate_id: string;
+  description: string | null;
+  cost: number | string | null;
+  markup_pct: number | string | null;
+  sort_order: number | string | null;
+};
+
+type EstimateAlternateRow = {
+  id: string;
+  estimate_id: string;
+  description: string | null;
+  amount: number | string | null;
+  sort_order: number | string | null;
 };
 
 export type EstimateUpsert = {
@@ -86,7 +138,7 @@ export type EstimateSnapshotInsert = {
 };
 
 type SupabaseEstimateClient = {
-  from: (table: "estimates" | "estimate_snapshots") => any;
+  from: (table: string) => any;
 };
 
 export function mapEstimateFromRow(row: EstimateRow): Estimate {
@@ -127,6 +179,65 @@ export function mapEstimateFromRow(row: EstimateRow): Estimate {
     alternates: [],
     exclusions: toStringArray(row.exclusions),
     clarifications: toStringArray(row.clarifications)
+  };
+}
+
+function mapItemRow(row: EstimateItemRow): EstimateItem {
+  return {
+    id: row.id,
+    name: row.name ?? undefined,
+    description: row.description ?? undefined,
+    drawingRef: row.drawing_ref ?? undefined,
+    category: row.category ?? undefined,
+    materialType: row.material_type ?? undefined,
+    qty: toNumber(row.qty),
+    unit: row.unit ?? undefined,
+    unitCost: toNumber(row.unit_cost),
+    ignored: row.ignored || undefined,
+    noPrint: row.no_print || undefined,
+    sortOrder: toNumber(row.sort_order)
+  };
+}
+
+function mapSectionRow(row: EstimateSectionRow, items: EstimateItem[]): EstimateSection {
+  return {
+    id: row.id,
+    name: row.name ?? undefined,
+    ignored: row.ignored || undefined,
+    noPrint: row.no_print || undefined,
+    items,
+    sortOrder: toNumber(row.sort_order)
+  };
+}
+
+function mapAreaRow(row: EstimateAreaRow, sections: EstimateSection[]): EstimateArea {
+  return {
+    id: row.id,
+    name: row.name ?? undefined,
+    qty: toNumber(row.qty),
+    ignored: row.ignored || undefined,
+    noPrint: row.no_print || undefined,
+    sections,
+    sortOrder: toNumber(row.sort_order)
+  };
+}
+
+function mapSubItemRow(row: EstimateSubItemRow): SubcontractorItem {
+  return {
+    id: row.id,
+    description: row.description ?? undefined,
+    cost: toNumber(row.cost),
+    markupPct: toNumber(row.markup_pct),
+    sortOrder: toNumber(row.sort_order)
+  };
+}
+
+function mapAlternateRow(row: EstimateAlternateRow): EstimateAlternate {
+  return {
+    id: row.id,
+    description: row.description ?? "",
+    amount: toNumber(row.amount),
+    sortOrder: toNumber(row.sort_order)
   };
 }
 
@@ -186,7 +297,15 @@ export async function listEstimates(client: SupabaseEstimateClient | null = supa
   const { data, error } = await client.from("estimates").select("*").order("updated_at", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []).map(mapEstimateFromRow);
+  const estimates: Estimate[] = ((data ?? []) as EstimateRow[]).map(mapEstimateFromRow);
+  const estimateIds = estimates.map((estimate) => estimate.id).filter(isUuid);
+  if (!estimateIds.length) return estimates;
+
+  const lineItemsByEstimate = await loadLineItemsForEstimates(estimateIds, client);
+  return estimates.map((estimate) => {
+    const lineItems = lineItemsByEstimate.get(estimate.id);
+    return lineItems ? { ...estimate, ...lineItems } : estimate;
+  });
 }
 
 export async function saveEstimateHeader(estimate: Estimate, client: SupabaseEstimateClient | null = supabase) {
@@ -194,7 +313,173 @@ export async function saveEstimateHeader(estimate: Estimate, client: SupabaseEst
   const { data, error } = await client.from("estimates").upsert(mapEstimateToUpsert(estimate)).select("*").single();
 
   if (error) throw error;
-  return data ? mapEstimateFromRow(data) : estimate;
+  return data ? { ...mapEstimateFromRow(data), areas: estimate.areas, subItems: estimate.subItems, alternates: estimate.alternates } : estimate;
+}
+
+type EstimateLineItems = Pick<Estimate, "areas" | "subItems" | "alternates">;
+
+export async function loadLineItemsForEstimates(
+  estimateIds: string[],
+  client: SupabaseEstimateClient | null = supabase
+): Promise<Map<string, EstimateLineItems>> {
+  const result = new Map<string, EstimateLineItems>(estimateIds.map((id) => [id, { areas: [], subItems: [], alternates: [] }]));
+  if (!client || !estimateIds.length) return result;
+
+  const [areasRes, subItemsRes, alternatesRes] = await Promise.all([
+    client.from("estimate_areas").select("*").in("estimate_id", estimateIds).order("sort_order"),
+    client.from("estimate_subcontractor_items").select("*").in("estimate_id", estimateIds).order("sort_order"),
+    client.from("estimate_alternates").select("*").in("estimate_id", estimateIds).order("sort_order")
+  ]);
+  for (const error of [areasRes.error, subItemsRes.error, alternatesRes.error]) {
+    if (error) throw error;
+  }
+
+  const areaRows = (areasRes.data ?? []) as EstimateAreaRow[];
+  const areaIds = areaRows.map((area) => area.id);
+  const sectionsByAreaId = new Map<string, EstimateSectionRow[]>();
+  const itemsBySectionId = new Map<string, EstimateItemRow[]>();
+
+  if (areaIds.length) {
+    const sectionsRes = await client.from("estimate_sections").select("*").in("area_id", areaIds).order("sort_order");
+    if (sectionsRes.error) throw sectionsRes.error;
+
+    const sectionRows = (sectionsRes.data ?? []) as EstimateSectionRow[];
+    for (const row of sectionRows) {
+      sectionsByAreaId.set(row.area_id, [...(sectionsByAreaId.get(row.area_id) ?? []), row]);
+    }
+
+    const sectionIds = sectionRows.map((section) => section.id);
+    if (sectionIds.length) {
+      const itemsRes = await client.from("estimate_items").select("*").in("section_id", sectionIds).order("sort_order");
+      if (itemsRes.error) throw itemsRes.error;
+      for (const row of (itemsRes.data ?? []) as EstimateItemRow[]) {
+        itemsBySectionId.set(row.section_id, [...(itemsBySectionId.get(row.section_id) ?? []), row]);
+      }
+    }
+  }
+
+  for (const row of areaRows) {
+    const sections = (sectionsByAreaId.get(row.id) ?? []).map((section) =>
+      mapSectionRow(section, (itemsBySectionId.get(section.id) ?? []).map(mapItemRow))
+    );
+    result.get(row.estimate_id)?.areas.push(mapAreaRow(row, sections));
+  }
+
+  for (const row of (subItemsRes.data ?? []) as EstimateSubItemRow[]) {
+    result.get(row.estimate_id)?.subItems.push(mapSubItemRow(row));
+  }
+
+  for (const row of (alternatesRes.data ?? []) as EstimateAlternateRow[]) {
+    result.get(row.estimate_id)?.alternates.push(mapAlternateRow(row));
+  }
+
+  return result;
+}
+
+export async function saveEstimateAreas(
+  estimateId: string,
+  areas: EstimateArea[],
+  client: SupabaseEstimateClient | null = supabase
+): Promise<void> {
+  if (!client) return;
+
+  const deleteRes = await client.from("estimate_areas").delete().eq("estimate_id", estimateId);
+  if (deleteRes.error) throw deleteRes.error;
+  if (!areas.length) return;
+
+  const areaRows = areas.map((area, index) => ({
+    estimate_id: estimateId,
+    name: area.name ?? "",
+    qty: area.qty,
+    ignored: area.ignored ?? false,
+    no_print: area.noPrint ?? false,
+    sort_order: area.sortOrder ?? index
+  }));
+  const { data: savedAreas, error: areaError } = await client.from("estimate_areas").insert(areaRows).select("id");
+  if (areaError) throw areaError;
+
+  const sectionRows = areas.flatMap((area, areaIndex) =>
+    area.sections.map((section, sectionIndex) => ({
+      area_id: savedAreas?.[areaIndex]?.id,
+      name: section.name ?? "",
+      ignored: section.ignored ?? false,
+      no_print: section.noPrint ?? false,
+      sort_order: section.sortOrder ?? sectionIndex,
+      section,
+      areaIndex
+    }))
+  ).filter((row) => row.area_id);
+  if (!sectionRows.length) return;
+
+  const { data: savedSections, error: sectionError } = await client
+    .from("estimate_sections")
+    .insert(sectionRows.map(({ section: _section, areaIndex: _areaIndex, ...row }) => row))
+    .select("id");
+  if (sectionError) throw sectionError;
+
+  const itemRows = sectionRows.flatMap((sectionRow, sectionRowIndex) =>
+    sectionRow.section.items.map((item, itemIndex) => ({
+      section_id: savedSections?.[sectionRowIndex]?.id,
+      name: item.name ?? null,
+      description: item.description ?? null,
+      drawing_ref: item.drawingRef ?? null,
+      category: item.category ?? null,
+      material_type: item.materialType ?? null,
+      qty: item.qty,
+      unit: item.unit ?? null,
+      unit_cost: item.unitCost,
+      ignored: item.ignored ?? false,
+      no_print: item.noPrint ?? false,
+      sort_order: item.sortOrder ?? itemIndex
+    }))
+  ).filter((row) => row.section_id);
+  if (!itemRows.length) return;
+
+  const { error: itemError } = await client.from("estimate_items").insert(itemRows);
+  if (itemError) throw itemError;
+}
+
+export async function saveEstimateSubItems(
+  estimateId: string,
+  subItems: SubcontractorItem[],
+  client: SupabaseEstimateClient | null = supabase
+): Promise<void> {
+  if (!client) return;
+  const deleteRes = await client.from("estimate_subcontractor_items").delete().eq("estimate_id", estimateId);
+  if (deleteRes.error) throw deleteRes.error;
+  if (!subItems.length) return;
+
+  const { error } = await client.from("estimate_subcontractor_items").insert(
+    subItems.map((item, index) => ({
+      estimate_id: estimateId,
+      description: item.description ?? null,
+      cost: item.cost,
+      markup_pct: item.markupPct,
+      sort_order: item.sortOrder ?? index
+    }))
+  );
+  if (error) throw error;
+}
+
+export async function saveEstimateAlternates(
+  estimateId: string,
+  alternates: EstimateAlternate[],
+  client: SupabaseEstimateClient | null = supabase
+): Promise<void> {
+  if (!client) return;
+  const deleteRes = await client.from("estimate_alternates").delete().eq("estimate_id", estimateId);
+  if (deleteRes.error) throw deleteRes.error;
+  if (!alternates.length) return;
+
+  const { error } = await client.from("estimate_alternates").insert(
+    alternates.map((alternate, index) => ({
+      estimate_id: estimateId,
+      description: alternate.description,
+      amount: alternate.amount,
+      sort_order: alternate.sortOrder ?? index
+    }))
+  );
+  if (error) throw error;
 }
 
 export async function saveEstimateSnapshot(estimate: Estimate, client: SupabaseEstimateClient | null = supabase) {

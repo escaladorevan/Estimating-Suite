@@ -146,6 +146,7 @@ export type EstimateItem = {
   ignored?: boolean;
   noPrint?: boolean;
   takeoffExpansion?: TakeoffExpansion;
+  sortOrder?: number;
 };
 
 export type EstimateSection = {
@@ -154,6 +155,7 @@ export type EstimateSection = {
   ignored?: boolean;
   noPrint?: boolean;
   items: EstimateItem[];
+  sortOrder?: number;
 };
 
 export type EstimateArea = {
@@ -163,12 +165,22 @@ export type EstimateArea = {
   ignored?: boolean;
   noPrint?: boolean;
   sections: EstimateSection[];
+  sortOrder?: number;
 };
 
 export type SubcontractorItem = {
+  id?: string;
   description?: string;
   cost: number;
   markupPct: number;
+  sortOrder?: number;
+};
+
+export type EstimateAlternate = {
+  id?: string;
+  description: string;
+  amount: number;
+  sortOrder?: number;
 };
 
 export type Estimate = {
@@ -213,7 +225,7 @@ export type Estimate = {
   insPct: number;
   areas: EstimateArea[];
   subItems: SubcontractorItem[];
-  alternates: { description: string; amount: number }[];
+  alternates: EstimateAlternate[];
   exclusions: string[];
   clarifications: string[];
 };

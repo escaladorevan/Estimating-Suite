@@ -20,7 +20,15 @@ import {
   removeOpportunityContact
 } from "./contact-repository";
 import { calculateEstimateTotals } from "./estimate-math";
-import { mapEstimateFromRow, mapEstimateSnapshotToInsert, mapEstimateToUpsert } from "./estimate-repository";
+import {
+  loadLineItemsForEstimates,
+  mapEstimateFromRow,
+  mapEstimateSnapshotToInsert,
+  mapEstimateToUpsert,
+  saveEstimateAlternates,
+  saveEstimateAreas,
+  saveEstimateSubItems
+} from "./estimate-repository";
 import {
   buildProjectFileStoragePath,
   mapProjectFileFromRow,
@@ -69,6 +77,7 @@ import { jobDetailTabs } from "./job-detail-tabs";
 import { mapOpportunityFromRow, mapOpportunityToUpsert } from "./opportunity-repository";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "./opportunity-import";
 import { CHANGE_ORDER_STATUSES, OPPORTUNITY_STATUSES } from "./status-constants";
+import { reconcilePersistedEstimateIdentity } from "./estimate-persistence-reconciliation";
 import { reconcilePersistedJobIdentity, resolvePersistedJobForPMNote } from "./job-persistence-reconciliation";
 import { bomComponentsToCsv } from "./takeoff-csv";
 import { expandTakeoff } from "./takeoff-engine";
@@ -583,6 +592,108 @@ describe("estimate repository mapping", () => {
       bid_total: 621.6,
       snapshot: estimate
     });
+  });
+
+  it("assembles persisted area, section, item, sub item, and alternate rows into a workbook estimate tree", async () => {
+    const estimateId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const areaId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const sectionId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const itemId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const subItemId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const alternateId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+
+    const mockClient = {
+      from: (table: string) => ({
+        select: () => ({
+          in: () => ({
+            order: () =>
+              Promise.resolve({
+                data:
+                  table === "estimate_areas"
+                    ? [{ id: areaId, estimate_id: estimateId, name: "Floor 2", qty: "2", ignored: false, no_print: false, sort_order: 0 }]
+                    : table === "estimate_sections"
+                      ? [{ id: sectionId, area_id: areaId, name: "Uppers", ignored: true, no_print: false, sort_order: 0 }]
+                      : table === "estimate_items"
+                        ? [{
+                            id: itemId,
+                            section_id: sectionId,
+                            name: "Uppers w/Doors",
+                            description: "24 inch deep uppers",
+                            drawing_ref: "A8.12",
+                            category: "Cabs Uppers w/Doors",
+                            material_type: "PLAM",
+                            qty: "44.5",
+                            unit: "LF",
+                            unit_cost: "310.25",
+                            ignored: false,
+                            no_print: true,
+                            sort_order: 0
+                          }]
+                        : table === "estimate_subcontractor_items"
+                          ? [{ id: subItemId, estimate_id: estimateId, description: "Quartz install", cost: "1800", markup_pct: "12", sort_order: 0 }]
+                          : table === "estimate_alternates"
+                            ? [{ id: alternateId, estimate_id: estimateId, description: "Add reception feature wall", amount: "7250", sort_order: 0 }]
+                            : [],
+                error: null
+              })
+          })
+        })
+      })
+    } as any;
+
+    const result = await loadLineItemsForEstimates([estimateId], mockClient);
+    const persisted = result.get(estimateId);
+
+    expect(persisted?.areas[0]).toMatchObject({ id: areaId, name: "Floor 2", qty: 2 });
+    expect(persisted?.areas[0].sections[0]).toMatchObject({ id: sectionId, name: "Uppers", ignored: true });
+    expect(persisted?.areas[0].sections[0].items[0]).toMatchObject({
+      id: itemId,
+      name: "Uppers w/Doors",
+      drawingRef: "A8.12",
+      category: "Cabs Uppers w/Doors",
+      materialType: "PLAM",
+      qty: 44.5,
+      unit: "LF",
+      unitCost: 310.25,
+      noPrint: true
+    });
+    expect(persisted?.subItems[0]).toMatchObject({ id: subItemId, description: "Quartz install", cost: 1800, markupPct: 12 });
+    expect(persisted?.alternates[0]).toMatchObject({ id: alternateId, description: "Add reception feature wall", amount: 7250 });
+  });
+
+  it("estimate line-item write helpers are safe no-ops without Supabase", async () => {
+    await expect(saveEstimateAreas("estimate-id", [], null)).resolves.toBeUndefined();
+    await expect(saveEstimateSubItems("estimate-id", [], null)).resolves.toBeUndefined();
+    await expect(saveEstimateAlternates("estimate-id", [], null)).resolves.toBeUndefined();
+  });
+
+  it("reconciles local workbook ids to persisted estimate ids without losing unsaved line items", () => {
+    const localEstimate = {
+      ...estimate,
+      id: "local-estimate",
+      areas: [{ id: "local-area", name: "Local area", qty: 1, sections: [] }],
+      subItems: [{ description: "Local sub", cost: 100, markupPct: 10 }],
+      alternates: [{ description: "Local alternate", amount: 250 }]
+    };
+    const persistedEstimate = {
+      ...estimate,
+      id: "99999999-9999-4999-8999-999999999999",
+      areas: [],
+      subItems: [],
+      alternates: []
+    };
+
+    const result = reconcilePersistedEstimateIdentity({
+      currentEstimates: [localEstimate],
+      persistedEstimates: [persistedEstimate],
+      activeEstimateId: "local-estimate"
+    });
+
+    expect(result.activeEstimateId).toBe("99999999-9999-4999-8999-999999999999");
+    expect(result.localToPersistedEstimateIds.get("local-estimate")).toBe("99999999-9999-4999-8999-999999999999");
+    expect(result.estimates[0].areas[0].name).toBe("Local area");
+    expect(result.estimates[0].subItems[0].description).toBe("Local sub");
+    expect(result.estimates[0].alternates[0].description).toBe("Local alternate");
   });
 });
 
