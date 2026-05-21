@@ -150,6 +150,8 @@ type AwardDetails = {
   ntpDate: string;
 };
 
+type HomeRole = "estimator" | "pm" | "admin";
+
 export default function Home() {
   const [view, setView] = useState<View>("dashboard");
   const [hasMounted, setHasMounted] = useState(false);
@@ -169,6 +171,7 @@ export default function Home() {
   const [sessionEmail, setSessionEmail] = useState("");
   const [authStatus, setAuthStatus] = useState("Sign in to save live data.");
   const [currentUser, setCurrentUser] = useState<AppUserProfile | null>(null);
+  const [homeRoleOverride, setHomeRoleOverride] = useState<HomeRole>("estimator");
   const [companies, setCompanies] = useState<Company[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactPersistenceStatus, setContactPersistenceStatus] = useState("Directory loads after sign-in.");
@@ -229,6 +232,14 @@ export default function Home() {
     ["Lead / ITB", "Pricing", "Review / Send"].includes(opportunity.status)
   );
   const renderedView: View = hasMounted ? view : "dashboard";
+  const homeRole: HomeRole =
+    currentUser?.role === "admin"
+      ? homeRoleOverride
+      : currentUser?.role === "pm"
+        ? "pm"
+        : currentUser?.role === "estimator"
+          ? "estimator"
+          : "estimator";
 
   const analytics = useMemo(() => {
     const submitted = opportunities.filter((opportunity) => opportunity.sentDate).length;
@@ -1299,10 +1310,6 @@ export default function Home() {
     if (note) void persistDeletePMNote(note);
   }
 
-  if (!hasMounted) {
-    return <main className="app-shell" />;
-  }
-
   return (
     <main className={mainNavCollapsed ? "app-shell main-nav-collapsed" : "app-shell"}>
       <aside className="side-nav">
@@ -1442,7 +1449,10 @@ export default function Home() {
         {renderedView === "dashboard" && (
           <HomeDashboard
             analytics={analytics}
+            canSwitchHomeRole={currentUser?.role === "admin"}
+            homeRole={homeRole}
             jobs={jobs}
+            onHomeRoleChange={setHomeRoleOverride}
             onCreateOpportunity={createNewOpportunity}
             onCreatePmNote={createPmNote}
             onDeletePmNote={deletePmNote}
@@ -1661,10 +1671,13 @@ export default function Home() {
 
 function HomeDashboard({
   analytics,
+  canSwitchHomeRole,
+  homeRole,
   opportunities,
   pipelineOpportunities,
   jobs,
   pmNotes,
+  onHomeRoleChange,
   onCreateOpportunity,
   onCreatePmNote,
   onDeletePmNote,
@@ -1672,10 +1685,13 @@ function HomeDashboard({
   onUpdatePmNoteStatus
 }: {
   analytics: DashboardAnalytics;
+  canSwitchHomeRole: boolean;
+  homeRole: HomeRole;
   opportunities: Opportunity[];
   pipelineOpportunities: Opportunity[];
   jobs: Job[];
   pmNotes: PMNote[];
+  onHomeRoleChange: (role: HomeRole) => void;
   onCreateOpportunity: () => void;
   onCreatePmNote: (text: string, jobId?: string) => void;
   onDeletePmNote: (noteId: string) => void;
@@ -1693,10 +1709,6 @@ function HomeDashboard({
   const submittedBidValue = opportunities
     .filter((opportunity) => opportunity.status === "Submitted" && !opportunity.winLoss)
     .reduce((sum, opportunity) => sum + opportunity.estimatedValue, 0);
-  const weightedPipeline = pipelineOpportunities.reduce((sum, opportunity) => {
-    const weight = opportunity.status === "Submitted" ? 0.45 : opportunity.status === "Review / Send" ? 0.3 : opportunity.status === "Pricing" ? 0.18 : 0.08;
-    return sum + opportunity.estimatedValue * weight;
-  }, 0);
   const dueSoon = opportunities
     .filter((opportunity) => !opportunity.winLoss && opportunity.bidDueDate)
     .filter((opportunity) => {
@@ -1709,93 +1721,170 @@ function HomeDashboard({
     .sort((a, b) => a.bidDueDate.localeCompare(b.bidDueDate));
   const nextSubmitted = opportunities.filter((opportunity) => opportunity.status === "Submitted" && !opportunity.winLoss);
   const pmActions = buildPmActionItems({ jobs, notes: pmNotes, today }).slice(0, 5);
+  const upcomingInstalls = activeJobs
+    .filter((job) => job.installStart)
+    .sort((a, b) => a.installStart.localeCompare(b.installStart))
+    .slice(0, 5);
+
+  const roleCopy = {
+    estimator: {
+      title: "Estimator Home",
+      detail: `${pipelineOpportunities.length} active bids are moving. ${nextSubmitted.length} submitted bids need follow-up.`
+    },
+    pm: {
+      title: "PM Home",
+      detail: `${activeJobs.length} active jobs are open. ${pmActions.length} items need PM attention.`
+    },
+    admin: {
+      title: "Admin Home",
+      detail: "Owner-level pulse for backlog, revenue, bid health, and production load."
+    }
+  } satisfies Record<HomeRole, { title: string; detail: string }>;
 
   return (
     <div className="stack home-stack">
       <section className="home-hero">
         <div>
           <span className="eyebrow">Thu, May 7, 2026</span>
-          <h2>Home</h2>
-          <p>
-            {pipelineOpportunities.length} active bids are moving. {nextSubmitted.length} submitted bids are waiting in the register.
-          </p>
+          <h2>{roleCopy[homeRole].title}</h2>
+          <p>{roleCopy[homeRole].detail}</p>
         </div>
-        <button className="primary" onClick={onCreateOpportunity}>New ITB</button>
+        <div className="home-hero-actions">
+          {canSwitchHomeRole ? (
+            <div className="role-switch" aria-label="Home role preview">
+              {(["estimator", "pm", "admin"] as HomeRole[]).map((role) => (
+                <button
+                  className={homeRole === role ? "active" : ""}
+                  key={role}
+                  onClick={() => onHomeRoleChange(role)}
+                  type="button"
+                >
+                  {role === "pm" ? "PM" : role[0].toUpperCase() + role.slice(1)}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {homeRole === "estimator" ? <button className="primary" onClick={onCreateOpportunity}>New ITB</button> : null}
+        </div>
       </section>
-      <div className="metric-grid home-metrics">
-        <Metric label="Contract backlog" value={money.format(backlogSummary.totalBacklog)} detail={`${money.format(backlogSummary.wonNotStarted)} won not started`} />
-        <Metric label="Revenue this Q" value={money.format(quarterRevenue)} detail="Jobs installing this quarter" />
-        <Metric label="Active jobs" value={activeJobs.length} detail={`${money.format(backlogSummary.activeProduction)} in production`} />
-        <Metric label="Active bids" value={pipelineOpportunities.length} detail={`${dueSoon.length} due in the next two weeks`} />
-      </div>
-      <section className="home-grid">
-        <div className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>Bid calendar</h2>
-              <p>Pipeline due dates for the next two weeks.</p>
-            </div>
+
+      {homeRole === "estimator" ? (
+        <>
+          <div className="metric-grid home-metrics">
+            <Metric label="Revenue this Q" value={money.format(quarterRevenue)} detail="Jobs installing this quarter" />
+            <Metric label="Active jobs" value={activeJobs.length} detail={`${money.format(backlogSummary.activeProduction)} in production`} />
+            <Metric label="Active bids" value={pipelineOpportunities.length} detail={`${dueSoon.length} due in the next two weeks`} />
+            <Metric label="Submitted bids" value={nextSubmitted.length} detail={money.format(submittedBidValue)} />
           </div>
-          <BidCalendar opportunities={dueSoon} />
-        </div>
-        <div className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>Pipeline focus</h2>
-              <p>What needs attention before it becomes a long-term register item.</p>
-            </div>
-          </div>
-          <div className="focus-list">
-            {pipelineOpportunities.slice(0, 6).map((opportunity) => (
-              <div className="focus-row" key={opportunity.id}>
+          <section className="home-grid">
+            <div className="panel">
+              <div className="panel-header">
                 <div>
-                  <strong>{opportunity.projectName}</strong>
-                  <span>{opportunity.client} - {opportunity.jobId}</span>
+                  <h2>Bid calendar</h2>
+                  <p>Pipeline due dates for the next two weeks.</p>
                 </div>
-                <Status value={opportunity.status} />
               </div>
-            ))}
+              <BidCalendar opportunities={dueSoon} />
+            </div>
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Estimator focus</h2>
+                  <p>Active bid work and submitted-bid follow-up.</p>
+                </div>
+              </div>
+              <div className="focus-list">
+                {[...pipelineOpportunities, ...nextSubmitted].slice(0, 6).map((opportunity) => (
+                  <div className="focus-row" key={opportunity.id}>
+                    <div>
+                      <strong>{opportunity.projectName}</strong>
+                      <span>{opportunity.client} - {opportunity.jobId}</span>
+                    </div>
+                    <Status value={opportunity.status} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {homeRole === "pm" ? (
+        <>
+          <div className="metric-grid home-metrics">
+            <Metric label="Active jobs" value={activeJobs.length} detail={`${money.format(backlogSummary.activeProduction)} in production`} />
+            <Metric label="Installs queued" value={upcomingInstalls.length} detail="Upcoming install windows" />
+            <Metric label="PM actions" value={pmActions.length} detail="Notes and job alerts" />
+            <Metric label="Open CO value" value={money.format(analytics.approvedCos)} detail="Approved change orders" />
           </div>
-        </div>
-      </section>
-      <PMActionBoard
-        actions={pmActions}
-        compact
-        jobs={jobs}
-        onCreateNote={onCreatePmNote}
-        onDeleteNote={onDeletePmNote}
-        onUpdateNoteText={onUpdatePmNoteText}
-        onUpdateNoteStatus={onUpdatePmNoteStatus}
-        title="PM action board"
-      />
-      <section className="panel two-column home-context-panel">
-        <div>
-          <h2>How this should behave</h2>
-          <p>
-            Pipeline is for active bid work: Lead / ITB, Pricing, Review / Send, and Submitted. Bid Register is the
-            masterpoint where submitted and cold bids can live for months until they become Won or Lost.
-          </p>
-          <div className="flow">
-            <span>Lead / ITB</span>
-            <span>Pricing</span>
-            <span>Review / Send</span>
-            <span>Submitted</span>
-            <span>Bid Register</span>
-            <span>Won to Jobs</span>
+          <section className="home-grid pm-home-grid">
+            <PMActionBoard
+              actions={pmActions}
+              jobs={jobs}
+              onCreateNote={onCreatePmNote}
+              onDeleteNote={onDeletePmNote}
+              onUpdateNoteText={onUpdatePmNoteText}
+              onUpdateNoteStatus={onUpdatePmNoteStatus}
+              title="PM action board"
+            />
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Install lookahead</h2>
+                  <p>Upcoming job starts for PM coordination.</p>
+                </div>
+              </div>
+              <div className="focus-list">
+                {upcomingInstalls.map((job) => (
+                  <div className="focus-row" key={job.id}>
+                    <div>
+                      <strong>{job.jobNumber} - {job.projectName}</strong>
+                      <span>{formatDateRange(job.installStart, job.installEnd)} - {job.pm}</span>
+                    </div>
+                    <Status value={job.installStatus} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {homeRole === "admin" ? (
+        <>
+          <div className="metric-grid home-metrics">
+            <Metric label="Contract backlog" value={money.format(backlogSummary.totalBacklog)} detail={`${money.format(backlogSummary.wonNotStarted)} won not started`} />
+            <Metric label="Current contract" value={money.format(yearlyRevenue)} detail="Base plus approved COs" />
+            <Metric label="Win rate" value={`${analytics.winRate}%`} detail={`${analytics.wonValue ? money.format(analytics.wonValue) : "$0"} won value`} />
+            <Metric label="Projected margin" value={`${analytics.margin}%`} detail="From stored final costs" />
           </div>
-        </div>
-        <div className="forecast-card">
-          <span className="eyebrow">Backlog / forecast</span>
-          <div className="forecast-total">{money.format(backlogSummary.totalBacklog)}</div>
-          <div className="forecast-lines">
-            <div><span>Current contract value</span><strong>{money.format(yearlyRevenue)}</strong></div>
-            <div><span>Won not started</span><strong>{money.format(backlogSummary.wonNotStarted)}</strong></div>
-            <div><span>Submitted bid value</span><strong>{money.format(submittedBidValue)}</strong></div>
-            <div><span>Weighted pipeline</span><strong>{money.format(weightedPipeline)}</strong></div>
-          </div>
-          <small>Awarded work carries as backlog until installed, completed, or voided.</small>
-        </div>
-      </section>
+          <section className="home-grid">
+            <div className="panel forecast-card">
+              <span className="eyebrow">Backlog / forecast</span>
+              <div className="forecast-total">{money.format(backlogSummary.totalBacklog)}</div>
+              <div className="forecast-lines">
+                <div><span>Current contract value</span><strong>{money.format(yearlyRevenue)}</strong></div>
+                <div><span>Won not started</span><strong>{money.format(backlogSummary.wonNotStarted)}</strong></div>
+                <div><span>Submitted bid value</span><strong>{money.format(submittedBidValue)}</strong></div>
+                <div><span>Active production</span><strong>{money.format(backlogSummary.activeProduction)}</strong></div>
+              </div>
+            </div>
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Operating risk</h2>
+                  <p>Admin preview. Deeper forecasting belongs in Analytics.</p>
+                </div>
+              </div>
+              <div className="focus-list">
+                <div className="focus-row"><strong>PM action load</strong><Status value={`${pmActions.length} open`} /></div>
+                <div className="focus-row"><strong>Submitted bids pending</strong><Status value={`${nextSubmitted.length} bids`} /></div>
+                <div className="focus-row"><strong>Due in two weeks</strong><Status value={`${dueSoon.length} bids`} /></div>
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
     </div>
   );
 }
