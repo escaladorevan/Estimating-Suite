@@ -585,7 +585,8 @@ p {
   margin: 1px 0 3px;
 }
 
-.bid-calendar article small {
+.bid-calendar article small,
+.calendar-bid {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r-xs);
@@ -599,6 +600,19 @@ p {
   padding: 2px 4px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  width: 100%;
+}
+
+.calendar-bid {
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.calendar-bid:hover,
+.calendar-bid:focus-visible {
+  border-color: var(--accent);
+  color: var(--ink);
 }
 
 .bid-calendar article em {
@@ -622,6 +636,27 @@ p {
   gap: 10px;
   justify-content: space-between;
   padding: 7px 0;
+}
+
+button.focus-row {
+  background: transparent;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.interactive-row:hover,
+.interactive-row:focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 65%, transparent);
+  margin-left: -8px;
+  margin-right: -8px;
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 .focus-row:first-child {
@@ -920,6 +955,15 @@ td span,
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   padding: 14px;
+}
+
+.pm-action.interactive-action {
+  cursor: pointer;
+}
+
+.pm-action.interactive-action:hover,
+.pm-action.interactive-action:focus-within {
+  border-color: var(--accent);
 }
 
 .forecast-total {

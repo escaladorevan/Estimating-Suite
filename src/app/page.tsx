@@ -1456,6 +1456,8 @@ export default function Home() {
             onCreateOpportunity={createNewOpportunity}
             onCreatePmNote={createPmNote}
             onDeletePmNote={deletePmNote}
+            onOpenJob={setDetailJobId}
+            onOpenOpportunity={setSelectedOpportunityId}
             onUpdatePmNoteText={updatePmNoteText}
             onUpdatePmNoteStatus={updatePmNoteStatus}
             opportunities={opportunities}
@@ -1681,6 +1683,8 @@ function HomeDashboard({
   onCreateOpportunity,
   onCreatePmNote,
   onDeletePmNote,
+  onOpenJob,
+  onOpenOpportunity,
   onUpdatePmNoteText,
   onUpdatePmNoteStatus
 }: {
@@ -1695,6 +1699,8 @@ function HomeDashboard({
   onCreateOpportunity: () => void;
   onCreatePmNote: (text: string, jobId?: string) => void;
   onDeletePmNote: (noteId: string) => void;
+  onOpenJob: (jobId: string) => void;
+  onOpenOpportunity: (opportunityId: string) => void;
   onUpdatePmNoteText: (noteId: string, text: string) => void;
   onUpdatePmNoteStatus: (noteId: string, status: PMNote["status"]) => void;
 }) {
@@ -1784,7 +1790,7 @@ function HomeDashboard({
                   <p>Pipeline due dates for the next two weeks.</p>
                 </div>
               </div>
-              <BidCalendar opportunities={dueSoon} />
+              <BidCalendar opportunities={dueSoon} onOpenOpportunity={onOpenOpportunity} />
             </div>
             <div className="panel">
               <div className="panel-header">
@@ -1795,13 +1801,13 @@ function HomeDashboard({
               </div>
               <div className="focus-list">
                 {[...pipelineOpportunities, ...nextSubmitted].slice(0, 6).map((opportunity) => (
-                  <div className="focus-row" key={opportunity.id}>
+                  <button className="focus-row interactive-row" key={opportunity.id} onClick={() => onOpenOpportunity(opportunity.id)} type="button">
                     <div>
                       <strong>{opportunity.projectName}</strong>
                       <span>{opportunity.client} - {opportunity.jobId}</span>
                     </div>
                     <Status value={opportunity.status} />
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -1823,6 +1829,7 @@ function HomeDashboard({
               jobs={jobs}
               onCreateNote={onCreatePmNote}
               onDeleteNote={onDeletePmNote}
+              onOpenJob={onOpenJob}
               onUpdateNoteText={onUpdatePmNoteText}
               onUpdateNoteStatus={onUpdatePmNoteStatus}
               title="PM action board"
@@ -1836,13 +1843,13 @@ function HomeDashboard({
               </div>
               <div className="focus-list">
                 {upcomingInstalls.map((job) => (
-                  <div className="focus-row" key={job.id}>
+                  <button className="focus-row interactive-row" key={job.id} onClick={() => onOpenJob(job.id)} type="button">
                     <div>
                       <strong>{job.jobNumber} - {job.projectName}</strong>
                       <span>{formatDateRange(job.installStart, job.installEnd)} - {job.pm}</span>
                     </div>
                     <Status value={job.installStatus} />
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -1889,7 +1896,13 @@ function HomeDashboard({
   );
 }
 
-function BidCalendar({ opportunities }: { opportunities: Opportunity[] }) {
+function BidCalendar({
+  opportunities,
+  onOpenOpportunity
+}: {
+  opportunities: Opportunity[];
+  onOpenOpportunity: (opportunityId: string) => void;
+}) {
   const days = Array.from({ length: 14 }, (_, index) => {
     const date = new Date(`${today}T12:00:00`);
     date.setDate(date.getDate() + index);
@@ -1908,7 +1921,9 @@ function BidCalendar({ opportunities }: { opportunities: Opportunity[] }) {
             <span>{day.toLocaleDateString("en-US", { weekday: "short" })}</span>
             <strong>{day.getDate()}</strong>
             {visibleBids.map((bid) => (
-              <small key={bid.id}>{bid.jobId} {bid.projectName}</small>
+              <button className="calendar-bid" key={bid.id} onClick={() => onOpenOpportunity(bid.id)} type="button">
+                {bid.jobId} {bid.projectName}
+              </button>
             ))}
             {hiddenCount > 0 ? <em>+{hiddenCount} more</em> : null}
           </article>
@@ -1924,6 +1939,7 @@ function PMActionBoard({
   jobs,
   onCreateNote,
   onDeleteNote,
+  onOpenJob,
   onUpdateNoteText,
   onUpdateNoteStatus,
   title
@@ -1933,6 +1949,7 @@ function PMActionBoard({
   jobs: Job[];
   onCreateNote: (text: string, jobId?: string) => void;
   onDeleteNote: (noteId: string) => void;
+  onOpenJob?: (jobId: string) => void;
   onUpdateNoteText: (noteId: string, text: string) => void;
   onUpdateNoteStatus: (noteId: string, status: PMNote["status"]) => void;
   title: string;
@@ -1978,10 +1995,17 @@ function PMActionBoard({
       </form>
       <div className="pm-action-list">
         {actions.length ? actions.map((action) => (
-          <article className={`pm-action ${action.severity}`} key={action.id}>
+          <article
+            className={`pm-action ${action.severity} ${action.jobId && onOpenJob ? "interactive-action" : ""}`}
+            key={action.id}
+            onClick={() => {
+              if (action.jobId && onOpenJob) onOpenJob(action.jobId);
+            }}
+          >
             {editingNoteId === action.id ? (
               <form
                 className="pm-note-edit"
+                onClick={(event) => event.stopPropagation()}
                 onSubmit={(event) => {
                   event.preventDefault();
                   onUpdateNoteText(action.id, editingText);
@@ -2002,15 +2026,16 @@ function PMActionBoard({
             {action.kind === "manual" ? (
               <div className="pm-action-buttons">
                 <button
-                  onClick={() => {
+                  onClick={(event) => {
+                    event.stopPropagation();
                     setEditingNoteId(action.id);
                     setEditingText(action.title);
                   }}
                 >
                   Edit
                 </button>
-                <button onClick={() => onUpdateNoteStatus(action.id, "Done")}>Done</button>
-                <button className="danger-text" onClick={() => onDeleteNote(action.id)}>Delete</button>
+                <button onClick={(event) => { event.stopPropagation(); onUpdateNoteStatus(action.id, "Done"); }}>Done</button>
+                <button className="danger-text" onClick={(event) => { event.stopPropagation(); onDeleteNote(action.id); }}>Delete</button>
               </div>
             ) : (
               <small>{action.jobNumber ?? "System"}</small>
