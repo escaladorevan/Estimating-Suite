@@ -1901,13 +1901,16 @@ function BidCalendar({ opportunities }: { opportunities: Opportunity[] }) {
       {days.map((day) => {
         const iso = day.toISOString().slice(0, 10);
         const bids = opportunities.filter((opportunity) => opportunity.bidDueDate === iso);
+        const visibleBids = bids.slice(0, 3);
+        const hiddenCount = bids.length - visibleBids.length;
         return (
           <article className={bids.length ? "has-bids" : ""} key={iso}>
             <span>{day.toLocaleDateString("en-US", { weekday: "short" })}</span>
             <strong>{day.getDate()}</strong>
-            {bids.map((bid) => (
+            {visibleBids.map((bid) => (
               <small key={bid.id}>{bid.jobId} {bid.projectName}</small>
             ))}
+            {hiddenCount > 0 ? <em>+{hiddenCount} more</em> : null}
           </article>
         );
       })}

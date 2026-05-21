@@ -558,8 +558,8 @@ p {
 .bid-calendar article {
   background: var(--panel-alt);
   border: 1px solid var(--line);
-  min-height: 66px;
-  padding: 5px;
+  min-height: 92px;
+  padding: 6px;
 }
 
 .bid-calendar article.has-bids {
@@ -599,6 +599,15 @@ p {
   padding: 2px 4px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.bid-calendar article em {
+  color: var(--ink-3);
+  display: block;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  margin-top: 3px;
 }
 
 .focus-list {
