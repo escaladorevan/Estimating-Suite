@@ -5,7 +5,7 @@ import { saveEstimateHeader } from "@/lib/estimate-repository";
 import { persistCarriedJobContacts } from "@/lib/contact-repository";
 import { pruneProjectFileSlotMetadata, saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
 import { remapCoActivityOwner, replaceJobDetail } from "@/lib/job-detail-data";
-import { reconcilePersistedJobIdentity } from "@/lib/job-persistence-reconciliation";
+import { reconcilePersistedJobIdentity, remapJobOwnedActivityForPersistence } from "@/lib/job-persistence-reconciliation";
 import {
   deletePMNote,
   listJobDetail,
@@ -165,6 +165,12 @@ export function useJobsPersistence({
                 : candidate
             )
           );
+        }
+      }
+
+      if (forceCreate && isUuid(saved.id)) {
+        for (const event of remapJobOwnedActivityForPersistence(job.activity, localId, saved.id)) {
+          void saveActivityEvent(event).catch(() => {});
         }
       }
     } catch {

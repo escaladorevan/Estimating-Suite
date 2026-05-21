@@ -1,4 +1,4 @@
-import type { Estimate, Job, PMNote } from "@/types";
+import type { ActivityEvent, Estimate, Job, PMNote } from "@/types";
 
 type ReconcilePersistedJobIdentityInput = {
   currentJobs: Job[];
@@ -84,6 +84,21 @@ export function resolvePersistedJobForPMNote({
     persistedJob: linkedJob && isUuid(linkedJob.id) ? linkedJob : persistedByNumber,
     blockedJobLabel: requestedNumber || requestedJobId || parsedJobNumber || ""
   };
+}
+
+export function remapJobOwnedActivityForPersistence(
+  events: ActivityEvent[],
+  localJobId: string,
+  persistedJobId: string
+): ActivityEvent[] {
+  if (!isUuid(persistedJobId)) return [];
+  return events
+    .filter((event) => event.ownerType === "job")
+    .map((event) => ({
+      ...event,
+      ownerId: event.ownerId === localJobId ? persistedJobId : event.ownerId
+    }))
+    .filter((event) => isUuid(event.ownerId));
 }
 
 function mergePersistedJob(persisted: Job, local?: Job): Job {
