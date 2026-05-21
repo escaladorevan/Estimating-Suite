@@ -389,6 +389,10 @@ button {
   overflow: auto;
 }
 
+.workspace > .home-stack {
+  margin: 14px 18px;
+}
+
 h1,
 h2,
 h3,
@@ -457,33 +461,57 @@ p {
 
 .home-stack {
   align-content: start;
+  gap: 10px;
 }
 
 .home-hero {
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh-sm);
+  border-radius: var(--r-md);
+  box-shadow: none;
   display: flex;
-  gap: 16px;
+  gap: 12px;
   justify-content: space-between;
-  padding: 18px 20px;
+  padding: 11px 14px;
 }
 
 .home-hero h2 {
-  font-size: 25px;
-  margin: 3px 0 5px;
+  font-size: 20px;
+  line-height: 1.05;
+  margin: 2px 0 3px;
 }
 
 .home-hero p {
+  font-size: 12px;
+  line-height: 1.35;
   margin-bottom: 0;
 }
 
 .home-grid {
   display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  gap: 10px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+}
+
+.home-grid .panel,
+.home-context-panel {
+  box-shadow: none;
+}
+
+.home-grid .panel-header {
+  margin-bottom: 8px;
+  padding-bottom: 9px;
+}
+
+.home-grid .panel-header h2 {
+  font-size: 16px;
+}
+
+.home-grid .panel-header p {
+  font-size: 12px;
+  line-height: 1.35;
+  margin-bottom: 0;
 }
 
 .bid-calendar {
@@ -495,8 +523,8 @@ p {
 .bid-calendar article {
   background: var(--panel-alt);
   border: 1px solid var(--line);
-  min-height: 92px;
-  padding: 7px;
+  min-height: 66px;
+  padding: 5px;
 }
 
 .bid-calendar article.has-bids {
@@ -517,9 +545,9 @@ p {
   color: var(--ink);
   display: block;
   font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 18px;
+  font-size: 15px;
   line-height: 1.1;
-  margin: 2px 0 6px;
+  margin: 1px 0 3px;
 }
 
 .bid-calendar article small {
@@ -528,12 +556,12 @@ p {
   border-radius: var(--r-xs);
   color: var(--accent-2);
   display: block;
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 700;
-  line-height: 1.25;
-  margin-top: 4px;
+  line-height: 1.2;
+  margin-top: 3px;
   overflow: hidden;
-  padding: 3px 5px;
+  padding: 2px 4px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -582,10 +610,27 @@ p {
   box-shadow: none;
 }
 
+.home-stack > .pm-board.compact {
+  padding: 12px;
+}
+
+.pm-board.compact .panel-header {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+}
+
+.pm-board.compact .panel-header p {
+  display: none;
+}
+
 .pm-note-entry {
   display: grid;
   gap: 8px;
   grid-template-columns: minmax(0, 1fr) 150px 108px;
+}
+
+.pm-board.compact .pm-note-entry {
+  grid-template-columns: minmax(0, 1fr) 92px;
 }
 
 .pm-note-entry input,
@@ -597,6 +642,10 @@ p {
 .pm-action-list {
   display: grid;
   gap: 8px;
+}
+
+.pm-board.compact .pm-action-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .pm-action {
@@ -698,6 +747,10 @@ p {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.home-metrics {
+  gap: 8px;
+}
+
 .metric-grid.small {
   grid-template-columns: repeat(4, minmax(150px, 1fr));
 }
@@ -716,6 +769,12 @@ p {
   gap: 5px;
   min-height: 96px;
   padding: 14px 16px;
+}
+
+.home-metrics .metric {
+  box-shadow: none;
+  min-height: 68px;
+  padding: 10px 12px;
 }
 
 .metric span,
@@ -738,6 +797,11 @@ td span,
   font-weight: 780;
   letter-spacing: -0.03em;
   line-height: 1;
+}
+
+.home-metrics .metric strong {
+  font-size: 19px;
+  letter-spacing: -0.015em;
 }
 
 .metric small {

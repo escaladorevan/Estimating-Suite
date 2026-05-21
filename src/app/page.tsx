@@ -1708,7 +1708,7 @@ function HomeDashboard({
     })
     .sort((a, b) => a.bidDueDate.localeCompare(b.bidDueDate));
   const nextSubmitted = opportunities.filter((opportunity) => opportunity.status === "Submitted" && !opportunity.winLoss);
-  const pmActions = buildPmActionItems({ jobs, notes: pmNotes, today }).slice(0, 10);
+  const pmActions = buildPmActionItems({ jobs, notes: pmNotes, today }).slice(0, 5);
 
   return (
     <div className="stack home-stack">
@@ -1722,21 +1722,12 @@ function HomeDashboard({
         </div>
         <button className="primary" onClick={onCreateOpportunity}>New ITB</button>
       </section>
-      <div className="metric-grid">
+      <div className="metric-grid home-metrics">
         <Metric label="Contract backlog" value={money.format(backlogSummary.totalBacklog)} detail={`${money.format(backlogSummary.wonNotStarted)} won not started`} />
         <Metric label="Revenue this Q" value={money.format(quarterRevenue)} detail="Jobs installing this quarter" />
         <Metric label="Active jobs" value={activeJobs.length} detail={`${money.format(backlogSummary.activeProduction)} in production`} />
         <Metric label="Active bids" value={pipelineOpportunities.length} detail={`${dueSoon.length} due in the next two weeks`} />
       </div>
-      <PMActionBoard
-        actions={pmActions}
-        jobs={jobs}
-        onCreateNote={onCreatePmNote}
-        onDeleteNote={onDeletePmNote}
-        onUpdateNoteText={onUpdatePmNoteText}
-        onUpdateNoteStatus={onUpdatePmNoteStatus}
-        title="PM action board"
-      />
       <section className="home-grid">
         <div className="panel">
           <div className="panel-header">
@@ -1767,7 +1758,17 @@ function HomeDashboard({
           </div>
         </div>
       </section>
-      <section className="panel two-column">
+      <PMActionBoard
+        actions={pmActions}
+        compact
+        jobs={jobs}
+        onCreateNote={onCreatePmNote}
+        onDeleteNote={onDeletePmNote}
+        onUpdateNoteText={onUpdatePmNoteText}
+        onUpdateNoteStatus={onUpdatePmNoteStatus}
+        title="PM action board"
+      />
+      <section className="panel two-column home-context-panel">
         <div>
           <h2>How this should behave</h2>
           <p>
