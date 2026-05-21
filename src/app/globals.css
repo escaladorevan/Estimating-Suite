@@ -3866,16 +3866,11 @@ td strong {
     overflow: auto;
   }
 
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .side-nav {
-    min-height: auto;
+  .workspace {
+    grid-template-rows: auto auto minmax(0, 1fr);
   }
 
   .side-nav nav,
-  .metric-grid,
   .home-grid,
   .kanban,
   .estimator-grid,
@@ -3911,8 +3906,8 @@ td strong {
     position: static;
   }
 
-  .workspace {
-    overflow: visible;
+  .home-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .topbar,
