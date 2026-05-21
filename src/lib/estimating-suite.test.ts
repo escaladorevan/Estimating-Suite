@@ -78,7 +78,7 @@ import { mapOpportunityFromRow, mapOpportunityToUpsert } from "./opportunity-rep
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "./opportunity-import";
 import { CHANGE_ORDER_STATUSES, OPPORTUNITY_STATUSES } from "./status-constants";
 import { reconcilePersistedEstimateIdentity } from "./estimate-persistence-reconciliation";
-import { reconcilePersistedJobIdentity, resolvePersistedJobForPMNote } from "./job-persistence-reconciliation";
+import { remapJobOwnedActivityForPersistence, reconcilePersistedJobIdentity, resolvePersistedJobForPMNote } from "./job-persistence-reconciliation";
 import { bomComponentsToCsv } from "./takeoff-csv";
 import { expandTakeoff } from "./takeoff-engine";
 import { findTakeoffRule } from "./takeoff-rules";
@@ -462,6 +462,124 @@ describe("opportunity repository mapping", () => {
       sent_date: null,
       specs_link: null,
       estimated_value: 145000
+    });
+  });
+
+  it("loads opportunity files without losing contact joins", async () => {
+    const opportunityId = "2dd51464-96d7-4ed1-ae7e-35ab2e92f865";
+    const contactId = "11111111-1111-4111-8111-111111111111";
+    const fileId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const mockClient = {
+      from: (table: string) => ({
+        select: () => ({
+          eq: () =>
+            table === "contacts"
+              ? {
+                  order: () => Promise.resolve({
+                    data: [{
+                      id: contactId,
+                      company_id: null,
+                      name: "Manny Ramirez",
+                      title: "GC PM",
+                      email: null,
+                      phone: null,
+                      mobile: null,
+                      notes: null,
+                      tags: [],
+                      active: true
+                    }],
+                    error: null
+                  })
+                }
+              : {
+                  in: () => ({
+                    order: () =>
+                      table === "files"
+                        ? Promise.resolve({
+                            data: [{
+                              id: fileId,
+                              owner_type: "opportunity",
+                              owner_id: opportunityId,
+                              slot: "proposal",
+                              name: "proposal.pdf",
+                              storage_bucket: "project-files",
+                              storage_path: "opportunity/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/proposal/proposal.pdf",
+                              mime_type: "application/pdf",
+                              size_bytes: 2048,
+                              uploaded_at: "2026-06-01T12:00:00Z"
+                            }],
+                            error: null
+                          })
+                        : Promise.resolve({ data: [], error: null })
+                  })
+                },
+          order: () =>
+            table === "opportunities"
+              ? Promise.resolve({
+                  data: [{
+                    id: opportunityId,
+                    opportunity_number: "Q-26-014",
+                    work_type: "Bid / ITB",
+                    month: "May",
+                    client: "Andersen",
+                    company_id: null,
+                    project_name: "Northwest Clinic",
+                    bid_due_date: "2026-06-01",
+                    drawing_stage: "DD",
+                    bid_type: "Budget",
+                    sent_date: null,
+                    submission_method: null,
+                    status: "Submitted",
+                    win_loss: "",
+                    job_type: null,
+                    estimated_value: 145000,
+                    drawing_link: null,
+                    specs_link: null,
+                    schedule_link: null,
+                    notes: null,
+                    bid_feedback: null,
+                    ntp_received: false,
+                    initial_contract_value: null,
+                    final_cost: null
+                  }],
+                  error: null
+                })
+              : Promise.resolve({ data: [], error: null }),
+          in: () => ({
+            order: () =>
+              table === "opportunity_contacts"
+                ? Promise.resolve({
+                    data: [{ id: "join-1", opportunity_id: opportunityId, contact_id: contactId, role: "GC PM" }],
+                    error: null
+                  })
+                : Promise.resolve({ data: [], error: null })
+          })
+        }),
+        storage: undefined
+      }),
+      storage: {
+        from: (bucket: string) => ({
+          createSignedUrl: async (path: string) => ({
+            data: { signedUrl: `https://example.test/${bucket}/${path}` },
+            error: null
+          })
+        })
+      }
+    } as any;
+
+    const { listOpportunities } = await import("./opportunity-repository");
+    const result = await listOpportunities(mockClient);
+
+    expect(result[0].files?.[0]).toMatchObject({
+      id: fileId,
+      slot: "proposal",
+      name: "proposal.pdf",
+      url: "https://example.test/project-files/opportunity/2dd51464-96d7-4ed1-ae7e-35ab2e92f865/proposal/proposal.pdf"
+    });
+    expect(result[0].contacts?.[0]).toMatchObject({
+      id: "join-1",
+      role: "GC PM",
+      contact: { id: contactId, name: "Manny Ramirez" }
     });
   });
 });
@@ -1408,6 +1526,35 @@ describe("job persistence reconciliation", () => {
 
     expect(result.linkedJob?.id).toBe(persistedJobId);
     expect(result.persistedJob?.id).toBe(persistedJobId);
+  });
+
+  it("returns job-owned activity events remapped to the persisted job UUID for persistence", () => {
+    const persistedJobId = "50f42d9f-b53f-4a97-b711-dc8b1cd13384";
+    const events = remapJobOwnedActivityForPersistence(
+      [
+        {
+          id: "act-job",
+          ownerType: "job",
+          ownerId: "job-local",
+          author: "System",
+          message: "Created from won opportunity Q-26-014.",
+          createdAt: "2026-06-01"
+        },
+        {
+          id: "act-submittal",
+          ownerType: "submittal",
+          ownerId: "sub-local",
+          author: "System",
+          message: "Submittal created.",
+          createdAt: "2026-06-01"
+        }
+      ],
+      "job-local",
+      persistedJobId
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ id: "act-job", ownerType: "job", ownerId: persistedJobId });
   });
 });
 

@@ -1,6 +1,7 @@
 import type { Opportunity, OpportunityStatus, WinLoss, WorkType } from "@/types";
 import { supabase } from "./supabase-client";
 import { listContacts, loadContactsForOpportunities } from "./contact-repository";
+import { mapProjectFileFromRow, signProjectFileUrl, type ProjectFileRow } from "./file-repository";
 import { OPPORTUNITY_STATUSES, WIN_LOSS_VALUES, WORK_TYPES } from "./status-constants";
 
 export type OpportunityRow = {
@@ -136,10 +137,29 @@ export async function listOpportunities(client: SupabaseOpportunityClient | null
   const opportunityIds = opportunities.map((opportunity) => opportunity.id).filter(isUuid);
   if (!opportunityIds.length) return opportunities;
 
-  const contacts = await listContacts(client);
+  const [contacts, fileRowsResult] = await Promise.all([
+    listContacts(client),
+    client
+      .from("files")
+      .select("*")
+      .eq("owner_type", "opportunity")
+      .in("owner_id", opportunityIds)
+      .order("uploaded_at", { ascending: false })
+  ]);
+  if (fileRowsResult.error) throw fileRowsResult.error;
+
   const contactsByOpportunity = await loadContactsForOpportunities(opportunityIds, contacts, client);
+  const files = await Promise.all(
+    ((fileRowsResult.data ?? []) as ProjectFileRow[]).map((row) => signProjectFileUrl(mapProjectFileFromRow(row), client))
+  );
+  const filesByOpportunity = new Map<string, typeof files>();
+  for (const file of files) {
+    filesByOpportunity.set(file.ownerId, [...(filesByOpportunity.get(file.ownerId) ?? []), file]);
+  }
+
   return opportunities.map((opportunity) => ({
     ...opportunity,
+    files: filesByOpportunity.get(opportunity.id) ?? [],
     contacts: contactsByOpportunity.get(opportunity.id) ?? []
   }));
 }
