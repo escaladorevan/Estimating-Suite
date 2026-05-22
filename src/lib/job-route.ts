@@ -16,7 +16,8 @@ export function parseJobRouteHash(hash: string): JobRouteParam | null {
   const cleaned = hash.trim().replace(/^#/, "");
   const match = cleaned.match(/^job\/(.+)$/i);
   if (!match) return null;
-  const jobNumber = normalizeJobRouteToken(decodeURIComponent(match[1] ?? ""));
+  const routeValue = (match[1] ?? "").split("?")[0]?.split("&")[0] ?? "";
+  const jobNumber = normalizeJobRouteToken(decodeURIComponent(routeValue));
   return jobNumber ? { jobNumber } : null;
 }
 

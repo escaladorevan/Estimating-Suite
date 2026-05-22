@@ -85,6 +85,11 @@ button {
   grid-template-columns: 52px minmax(0, 1fr);
 }
 
+.app-shell.job-cockpit-shell,
+.app-shell.main-nav-collapsed.job-cockpit-shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .side-nav {
   background: var(--panel-alt);
   border-right: 1px solid var(--line);
@@ -236,6 +241,10 @@ button {
   grid-template-rows: 50px auto minmax(0, 1fr);
   min-width: 0;
   overflow: hidden;
+}
+
+.job-cockpit-shell .workspace {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .topbar {
@@ -1838,6 +1847,7 @@ td strong {
   gap: 8px;
   font-size: 12px;
   font-weight: 750;
+  min-width: 0;
 }
 
 .job-breadcrumb button {
@@ -1847,6 +1857,22 @@ td strong {
   cursor: pointer;
   font-weight: 850;
   padding: 0;
+}
+
+.job-breadcrumb span:last-of-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-cockpit-close {
+  background: var(--panel) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 999px !important;
+  color: var(--ink) !important;
+  margin-left: auto;
+  min-height: 30px;
+  padding: 0 12px !important;
 }
 
 .job-command-header {

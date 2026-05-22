@@ -120,6 +120,7 @@ export function JobDetailPage(props: JobDetailPageProps) {
         <strong>{job.jobNumber}</strong>
         <span>/</span>
         <span>{job.projectName}</span>
+        <button className="job-cockpit-close" onClick={onBackToJobs} type="button">Close</button>
       </div>
 
       <header className="job-command-header">

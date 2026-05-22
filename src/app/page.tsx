@@ -1320,7 +1320,11 @@ export default function Home() {
 
   function goToView(nextView: View) {
     setView(nextView);
-    window.history.replaceState(null, "", `#${nextView}`);
+    setDetailJobId(null);
+    navCollapsedBeforeJobRoute.current = null;
+    const hash = `#${nextView}`;
+    setCurrentHash(hash);
+    window.location.hash = hash;
     if (nextView === "estimator") {
       setMainNavCollapsed(true);
     }
@@ -1381,8 +1385,8 @@ export default function Home() {
   }
 
   return (
-    <main className={mainNavCollapsed ? "app-shell main-nav-collapsed" : "app-shell"}>
-      <aside className="side-nav">
+    <main className={`${mainNavCollapsed ? "app-shell main-nav-collapsed" : "app-shell"} ${isJobRoute ? "job-cockpit-shell" : ""}`}>
+      {!isJobRoute ? <aside className="side-nav">
         <div className="brand">
           <div className="brand-mark">FS</div>
           <div>
@@ -1415,10 +1419,10 @@ export default function Home() {
           <strong>FS Estimator V2</strong>
           <strong>FS Job Dashboard</strong>
         </div>
-      </aside>
+      </aside> : null}
 
       <section className="workspace">
-        <header className="topbar">
+        {!isJobRoute ? <header className="topbar">
           <div>
             <h1>{isJobRoute && detailJob ? detailJob.jobNumber : nav.find((item) => item.id === renderedView)?.label}</h1>
             <p>{isJobRoute && detailJob ? `${detailJob.projectName} PM cockpit` : "Manual-first Supabase-ready rebuild of the FS bid, estimate, proposal, and job workflow."}</p>
@@ -1457,7 +1461,7 @@ export default function Home() {
               <input accept=".xlsx,.xls" onChange={importMasterWorkbook} type="file" />
             </label>
           </div>
-        </header>
+        </header> : null}
         <div className="persistence-strip">{opportunityPersistenceStatus}</div>
         {currentUser?.role === "viewer" && (
           <div className="viewer-banner">You are in read-only mode. Contact an admin to request edit access.</div>
