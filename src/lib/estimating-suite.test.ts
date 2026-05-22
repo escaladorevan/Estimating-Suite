@@ -83,7 +83,14 @@ import { bomComponentsToCsv } from "./takeoff-csv";
 import { expandTakeoff } from "./takeoff-engine";
 import { findTakeoffRule } from "./takeoff-rules";
 import { pricingLibrary } from "./pricing-library";
-import { filterOpportunitiesForView, suggestJobNumber } from "./opportunity-workflow";
+import {
+  buildAwardedOpportunityJob,
+  buildOpportunityEstimate,
+  buildNewOpportunity,
+  filterOpportunitiesForView,
+  nextOpportunityId,
+  suggestJobNumber
+} from "./opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote } from "./pm-actions";
 import { addMonthsToCalendarMonth, buildCapacityWeeks, buildInstallCalendarMonth } from "./schedule-capacity";
 import { suggestServiceJobNumber } from "./service-workflow";
@@ -2271,10 +2278,33 @@ describe("schedule capacity", () => {
 
     const augustFourth = month.days.find((day) => day.date === "2026-08-04");
     expect(month.label).toBe("August 2026");
-    expect(month.days[0].date).toBe("2026-07-27");
+    expect(month.days[0]).toMatchObject({ date: "2026-07-27", dayNumber: 27, inMonth: false, weekdayIndex: 1 });
+    expect(month.days).toHaveLength(42);
     expect(augustFourth?.jobs.map((job) => job.jobNumber)).toEqual(["G26-051", "P26-043"]);
     expect(augustFourth?.crewTotal).toBe(7);
     expect(augustFourth?.isOverloaded).toBe(true);
+  });
+
+  it("includes adjacent-month dates only as needed to complete calendar rows", () => {
+    const month = buildInstallCalendarMonth({
+      month: "2026-07",
+      jobs: [
+        {
+          id: "job-august",
+          jobNumber: "G26-061",
+          projectName: "August Install",
+          installStart: "2026-08-03",
+          installEnd: "2026-08-09",
+          crewSize: 4
+        }
+      ]
+    });
+
+    const augustFirst = month.days.find((day) => day.date === "2026-08-01");
+    expect(month.days).toHaveLength(35);
+    expect(month.days[0]).toMatchObject({ date: "2026-06-29", weekdayIndex: 1, monthTag: "JUN" });
+    expect(augustFirst).toMatchObject({ dayNumber: 1, inMonth: false, monthTag: "AUG" });
+    expect(month.days.some((day) => day.date === "2026-08-09")).toBe(false);
   });
 
   it("moves calendar months backward and forward", () => {
@@ -2577,6 +2607,161 @@ describe("opportunity import", () => {
 });
 
 describe("opportunity workflow", () => {
+  it("creates the next Q-year opportunity id from opportunities and bid references", () => {
+    expect(
+      nextOpportunityId({
+        date: "2026-05-07",
+        jobs: [{ bidRef: "Q-26-041" }],
+        opportunities: [{ jobId: "Q-26-002" }, { jobId: "Q-25-099" }]
+      })
+    ).toBe("Q-26-042");
+  });
+
+  it("builds a new ITB opportunity for the register", () => {
+    const opportunity = buildNewOpportunity({
+      date: "2026-05-07",
+      jobs: [],
+      opportunities: [{ jobId: "Q-26-001" }],
+      id: "local-opp"
+    });
+
+    expect(opportunity).toMatchObject({
+      id: "local-opp",
+      jobId: "Q-26-002",
+      month: "May",
+      projectName: "New ITB",
+      status: "Lead / ITB",
+      workType: "Bid / ITB"
+    });
+  });
+
+  it("builds a linked proposal estimate from an opportunity", () => {
+    const estimate = buildOpportunityEstimate({
+      id: "estimate-1",
+      opportunity: {
+        id: "opp-1",
+        jobId: "Q-26-010",
+        month: "May",
+        client: "Layton",
+        projectName: "Hospital Lab",
+        bidDueDate: "2026-05-14",
+        drawingStage: "CD",
+        bidType: "Invited",
+        sentDate: "",
+        submissionMethod: "Email",
+        status: "Pricing",
+        winLoss: "",
+        jobType: "Healthcare",
+        workType: "Bid / ITB",
+        estimatedValue: 250000,
+        links: {},
+        notes: "",
+        bidFeedback: "",
+        ntpReceived: false,
+        initialContractValue: null,
+        finalCost: null
+      }
+    });
+
+    expect(estimate).toMatchObject({
+      id: "estimate-1",
+      opportunityId: "opp-1",
+      proposalNumber: "Q-26-010",
+      projectId: "Q-26-010",
+      dueDate: "2026-05-14",
+      documentType: "Proposal",
+      projectName: "Hospital Lab",
+      client: "Layton",
+      pricingMode: "byarea"
+    });
+    expect(estimate.clarifications).toContain("Proposal initialized from Q-26-010.");
+    expect(estimate.areas[0].sections[0].items[0]).toMatchObject({ name: "Add takeoff item", unit: "LS" });
+  });
+
+  it("builds an awarded opportunity, linked job, and handoff activity", () => {
+    const { awardedOpportunity, job, activity } = buildAwardedOpportunityJob({
+      opportunity: {
+        id: "11111111-1111-4111-8111-111111111111",
+        jobId: "Q-26-010",
+        month: "May",
+        client: "Layton",
+        projectName: "Hospital Lab",
+        bidDueDate: "2026-05-14",
+        drawingStage: "CD",
+        bidType: "Invited",
+        sentDate: "",
+        submissionMethod: "Email",
+        status: "Submitted",
+        winLoss: "",
+        jobType: "Healthcare",
+        workType: "Bid / ITB",
+        estimatedValue: 250000,
+        links: {},
+        notes: "Carry this into job notes",
+        bidFeedback: "",
+        ntpReceived: false,
+        initialContractValue: null,
+        finalCost: null,
+        files: [
+          {
+            id: "opp-file-1",
+            ownerType: "opportunity",
+            ownerId: "11111111-1111-4111-8111-111111111111",
+            slot: "drawings",
+            name: "Drawings.pdf",
+            storageBucket: "project-files",
+            storagePath: "opportunity/11111111-1111-4111-8111-111111111111/drawings/Drawings.pdf",
+            uploadedAt: "2026-05-20"
+          }
+        ],
+        contacts: [{ id: "opp-contact-1", contactId: "contact-1", role: "GC PM" }]
+      },
+      award: {
+        pm: "Geoff",
+        jobNumber: "G26-044",
+        contractValue: 260000,
+        ntpDate: "2026-05-21"
+      },
+      today: "2026-05-21",
+      jobId: "job-local",
+      activityId: "activity-local",
+      makeContactId: () => "job-contact-local"
+    });
+
+    expect(awardedOpportunity).toMatchObject({
+      status: "Won",
+      winLoss: "Won",
+      ntpReceived: true,
+      initialContractValue: 260000
+    });
+    expect(job).toMatchObject({
+      id: "job-local",
+      opportunityId: "11111111-1111-4111-8111-111111111111",
+      jobNumber: "G26-044",
+      bidRef: "Q-26-010",
+      baseContract: 260000,
+      ntpDate: "2026-05-21",
+      notes: "Carry this into job notes"
+    });
+    expect(job.contacts?.[0]).toMatchObject({ id: "job-contact-local", contactId: "contact-1", role: "GC PM" });
+    expect(job.files[0]).toMatchObject({
+      id: "job-file-opp-file-1",
+      ownerType: "job",
+      ownerId: "job-local",
+      slot: "drawings",
+      name: "Drawings.pdf",
+      storageBucket: "project-files",
+      storagePath: "opportunity/11111111-1111-4111-8111-111111111111/drawings/Drawings.pdf"
+    });
+    expect(activity).toMatchObject({
+      id: "activity-local",
+      ownerType: "job",
+      ownerId: "job-local",
+      message: "Created from won opportunity Q-26-010. NTP 2026-05-21."
+    });
+    expect(job.activity[0]).toEqual(activity);
+  });
+
   it("suggests the next PM-based job number for the award year", () => {
     const jobs = [
       { jobNumber: "G26-002" },

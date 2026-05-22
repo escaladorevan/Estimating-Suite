@@ -19,6 +19,7 @@ import {
   WalletCards,
   Wrench
 } from "lucide-react";
+import { jsPDF } from "jspdf";
 import type { ChangeEvent, ElementType, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { supabase, getCurrentUserProfile } from "@/lib/supabase-client";
@@ -61,7 +62,14 @@ import {
 import { fileSlots, estimates as seedEstimates, jobs as seedJobs, opportunities as seedOpportunities } from "@/lib/sample-data";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "@/lib/opportunity-import";
 import { listOpportunities, saveOpportunity } from "@/lib/opportunity-repository";
-import { filterOpportunitiesForView, suggestJobNumber, type RegisterView } from "@/lib/opportunity-workflow";
+import {
+  buildAwardedOpportunityJob,
+  buildNewOpportunity,
+  buildOpportunityEstimate,
+  filterOpportunitiesForView,
+  suggestJobNumber,
+  type RegisterView
+} from "@/lib/opportunity-workflow";
 import { buildPmActionItems, parseJobReferenceFromNote, type PMActionItem } from "@/lib/pm-actions";
 import { buildProposalPdf } from "@/lib/proposal-pdf";
 import { addMonthsToCalendarMonth, buildCapacityWeeks, buildInstallCalendarMonth, type InstallCalendarDay } from "@/lib/schedule-capacity";
@@ -636,6 +644,33 @@ export default function Home() {
     }
   }
 
+  async function persistStartedEstimate(estimate: Estimate) {
+    const localId = estimate.id;
+    setEstimatePersistenceStatus("Starting estimate in Supabase...");
+
+    try {
+      const savedHeader = await saveEstimateHeader(estimate);
+      const persistedEstimate: Estimate = {
+        ...estimate,
+        id: savedHeader.id,
+        opportunityId: savedHeader.opportunityId ?? estimate.opportunityId,
+        jobId: savedHeader.jobId ?? estimate.jobId
+      };
+
+      setEstimates((current) =>
+        current.map((candidate) => (candidate.id === localId || candidate.id === persistedEstimate.id ? persistedEstimate : candidate))
+      );
+      setActiveEstimateId((current) => (current === localId ? persistedEstimate.id : current));
+
+      await saveEstimateAreas(persistedEstimate.id, persistedEstimate.areas);
+      await saveEstimateSubItems(persistedEstimate.id, persistedEstimate.subItems);
+      await saveEstimateAlternates(persistedEstimate.id, persistedEstimate.alternates);
+      setEstimatePersistenceStatus(`Started estimate for ${persistedEstimate.projectName}.`);
+    } catch {
+      setEstimatePersistenceStatus("Estimate started locally. Sign in and use a persisted opportunity before saving.");
+    }
+  }
+
   async function persistOpportunityFile(opportunity: Opportunity, slot: string, file: File) {
     if (!isUuid(opportunity.id)) {
       setOpportunityPersistenceStatus("File attached locally. Save the opportunity to Supabase before storing files.");
@@ -754,31 +789,12 @@ export default function Home() {
   }
 
   function createNewOpportunity() {
-    const opportunityId = nextOpportunityId({ jobs, opportunities, date: today });
-    const newOpportunity: Opportunity = {
-      id: `opp-${Date.now()}`,
-      jobId: opportunityId,
-      month: monthFromDate(today),
-      client: "",
-      projectName: "New ITB",
-      bidDueDate: "",
-      drawingStage: "",
-      bidType: "Invited",
-      sentDate: "",
-      submissionMethod: "Email",
-      status: "Lead / ITB",
-      winLoss: "",
-      jobType: "",
-      workType: "Bid / ITB",
-      estimatedValue: 0,
-      links: { drawings: "", specs: "", schedule: "" },
-      notes: "",
-      bidFeedback: "",
-      ntpReceived: false,
-      initialContractValue: null,
-      finalCost: null,
-      files: []
-    };
+    const newOpportunity = buildNewOpportunity({
+      date: today,
+      id: makeLocalId("opp"),
+      jobs,
+      opportunities
+    });
 
     setOpportunities((current) => [newOpportunity, ...current]);
     setSelectedOpportunityId(newOpportunity.id);
@@ -801,7 +817,6 @@ export default function Home() {
   }
 
   async function exportProposalPdf() {
-    const { jsPDF } = await import("jspdf");
     const doc = new jsPDF();
     buildProposalPdf(doc, selectedEstimate);
     doc.save(`${selectedEstimate.projectName.replace(/[^a-z0-9]+/gi, "-")}-proposal.pdf`);
@@ -1561,59 +1576,14 @@ export default function Home() {
           onAddContact={(opportunityId, contactId) => void linkContactToOpportunity(opportunityId, contactId)}
           onRemoveContact={(opportunityId, joinId) => void unlinkContactFromOpportunity(opportunityId, joinId)}
           onConvertToJob={(opportunity, award) => {
-            const contractValue = award.contractValue || opportunity.initialContractValue || opportunity.estimatedValue;
-            const awardedOpportunity: Opportunity = {
-              ...opportunity,
-              status: "Won",
-              winLoss: "Won",
-              ntpReceived: true,
-              initialContractValue: contractValue
-            };
-            const newJob: Job = {
-              id: `job-${opportunity.id}`,
-              opportunityId: isUuid(opportunity.id) ? opportunity.id : undefined,
-              jobNumber: award.jobNumber,
-              pm: award.pm,
-              client: opportunity.client,
-              projectName: opportunity.projectName,
-              baseContract: contractValue,
-              bidRef: opportunity.jobId,
-              awardDate: award.ntpDate || today,
-              ntpDate: award.ntpDate || today,
-              backlogStatus: "Awarded / Waiting",
-              forecastStart: "",
-              forecastEnd: "",
-              expectedFabStart: "",
-              expectedCompletion: "",
-              fabStatus: "Not Started",
-              installStart: "",
-              installEnd: "",
-              installStatus: "Ready",
-              invoiceStatus: "Not Billed",
-              crewSize: 0,
-              gc: opportunity.client,
-              workType: opportunity.workType ?? "Bid / ITB",
-              notes: opportunity.notes,
-              finalCost: undefined,
-              changeOrders: [],
-              purchaseOrders: [],
-              submittals: [],
-              files: [],
-              contacts: (opportunity.contacts ?? []).map((contact) => ({
-                ...contact,
-                id: makeLocalId("job-contact")
-              })),
-              activity: [
-                {
-                  id: `act-${Date.now()}`,
-                  ownerType: "job",
-                  ownerId: `job-${opportunity.id}`,
-                  author: "System",
-                  message: `Created from won opportunity ${opportunity.jobId}. NTP ${award.ntpDate || today}.`,
-                  createdAt: today
-                }
-              ]
-            };
+            const { awardedOpportunity, job: newJob } = buildAwardedOpportunityJob({
+              activityId: makeLocalId("act"),
+              award,
+              jobId: `job-${opportunity.id}`,
+              makeContactId: () => makeLocalId("job-contact"),
+              opportunity,
+              today
+            });
 
             setJobs((current) => [newJob, ...current]);
             void persistOpportunity(awardedOpportunity);
@@ -1627,40 +1597,13 @@ export default function Home() {
             if (existing) {
               setActiveEstimateId(existing.id);
             } else {
-              const estimate: Estimate = {
+              const estimate = buildOpportunityEstimate({
                 id: `est-${opportunity.id}`,
-                opportunityId: opportunity.id,
-                documentType: opportunity.workType === "Service" ? "Service Quote" : "Proposal",
-                projectName: opportunity.projectName,
-                client: opportunity.client,
-                pricingMode: "byarea",
-                ohPct: 12,
-                delPct: 3,
-                insPct: 8,
-                areas: [
-                  {
-                    id: `area-${opportunity.id}-1`,
-                    name: "Base Bid",
-                    qty: 1,
-                    sections: [
-                      {
-                        id: `section-${opportunity.id}-1`,
-                        name: "Unpriced Scope",
-                        items: [{ id: `item-${opportunity.id}-1`, name: "Add takeoff item", qty: 1, unit: "LS", unitCost: 0 }]
-                      }
-                    ]
-                  }
-                ],
-                subItems: [],
-                alternates: [],
-                exclusions: ["Electrical, plumbing, and backing by others."],
-                clarifications: [
-                  `Proposal initialized from ${opportunity.jobId}.`,
-                  opportunity.drawingStage ? `Drawing stage: ${opportunity.drawingStage}.` : ""
-                ].filter(Boolean)
-              };
+                opportunity
+              });
               setEstimates((current) => [estimate, ...current]);
               setActiveEstimateId(estimate.id);
+              void persistStartedEstimate(estimate);
             }
             setSelectedOpportunityId(null);
             goToView("estimator");
@@ -2251,29 +2194,6 @@ function yearFromDate(value?: string) {
   return Number.isNaN(date.getTime()) ? null : date.getFullYear();
 }
 
-function nextOpportunityId({
-  date,
-  jobs,
-  opportunities
-}: {
-  date: string;
-  jobs: Job[];
-  opportunities: Opportunity[];
-}) {
-  const year = new Date(`${date}T12:00:00`).getFullYear().toString().slice(-2);
-  const pattern = new RegExp(`^Q-${year}-(\\d{3})$`);
-  const numbers = [
-    ...opportunities.map((opportunity) => opportunity.jobId),
-    ...jobs.map((job) => job.bidRef ?? "")
-  ]
-    .map((value) => value.match(pattern)?.[1])
-    .filter((value): value is string => Boolean(value))
-    .map((value) => Number(value));
-  const next = Math.max(0, ...numbers) + 1;
-
-  return `Q-${year}-${String(next).padStart(3, "0")}`;
-}
-
 function LinkDots({ opportunity }: { opportunity: Opportunity }) {
   const links: Array<[string, boolean]> = [
     ["D", Boolean(opportunity.links.drawings || opportunity.files?.some((file) => file.slot === "drawings"))],
@@ -2525,7 +2445,7 @@ function CalendarCapacityView({ jobs, onOpenJob }: { jobs: Job[]; onOpenJob: (jo
   const weeks = buildCapacityWeeks({
     jobs: activeJobs,
     startDate: today,
-    weekCount: 18,
+    weekCount: 6,
     installCrewCapacity,
     shopJobCapacity
   });
@@ -2554,7 +2474,7 @@ function CalendarCapacityView({ jobs, onOpenJob }: { jobs: Job[]; onOpenJob: (jo
         <div className="panel-header">
           <div>
             <h2>{calendarMonth.label}</h2>
-            <p>Only the job number is shown on the date. Click a date for install details.</p>
+            <p>Month view shows only installs inside this month. Adjacent-month days stay blank.</p>
           </div>
           <div className="calendar-controls">
             <button aria-label="Previous month" onClick={() => setVisibleMonth((month) => addMonthsToCalendarMonth(month, -1))}>
@@ -2577,17 +2497,35 @@ function CalendarCapacityView({ jobs, onOpenJob }: { jobs: Job[]; onOpenJob: (jo
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h2>PM readout</h2>
-            <p>Weeks that need expectation management, crew planning, or schedule cleanup.</p>
+            <h2>PM 6-week look ahead</h2>
+            <p>Near-term install and shop capacity, separate from the monthly install calendar.</p>
           </div>
         </div>
-        <div className="capacity-readout">
-          {overloadedWeeks.length ? overloadedWeeks.map((week) => (
-            <div className="capacity-warning-row" key={week.weekStart}>
-              <strong>{formatDateRange(week.weekStart, week.weekEnd)}</strong>
-              <span>{week.warnings.join(" | ")}</span>
-            </div>
-          )) : <div className="empty-note">No overloads in the current capacity window.</div>}
+        <div className="lookahead-grid">
+          {weeks.map((week) => (
+            <article className={`lookahead-week ${week.installStatus} ${week.shopStatus === "overloaded" ? "shop-overloaded" : ""}`} key={week.weekStart}>
+              <div className="lookahead-week-head">
+                <strong>{formatDateRange(week.weekStart, week.weekEnd)}</strong>
+                <span>{week.installStatus === "overloaded" || week.shopStatus === "overloaded" ? "Needs review" : "Open"}</span>
+              </div>
+              <div className="lookahead-metrics">
+                <span>Install <b>{week.installJobCount}</b></span>
+                <span>Peak crew <b>{week.installCrewPeak}</b> / {installCrewCapacity}</span>
+                <span>Shop <b>{week.shopJobCount}</b> / {shopJobCapacity}</span>
+              </div>
+              {week.installJobs.length ? (
+                <div className="lookahead-jobs">
+                  {week.installJobs.map((job) => (
+                    <button key={job.id} onClick={() => onOpenJob(job.id)} type="button">
+                      <strong>{job.jobNumber}</strong>
+                      <span>{job.installStart} to {job.installEnd || job.installStart}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : <p className="lookahead-empty">No installs scheduled.</p>}
+              {week.warnings.length ? <p className="lookahead-warning">{week.warnings.join(" | ")}</p> : null}
+            </article>
+          ))}
         </div>
       </section>
       {selectedDay ? <InstallDayModal day={selectedDay} onClose={() => setSelectedDay(null)} onOpenJob={onOpenJob} /> : null}
@@ -2597,9 +2535,14 @@ function CalendarCapacityView({ jobs, onOpenJob }: { jobs: Job[]; onOpenJob: (jo
 
 function InstallCalendarDayCell({ day, onOpen }: { day: InstallCalendarDay; onOpen: (day: InstallCalendarDay) => void }) {
   return (
-    <button className={`install-day ${day.inMonth ? "" : "muted"} ${day.jobs.length ? "has-install" : ""} ${day.isOverloaded ? "overloaded" : ""}`} onClick={() => onOpen(day)}>
+    <button
+      className={`install-day ${day.inMonth ? "" : "muted"} ${day.jobs.length ? "has-install" : ""} ${day.isOverloaded ? "overloaded" : ""}`}
+      onClick={() => onOpen(day)}
+      style={{ gridColumnStart: day.dayNumber === 1 ? day.weekdayIndex : undefined }}
+      type="button"
+    >
       <div className="install-day-number">
-        <span>{day.dayNumber}</span>
+        <span>{day.monthTag ? <><b>{day.monthTag}</b> {day.dayNumber}</> : day.dayNumber}</span>
         {day.crewTotal ? <small>{day.crewTotal}</small> : null}
       </div>
       {day.jobs.map((job) => (
@@ -2874,6 +2817,22 @@ function JobDetailModal({
               <p><BriefcaseBusiness size={15} /> Approved COs {money.format(coSummary.approved)} - Pending {money.format(coSummary.submitted)}</p>
               <p><CalendarDays size={15} /> Fab {job.expectedFabStart || "TBD"} - Complete {job.expectedCompletion || "TBD"}</p>
             </div>
+            {canEditHeader ? (
+              <div className="pm-quick-schedule">
+                <label>
+                  <span>Install start</span>
+                  <input onChange={(e) => onUpdateJob(job.id, { installStart: e.target.value })} type="date" value={job.installStart} />
+                </label>
+                <label>
+                  <span>Install end</span>
+                  <input onChange={(e) => onUpdateJob(job.id, { installEnd: e.target.value })} type="date" value={job.installEnd} />
+                </label>
+                <label>
+                  <span>Crew</span>
+                  <input min="0" onChange={(e) => onUpdateJob(job.id, { crewSize: Number(e.target.value) || 0 })} type="number" value={job.crewSize} />
+                </label>
+              </div>
+            ) : null}
             <div className="pm-document-strip">
               <span className="eyebrow">Job documents</span>
               {primaryDocumentSlots.map((slot) => {

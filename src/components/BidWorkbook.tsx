@@ -106,7 +106,7 @@ export function BidWorkbook({
     const rows = selectedItems();
     if (!rows.length) return;
     setCopiedItems(rows);
-    void navigator.clipboard?.writeText(estimateItemsToClipboardText(rows)).catch(() => undefined);
+    void writeClipboardText(estimateItemsToClipboardText(rows));
   }
 
   function pasteRows(target: PasteRowsTarget, options: PasteOptions) {
@@ -130,7 +130,7 @@ export function BidWorkbook({
   }
 
   async function pasteSheetRows(areaId: string, sectionId: string) {
-    const text = await navigator.clipboard?.readText().catch(() => "");
+    const text = await readClipboardText();
     const items = parseClipboardLineItems(text ?? "");
     pasteParsedRows({ areaId, sectionId }, items);
   }
@@ -392,6 +392,7 @@ export function BidWorkbook({
               onAreaChange={(fields) => updateArea(selectedArea.id!, (area) => ({ ...area, ...fields }))}
               onCopyRows={copySelectedRows}
               onSectionChange={(sectionId, fields) => updateSection(selectedArea.id!, sectionId, (section) => ({ ...section, ...fields }))}
+              onSelectSection={(sectionId) => setSelectedSectionId(sectionId)}
               onSectionSelectionChange={toggleSectionSelection}
               onItemChange={(sectionId, itemId, fields) => updateItem(selectedArea.id!, sectionId, itemId, fields)}
               onItemSelectionChange={toggleItemSelection}
@@ -465,6 +466,26 @@ export function BidWorkbook({
       ) : null}
     </div>
   );
+}
+
+async function writeClipboardText(text: string) {
+  try {
+    const writeText = globalThis.navigator?.clipboard?.writeText;
+    if (!writeText) return;
+    await writeText.call(globalThis.navigator.clipboard, text);
+  } catch {
+    // Browser clipboard access is permission-dependent; workbook memory copy still works.
+  }
+}
+
+async function readClipboardText() {
+  try {
+    const readText = globalThis.navigator?.clipboard?.readText;
+    if (!readText) return "";
+    return await readText.call(globalThis.navigator.clipboard);
+  } catch {
+    return "";
+  }
 }
 
 function ChangeOrderImpactBar({ estimate, thisCoAmount }: { estimate: Estimate; thisCoAmount: number }) {
@@ -636,6 +657,7 @@ function AreaEditor({
   onAreaChange,
   onCopyRows,
   onSectionChange,
+  onSelectSection,
   onSectionSelectionChange,
   onItemChange,
   onItemSelectionChange,
@@ -653,6 +675,7 @@ function AreaEditor({
   onAreaChange: (fields: Partial<EstimateArea>) => void;
   onCopyRows: () => void;
   onSectionChange: (sectionId: string, fields: Partial<EstimateSection>) => void;
+  onSelectSection: (sectionId: string) => void;
   onSectionSelectionChange: (section: EstimateSection, selected: boolean) => void;
   onItemChange: (sectionId: string, itemId: string, fields: Partial<EstimateItem>) => void;
   onItemSelectionChange: (itemId: string, selected: boolean) => void;
@@ -691,7 +714,12 @@ function AreaEditor({
         </div>
       ) : null}
       {area.sections.map((section) => (
-        <section className={selectedSectionId === section.id ? "estimate-section active" : "estimate-section"} key={section.id}>
+        <section
+          className={selectedSectionId === section.id ? "estimate-section active" : "estimate-section"}
+          key={section.id}
+          onFocusCapture={() => section.id && onSelectSection(section.id)}
+          onMouseDown={() => section.id && onSelectSection(section.id)}
+        >
           <div className="section-title-row">
             <input value={section.name} onChange={(event) => onSectionChange(section.id!, { name: event.target.value })} />
             <div className="section-actions">

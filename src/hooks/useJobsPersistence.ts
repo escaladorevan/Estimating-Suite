@@ -168,6 +168,36 @@ export function useJobsPersistence({
         }
       }
 
+      if (forceCreate && isUuid(saved.id) && (job.files ?? []).length) {
+        const fileIdRemaps = new Map<string, ProjectFile>();
+        for (const file of job.files) {
+          if (!file.storagePath) continue;
+          const savedFile = await saveProjectFileMetadata({
+            ownerType: "job",
+            ownerId: saved.id,
+            slot: file.slot,
+            name: file.name,
+            storageBucket: file.storageBucket,
+            storagePath: file.storagePath
+          });
+          if (savedFile) fileIdRemaps.set(file.id, savedFile);
+        }
+        if (fileIdRemaps.size) {
+          setJobs((current) =>
+            current.map((candidate) =>
+              candidate.id === saved.id
+                ? {
+                    ...candidate,
+                    files: (candidate.files.length ? candidate.files : job.files).map((file) =>
+                      fileIdRemaps.get(file.id) ?? { ...file, ownerType: "job", ownerId: saved.id }
+                    )
+                  }
+                : candidate
+            )
+          );
+        }
+      }
+
       if (forceCreate && isUuid(saved.id)) {
         for (const event of remapJobOwnedActivityForPersistence(job.activity, localId, saved.id)) {
           void saveActivityEvent(event).catch(() => {});

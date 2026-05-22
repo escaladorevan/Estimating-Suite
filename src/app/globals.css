@@ -523,7 +523,7 @@ p {
 }
 
 .home-grid {
-  align-items: start;
+  align-items: flex-start;
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
@@ -1523,8 +1523,13 @@ td strong {
 }
 
 .install-day.muted {
-  background: #ede9df;
-  color: var(--ink-3);
+  background: #d3cec3;
+  color: #514c43;
+  cursor: pointer;
+}
+
+.install-day.muted:hover {
+  box-shadow: none;
 }
 
 .install-day.has-install {
@@ -1553,6 +1558,15 @@ td strong {
   font-weight: 800;
 }
 
+.install-day-number b {
+  background: rgba(20, 31, 35, 0.14);
+  border-radius: 5px;
+  color: var(--ink);
+  font-size: 9px;
+  margin-right: 4px;
+  padding: 2px 4px;
+}
+
 .install-day-number small {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1577,9 +1591,115 @@ td strong {
   white-space: nowrap;
 }
 
+.install-day.muted .install-job-chip {
+  background: #3f4d4f;
+  color: white;
+}
+
 .install-day.overloaded .install-job-chip {
   background: var(--accent);
   color: var(--ink);
+}
+
+.install-day.muted.overloaded .install-job-chip {
+  background: #2f3a3c;
+  color: white;
+}
+
+.lookahead-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.lookahead-week {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.lookahead-week.overloaded,
+.lookahead-week.shop-overloaded {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+}
+
+.lookahead-week-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.lookahead-week-head strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.lookahead-week-head span {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: 850;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.lookahead-metrics {
+  color: var(--ink-3);
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.lookahead-metrics b {
+  color: var(--ink);
+}
+
+.lookahead-jobs {
+  display: grid;
+  gap: 6px;
+}
+
+.lookahead-jobs button {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  display: grid;
+  gap: 2px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.lookahead-jobs button:hover,
+.lookahead-jobs button:focus-visible {
+  border-color: var(--jun);
+  box-shadow: 0 0 0 2px var(--jun-soft);
+}
+
+.lookahead-jobs strong {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.lookahead-jobs span,
+.lookahead-empty,
+.lookahead-warning {
+  color: var(--ink-3);
+  font-size: 11px;
+  margin: 0;
+}
+
+.lookahead-warning {
+  color: #7a4b08;
+  font-weight: 800;
 }
 
 .install-day-modal {
@@ -1587,7 +1707,7 @@ td strong {
 }
 
 .install-detail-row {
-  align-items: start;
+  align-items: flex-start;
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 12px;
@@ -1803,6 +1923,34 @@ td strong {
 
 .pm-command-lines p {
   margin: 0;
+}
+
+.pm-quick-schedule {
+  align-items: end;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 12px;
+  padding: 10px;
+}
+
+.pm-quick-schedule label {
+  display: grid;
+  gap: 4px;
+}
+
+.pm-quick-schedule span {
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pm-quick-schedule input {
+  min-width: 0;
 }
 
 .pm-document-strip {

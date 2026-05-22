@@ -1,5 +1,8 @@
+import type { ActivityEvent, Estimate, Job, Opportunity } from "@/types";
+
 type JobNumberLike = {
   jobNumber?: string;
+  bidRef?: string;
 };
 
 type OpportunityLike = {
@@ -10,6 +13,13 @@ type OpportunityLike = {
   sentDate?: string;
   receivedDate?: string;
   wonLostDate?: string;
+};
+
+type AwardDetails = {
+  pm: string;
+  jobNumber: string;
+  contractValue: number;
+  ntpDate: string;
 };
 
 export type RegisterView =
@@ -45,6 +55,190 @@ export function suggestJobNumber(input: {
   }, 0);
 
   return `${prefix}${String(max + 1).padStart(3, "0")}`;
+}
+
+export function nextOpportunityId({
+  date,
+  jobs,
+  opportunities
+}: {
+  date: string;
+  jobs: JobNumberLike[];
+  opportunities: OpportunityLike[];
+}): string {
+  const year = twoDigitYear(date);
+  const pattern = new RegExp(`^Q-${year}-(\\d{3})$`);
+  const numbers = [
+    ...opportunities.map((opportunity) => opportunity.jobId ?? ""),
+    ...jobs.map((job) => job.bidRef ?? "")
+  ]
+    .map((value) => value.match(pattern)?.[1])
+    .filter((value): value is string => Boolean(value))
+    .map((value) => Number(value));
+  const next = Math.max(0, ...numbers) + 1;
+
+  return `Q-${year}-${String(next).padStart(3, "0")}`;
+}
+
+export function buildNewOpportunity({
+  date,
+  id,
+  jobs,
+  opportunities
+}: {
+  date: string;
+  id: string;
+  jobs: JobNumberLike[];
+  opportunities: OpportunityLike[];
+}): Opportunity {
+  return {
+    id,
+    jobId: nextOpportunityId({ date, jobs, opportunities }),
+    month: monthFromDate(date),
+    client: "",
+    projectName: "New ITB",
+    bidDueDate: "",
+    drawingStage: "",
+    bidType: "Invited",
+    sentDate: "",
+    submissionMethod: "Email",
+    status: "Lead / ITB",
+    winLoss: "",
+    jobType: "",
+    workType: "Bid / ITB",
+    estimatedValue: 0,
+    links: { drawings: "", specs: "", schedule: "" },
+    notes: "",
+    bidFeedback: "",
+    ntpReceived: false,
+    initialContractValue: null,
+    finalCost: null,
+    files: []
+  };
+}
+
+export function buildOpportunityEstimate({
+  id,
+  opportunity
+}: {
+  id: string;
+  opportunity: Opportunity;
+}): Estimate {
+  return {
+    id,
+    opportunityId: opportunity.id,
+    documentType: opportunity.workType === "Service" ? "Service Quote" : "Proposal",
+    proposalNumber: opportunity.jobId,
+    projectId: opportunity.jobId,
+    projectName: opportunity.projectName,
+    client: opportunity.client,
+    bidDate: opportunity.sentDate || "",
+    dueDate: opportunity.bidDueDate,
+    pricingMode: "byarea",
+    ohPct: 12,
+    delPct: 3,
+    insPct: 8,
+    areas: [
+      {
+        id: `${id}-area-1`,
+        name: "Base Bid",
+        qty: 1,
+        sections: [
+          {
+            id: `${id}-section-1`,
+            name: "Unpriced Scope",
+            items: [{ id: `${id}-item-1`, name: "Add takeoff item", qty: 1, unit: "LS", unitCost: 0 }]
+          }
+        ]
+      }
+    ],
+    subItems: [],
+    alternates: [],
+    exclusions: ["Electrical, plumbing, and backing by others."],
+    clarifications: [
+      `Proposal initialized from ${opportunity.jobId}.`,
+      opportunity.drawingStage ? `Drawing stage: ${opportunity.drawingStage}.` : ""
+    ].filter(Boolean)
+  };
+}
+
+export function buildAwardedOpportunityJob({
+  activityId,
+  award,
+  jobId,
+  makeContactId,
+  opportunity,
+  today
+}: {
+  activityId: string;
+  award: AwardDetails;
+  jobId: string;
+  makeContactId: () => string;
+  opportunity: Opportunity;
+  today: string;
+}): { awardedOpportunity: Opportunity; job: Job; activity: ActivityEvent } {
+  const contractValue = award.contractValue || opportunity.initialContractValue || opportunity.estimatedValue;
+  const ntpDate = award.ntpDate || today;
+  const awardedOpportunity: Opportunity = {
+    ...opportunity,
+    status: "Won",
+    winLoss: "Won",
+    ntpReceived: true,
+    initialContractValue: contractValue
+  };
+  const activity: ActivityEvent = {
+    id: activityId,
+    ownerType: "job",
+    ownerId: jobId,
+    author: "System",
+    message: `Created from won opportunity ${opportunity.jobId}. NTP ${ntpDate}.`,
+    createdAt: today
+  };
+  const files = (opportunity.files ?? []).map((file) => ({
+    ...file,
+    id: `job-file-${file.id}`,
+    ownerType: "job" as const,
+    ownerId: jobId
+  }));
+  const job: Job = {
+    id: jobId,
+    opportunityId: isUuid(opportunity.id) ? opportunity.id : undefined,
+    companyId: opportunity.companyId,
+    jobNumber: award.jobNumber,
+    pm: award.pm,
+    client: opportunity.client,
+    projectName: opportunity.projectName,
+    baseContract: contractValue,
+    bidRef: opportunity.jobId,
+    awardDate: ntpDate,
+    ntpDate,
+    backlogStatus: "Awarded / Waiting",
+    forecastStart: "",
+    forecastEnd: "",
+    expectedFabStart: "",
+    expectedCompletion: "",
+    fabStatus: "Not Started",
+    installStart: "",
+    installEnd: "",
+    installStatus: "Ready",
+    invoiceStatus: "Not Billed",
+    crewSize: 0,
+    gc: opportunity.client,
+    workType: opportunity.workType ?? "Bid / ITB",
+    notes: opportunity.notes,
+    finalCost: undefined,
+    changeOrders: [],
+    purchaseOrders: [],
+    submittals: [],
+    files,
+    contacts: (opportunity.contacts ?? []).map((contact) => ({
+      ...contact,
+      id: makeContactId()
+    })),
+    activity: [activity]
+  };
+
+  return { awardedOpportunity, job, activity };
 }
 
 export function filterOpportunitiesForView<T extends OpportunityLike>(
@@ -116,4 +310,15 @@ function getYear(value?: string): number | null {
   if (!value) return null;
   const date = new Date(`${value}T12:00:00`);
   return Number.isNaN(date.getTime()) ? null : date.getFullYear();
+}
+
+function monthFromDate(value: string): string {
+  if (!value) return "";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", { month: "long" });
+}
+
+function isUuid(value?: string): boolean {
+  return Boolean(value?.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
 }

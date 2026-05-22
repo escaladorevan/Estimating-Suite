@@ -33,6 +33,8 @@ export type InstallCalendarDay = {
   date: string;
   dayNumber: number;
   inMonth: boolean;
+  monthTag?: string;
+  weekdayIndex: number;
   jobs: InstallCalendarJob[];
   crewTotal: number;
   isOverloaded: boolean;
@@ -60,12 +62,16 @@ export function buildInstallCalendarMonth({
   installCrewCapacity?: number;
 }): InstallCalendarMonth {
   const monthStart = `${month}-01`;
-  const start = startOfWeek(monthStart);
   const parsedMonth = new Date(`${monthStart}T12:00:00`);
   const label = parsedMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const dayCount = daysInMonth(parsedMonth);
+  const start = startOfWeek(monthStart);
+  const end = endOfWeek(`${month}-${String(dayCount).padStart(2, "0")}`);
+  const calendarDayCount = daysBetween(start, end) + 1;
 
-  const days = Array.from({ length: 42 }, (_, index) => {
+  const days = Array.from({ length: calendarDayCount }, (_, index) => {
     const date = addDays(start, index);
+    const inMonth = date.startsWith(month);
     const dayJobs = jobs
       .filter((job) => overlaps(job.installStart, job.installEnd, date, date))
       .map((job) => ({
@@ -83,7 +89,9 @@ export function buildInstallCalendarMonth({
     return {
       date,
       dayNumber: Number(date.slice(-2)),
-      inMonth: date.startsWith(month),
+      inMonth,
+      monthTag: !inMonth && Number(date.slice(-2)) === 1 ? monthAbbreviation(date) : index === 0 && !inMonth ? monthAbbreviation(date) : undefined,
+      weekdayIndex: weekdayIndex(date),
       jobs: dayJobs,
       crewTotal,
       isOverloaded: dayJobs.length > 1 || crewTotal > installCrewCapacity
@@ -170,10 +178,38 @@ function startOfWeek(date: string): string {
   return toIso(parsed);
 }
 
+function endOfWeek(date: string): string {
+  const parsed = new Date(`${date}T12:00:00`);
+  const day = parsed.getDay();
+  const diff = day === 0 ? 0 : 7 - day;
+  parsed.setDate(parsed.getDate() + diff);
+  return toIso(parsed);
+}
+
 function addDays(date: string, amount: number): string {
   const parsed = new Date(`${date}T12:00:00`);
   parsed.setDate(parsed.getDate() + amount);
   return toIso(parsed);
+}
+
+function daysBetween(start: string, end: string): number {
+  const startDate = new Date(`${start}T12:00:00`);
+  const endDate = new Date(`${end}T12:00:00`);
+  return Math.round((endDate.getTime() - startDate.getTime()) / 86400000);
+}
+
+function daysInMonth(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function weekdayIndex(date: string): number {
+  const parsed = new Date(`${date}T12:00:00`);
+  const day = parsed.getDay();
+  return day === 0 ? 7 : day;
+}
+
+function monthAbbreviation(date: string): string {
+  return new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short" }).toUpperCase();
 }
 
 function toIso(date: Date): string {
