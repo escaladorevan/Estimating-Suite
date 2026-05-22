@@ -144,7 +144,7 @@ export function JobDetailPage(props: JobDetailPageProps) {
         </div>
         <div className="job-command-facts">
           <article className="fact-money"><span>Current contract</span><strong>{money.format(currentValue)}</strong><small>Base {money.format(job.baseContract)} + approved COs</small></article>
-          <article><span>Install window</span><strong>{job.installStart || "TBD"}</strong><small>{installDuration(job.installStart, job.installEnd)} - crew {job.crewSize || "TBD"}</small></article>
+          <article><span>Install window</span><strong>{formatInstallWindow(job.installStart, job.installEnd)}</strong><small>{installDuration(job.installStart, job.installEnd)} - crew {job.crewSize || "TBD"}</small></article>
           <article className={releaseBlockers.length ? "fact-alert" : "fact-good"}><span>PM attention</span><strong>{releaseBlockers.length || "Clear"}</strong><small>{releaseBlockers[0] || "No immediate blockers"}</small></article>
         </div>
         <div className="job-command-actions">
@@ -271,7 +271,7 @@ function OverviewSection({
       <div className="overview-primary">
         <article className={scheduleReady ? "question-card ready" : "question-card needs-action"}>
           <span>Install plan</span>
-          <strong>{job.installStart ? `${job.installStart}${job.installEnd && job.installEnd !== job.installStart ? ` - ${job.installEnd}` : ""}` : "Needs dates"}</strong>
+          <strong>{formatInstallWindow(job.installStart, job.installEnd)}</strong>
           <small>{installDuration(job.installStart, job.installEnd)} - crew {job.crewSize || "TBD"}</small>
           <button onClick={() => setActiveTab("schedule")} type="button">{scheduleReady ? "Adjust schedule" : "Set install"}</button>
         </article>
@@ -648,6 +648,19 @@ function installDuration(start: string, end: string) {
   const endDate = new Date(`${end}T12:00:00`);
   const days = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1);
   return `${days} days`;
+}
+
+function formatInstallWindow(start: string, end: string) {
+  if (!start) return "TBD";
+  const formattedStart = formatDate(start);
+  if (!end || end === start) return formattedStart;
+  return `${formattedStart} - ${formatDate(end)}`;
+}
+
+function formatDate(value: string) {
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${month}/${day}/${year}`;
 }
 
 function nextPoNumber(job: Job) {
