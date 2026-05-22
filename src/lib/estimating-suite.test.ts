@@ -74,6 +74,7 @@ import {
   summarizeServiceWork
 } from "./job-financials";
 import { jobDetailTabs } from "./job-detail-tabs";
+import { buildJobRouteHash, parseJobRouteHash, resolveJobRoute } from "./job-route";
 import { mapOpportunityFromRow, mapOpportunityToUpsert } from "./opportunity-repository";
 import { mapEstimatingMasterRow, shouldFlagStaleFollowUp } from "./opportunity-import";
 import { CHANGE_ORDER_STATUSES, OPPORTUNITY_STATUSES } from "./status-constants";
@@ -1566,8 +1567,53 @@ describe("job persistence reconciliation", () => {
 });
 
 describe("job detail tabs", () => {
-  it("keeps the PM job workspace organized into stable tabs", () => {
-    expect(jobDetailTabs.map((tab) => tab.id)).toEqual(["actions", "submittals", "financials", "files", "activity"]);
+  it("defines Dewey-style job detail cockpit tabs", () => {
+    expect(jobDetailTabs).toEqual([
+      { id: "overview", code: "00", label: "Overview" },
+      { id: "schedule", code: "10", label: "Schedule" },
+      { id: "submittals", code: "20", label: "Submittals" },
+      { id: "change-orders", code: "30", label: "COs" },
+      { id: "purchase-orders", code: "40", label: "POs" },
+      { id: "files", code: "50", label: "Files" },
+      { id: "notes", code: "60", label: "Notes" },
+      { id: "activity", code: "70", label: "Activity" }
+    ]);
+  });
+});
+
+describe("job route helpers", () => {
+  const jobs = [
+    {
+      id: "50f42d9f-b53f-4a97-b711-dc8b1cd13384",
+      jobNumber: "G26-042",
+      projectName: "Norwest",
+      client: "Layton"
+    },
+    {
+      id: "local-job",
+      jobNumber: "P26-043",
+      projectName: "Lab Renovation",
+      client: "McCarthy"
+    }
+  ];
+
+  it("builds human-readable job route hashes", () => {
+    expect(buildJobRouteHash({ jobNumber: "G26-042" })).toBe("#job/G26-042");
+    expect(buildJobRouteHash({ jobNumber: "G 26-042" })).toBe("#job/G26-042");
+  });
+
+  it("parses job route hashes by job number", () => {
+    expect(parseJobRouteHash("#job/G26-042")).toEqual({ jobNumber: "G26-042" });
+    expect(parseJobRouteHash("job/P26-043")).toEqual({ jobNumber: "P26-043" });
+    expect(parseJobRouteHash("#jobs")).toBeNull();
+  });
+
+  it("resolves a job route by job number first", () => {
+    expect(resolveJobRoute("#job/g26-042", jobs)?.id).toBe("50f42d9f-b53f-4a97-b711-dc8b1cd13384");
+  });
+
+  it("falls back to UUID route values when no job number matches", () => {
+    expect(resolveJobRoute("#job/50f42d9f-b53f-4a97-b711-dc8b1cd13384", jobs)?.jobNumber).toBe("G26-042");
   });
 });
 
