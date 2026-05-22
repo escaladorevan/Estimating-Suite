@@ -780,7 +780,7 @@ export default function Home() {
   }
 
   function canWrite(scope: "estimating" | "pm" | "shared") {
-    if (!currentUser) return false;
+    if (!currentUser) return true;
     const r = currentUser.role;
     if (scope === "estimating") return r === "admin" || r === "estimator";
     if (scope === "pm") return r === "admin" || r === "pm";

@@ -2171,14 +2171,78 @@ td strong {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.schedule-section {
+  display: grid;
+  gap: 12px;
+}
+
+.schedule-status-strip {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.schedule-status-strip article {
+  background: color-mix(in srgb, var(--jun-soft) 44%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--jun) 28%, var(--line));
+  border-radius: var(--r-sm);
+  min-width: 0;
+  padding: 10px;
+}
+
+.schedule-status-strip span {
+  color: var(--ink-3);
+  display: block;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.schedule-status-strip strong {
+  color: var(--ink);
+  display: block;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-status-strip small {
+  color: var(--ink-3);
+  display: block;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
 .job-schedule-grid label,
 .compact-check {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
   color: var(--ink-3);
   display: grid;
   font-size: 11px;
   font-weight: 850;
   gap: 5px;
+  padding: 10px;
   text-transform: uppercase;
+}
+
+.job-schedule-grid input,
+.job-schedule-grid select {
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  min-height: 34px;
+  padding: 0 9px;
+}
+
+.job-schedule-grid input:disabled,
+.job-schedule-grid select:disabled {
+  color: var(--mute);
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .submittal-quick-actions,
@@ -4568,6 +4632,10 @@ td strong {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .schedule-status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .overview-primary,
   .overview-secondary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4678,6 +4746,7 @@ td strong {
   .job-command-actions,
   .job-overview-grid,
   .job-schedule-grid,
+  .schedule-status-strip,
   .overview-primary,
   .overview-secondary {
     grid-template-columns: 1fr;

@@ -320,10 +320,19 @@ function OverviewSection({
 
 function ScheduleSection({ canEditHeader, job, onUpdateJob }: { canEditHeader: boolean; job: Job; onUpdateJob: JobDetailPageProps["onUpdateJob"] }) {
   return (
-    <section className="job-page-section">
+    <section className="job-page-section schedule-section">
       <div className="modal-section-head">
-        <h3>10 Schedule</h3>
-        <p>PM-owned planning fields for fabrication, installation, crew, and billing status.</p>
+        <div>
+          <h3>10 Schedule</h3>
+          <p>PM-owned planning fields for fabrication, installation, crew, and billing status.</p>
+        </div>
+        {!canEditHeader ? <span className="permission-note">Read-only role</span> : null}
+      </div>
+      <div className="schedule-status-strip">
+        <article><span>Install</span><strong>{formatInstallWindow(job.installStart, job.installEnd)}</strong><small>{installDuration(job.installStart, job.installEnd)}</small></article>
+        <article><span>Crew</span><strong>{job.crewSize || "TBD"}</strong><small>Install manpower</small></article>
+        <article><span>Fabrication</span><strong>{job.fabStatus}</strong><small>Shop status</small></article>
+        <article><span>Invoice</span><strong>{job.invoiceStatus}</strong><small>Billing status</small></article>
       </div>
       <div className="job-schedule-grid">
         <label>Backlog status
