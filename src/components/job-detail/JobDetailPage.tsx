@@ -68,6 +68,14 @@ export function JobDetailPage(props: JobDetailPageProps) {
     : job.purchaseOrders.some((po) => po.status === "Draft")
       ? "PO needs issue"
       : "Ordered / tracking";
+  const releaseBlockers = [
+    !job.installStart ? "Install dates missing" : "",
+    documentCount < primaryDocumentSlots.length ? "Core docs missing" : "",
+    shopDrawingPackage && !["Approved", "Approved as Noted"].includes(shopDrawingPackage.status) ? "Shop drawings need review" : "",
+    materialStatus !== "Ordered / tracking" ? materialStatus : "",
+    coSummary.submitted ? `${money.format(coSummary.submitted)} submitted COs` : "",
+    openNoteCount ? `${openNoteCount} open note${openNoteCount === 1 ? "" : "s"}` : ""
+  ].filter(Boolean);
 
   function addSubmittal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -125,19 +133,24 @@ export function JobDetailPage(props: JobDetailPageProps) {
 
       <header className="job-command-header">
         <div className="job-command-title">
-          <span className="eyebrow">{job.jobNumber} - {job.pm}</span>
+          <span className="eyebrow">{job.jobNumber} - PM {job.pm || "TBD"}</span>
           <h2>{job.projectName}</h2>
           <p>{job.client} - GC {job.gc || "TBD"} - Bid ref {job.bidRef || "TBD"}</p>
+          <div className="job-command-meta">
+            <Status value={job.backlogStatus} />
+            <span>{job.workType || "Bid / ITB"}</span>
+            <span>{job.contacts?.length ?? 0} contacts</span>
+          </div>
         </div>
         <div className="job-command-facts">
-          <article><span>Contract</span><strong>{money.format(currentValue)}</strong></article>
-          <article><span>Install</span><strong>{job.installStart || "TBD"}</strong><small>{installDuration(job.installStart, job.installEnd)}</small></article>
-          <article><span>Status</span><Status value={job.backlogStatus} /></article>
+          <article className="fact-money"><span>Current contract</span><strong>{money.format(currentValue)}</strong><small>Base {money.format(job.baseContract)} + approved COs</small></article>
+          <article><span>Install window</span><strong>{job.installStart || "TBD"}</strong><small>{installDuration(job.installStart, job.installEnd)} - crew {job.crewSize || "TBD"}</small></article>
+          <article className={releaseBlockers.length ? "fact-alert" : "fact-good"}><span>PM attention</span><strong>{releaseBlockers.length || "Clear"}</strong><small>{releaseBlockers[0] || "No immediate blockers"}</small></article>
         </div>
         <div className="job-command-actions">
           <button className="primary" onClick={() => onStartChangeOrder(job.id)} type="button">New CO</button>
-          <button className="primary muted-action" onClick={() => setActiveTab("purchase-orders")} type="button">New PO</button>
-          <button className="primary muted-action" onClick={() => setActiveTab("files")} type="button">Add File</button>
+          <button className="primary muted-action" onClick={() => setActiveTab("purchase-orders")} type="button">Add PO</button>
+          <button className="primary muted-action" onClick={() => setActiveTab("files")} type="button">Upload File</button>
           <button className="primary muted-action" onClick={() => onCreatePmNote(`Follow up on ${job.jobNumber}`, job.id)} type="button">Add Note</button>
         </div>
       </header>
@@ -170,6 +183,8 @@ export function JobDetailPage(props: JobDetailPageProps) {
           materialStatus={materialStatus}
           openNoteCount={openNoteCount}
           poSummary={poSummary}
+          releaseBlockers={releaseBlockers}
+          setActiveTab={setActiveTab}
           submittalSummary={submittalSummary}
         />
       ) : null}
@@ -229,6 +244,8 @@ function OverviewSection({
   materialStatus,
   openNoteCount,
   poSummary,
+  releaseBlockers,
+  setActiveTab,
   submittalSummary
 }: {
   contactCount: number;
@@ -239,18 +256,63 @@ function OverviewSection({
   materialStatus: string;
   openNoteCount: number;
   poSummary: ReturnType<typeof summarizePurchaseOrders>;
+  releaseBlockers: string[];
+  setActiveTab: (tab: JobDetailTabId) => void;
   submittalSummary: ReturnType<typeof summarizeSubmittals>;
 }) {
+  const scheduleReady = Boolean(job.installStart);
+  const submittalsReady = submittalSummary.releaseState === "Ready" || submittalSummary.releaseState === "No Packages";
+  const materialsReady = materialStatus === "Ordered / tracking";
+  const docsReady = documentCount >= primaryDocumentSlots.length;
+  const coSummary = summarizeChangeOrders(job.changeOrders);
+
   return (
-    <section className="job-page-section">
-      <div className="job-overview-grid">
-        <article><span>Install</span><strong>{job.installStart || "TBD"}</strong><small>{installDuration(job.installStart, job.installEnd)} - crew {job.crewSize}</small></article>
-        <article><span>Submittals</span><strong>{submittalSummary.label}</strong><small>{submittalSummary.releaseState}</small></article>
-        <article><span>Materials / POs</span><strong>{materialStatus}</strong><small>{poSummary.count} total - {money.format(poSummary.committed)}</small></article>
-        <article><span>Contract</span><strong>{money.format(currentValue)}</strong><small>Base {money.format(job.baseContract)}</small></article>
-        <article><span>Projected Cost</span><strong>{money.format(costSummary.projectedCost)}</strong><small>{costSummary.projectedMarginPct === null ? "Margin TBD" : `${costSummary.projectedMarginPct}% projected margin`}</small></article>
-        <article><span>Docs / Notes</span><strong>{documentCount}/{primaryDocumentSlots.length} docs</strong><small>{openNoteCount} open notes - {contactCount} contacts</small></article>
+    <section className="job-page-section cockpit-overview">
+      <div className="overview-primary">
+        <article className={scheduleReady ? "question-card ready" : "question-card needs-action"}>
+          <span>Install plan</span>
+          <strong>{job.installStart ? `${job.installStart}${job.installEnd && job.installEnd !== job.installStart ? ` - ${job.installEnd}` : ""}` : "Needs dates"}</strong>
+          <small>{installDuration(job.installStart, job.installEnd)} - crew {job.crewSize || "TBD"}</small>
+          <button onClick={() => setActiveTab("schedule")} type="button">{scheduleReady ? "Adjust schedule" : "Set install"}</button>
+        </article>
+        <article className={submittalsReady ? "question-card ready" : "question-card needs-action"}>
+          <span>Shop drawings</span>
+          <strong>{submittalSummary.label}</strong>
+          <small>{submittalSummary.releaseState} - {submittalSummary.blockingCount} blocking</small>
+          <button onClick={() => setActiveTab("submittals")} type="button">Open submittals</button>
+        </article>
+        <article className={materialsReady ? "question-card ready" : "question-card needs-action"}>
+          <span>Materials / vendors</span>
+          <strong>{materialStatus}</strong>
+          <small>{poSummary.count} POs - {money.format(poSummary.openCommitment)} open</small>
+          <button onClick={() => setActiveTab("purchase-orders")} type="button">{materialsReady ? "Review POs" : "Add PO"}</button>
+        </article>
+        <article className={docsReady ? "question-card ready" : "question-card needs-action"}>
+          <span>Job documents</span>
+          <strong>{documentCount}/{primaryDocumentSlots.length} attached</strong>
+          <small>{openNoteCount} notes - {contactCount} contacts</small>
+          <button onClick={() => setActiveTab("files")} type="button">{docsReady ? "Open files" : "Upload docs"}</button>
+        </article>
       </div>
+
+      <div className="overview-secondary">
+        <article>
+          <span>Contract health</span>
+          <strong>{money.format(currentValue)}</strong>
+          <small>Approved COs {money.format(coSummary.approved)} - submitted {money.format(coSummary.submitted)}</small>
+        </article>
+        <article>
+          <span>Projected cost</span>
+          <strong>{money.format(costSummary.projectedCost)}</strong>
+          <small>{costSummary.projectedMarginPct === null ? "Margin TBD" : `${costSummary.projectedMarginPct}% projected margin`}</small>
+        </article>
+        <article className={releaseBlockers.length ? "attention-list active" : "attention-list"}>
+          <span>Attention list</span>
+          <strong>{releaseBlockers.length ? `${releaseBlockers.length} items` : "Clear"}</strong>
+          <small>{releaseBlockers.slice(0, 3).join(" - ") || "Nothing critical flagged."}</small>
+        </article>
+      </div>
+
       {job.notes ? <p className="job-page-note">{job.notes}</p> : null}
     </section>
   );
