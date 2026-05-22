@@ -53,6 +53,7 @@ body {
   font-size: 13px;
   line-height: 1.45;
   overflow: hidden;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -384,7 +385,8 @@ button {
 .workspace > .panel,
 .workspace > .kanban,
 .workspace > .estimator-grid,
-.workspace > .jobs-layout {
+.workspace > .jobs-layout,
+.workspace > .job-page {
   margin: 22px 28px;
   overflow: auto;
 }
@@ -1825,6 +1827,8 @@ td strong {
   display: grid;
   gap: 14px;
   min-width: 0;
+  overflow-x: hidden;
+  width: auto;
 }
 
 .job-breadcrumb {
@@ -1853,7 +1857,7 @@ td strong {
   box-shadow: var(--shadow);
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(260px, 1.4fr) minmax(360px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1.25fr) minmax(300px, 1fr) minmax(180px, auto);
   padding: 14px;
   position: sticky;
   top: 0;
@@ -1927,7 +1931,7 @@ td strong {
   align-content: center;
   display: grid;
   gap: 7px;
-  grid-template-columns: repeat(2, minmax(88px, 1fr));
+  grid-template-columns: repeat(2, minmax(72px, 1fr));
 }
 
 .job-alert-strip {
@@ -2000,6 +2004,7 @@ td strong {
   box-shadow: var(--shadow-soft);
   min-width: 0;
   padding: 14px;
+  overflow-x: hidden;
 }
 
 .job-page-note {
@@ -4338,6 +4343,7 @@ td strong {
 @media (max-width: 1100px) {
   body {
     overflow: auto;
+    overflow-x: hidden;
   }
 
   .workspace {
@@ -4389,6 +4395,29 @@ td strong {
 
   .search-box {
     min-width: 0;
+  }
+
+  .job-command-header {
+    grid-template-columns: 1fr;
+    position: static;
+  }
+
+  .job-command-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .job-dewey-tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    position: sticky;
+    top: 0;
+  }
+
+  .job-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .job-schedule-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -4462,15 +4491,51 @@ td strong {
   .workspace > .panel,
   .workspace > .kanban,
   .workspace > .estimator-grid,
-  .workspace > .jobs-layout {
+  .workspace > .jobs-layout,
+  .workspace > .job-page {
     margin: 12px 14px;
   }
 
   /* Topbar: compress for small screens */
   .topbar {
+    align-items: flex-start;
+    flex-direction: column;
     gap: 10px;
     min-height: auto;
     padding: 10px 14px;
+  }
+
+  .topbar-actions,
+  .auth-box {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .job-command-title h2 {
+    font-size: 19px;
+    white-space: normal;
+  }
+
+  .job-command-title p {
+    white-space: normal;
+  }
+
+  .job-command-facts,
+  .job-command-actions,
+  .job-overview-grid,
+  .job-schedule-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .job-dewey-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    position: static;
+  }
+
+  .pm-action-list.compact .pm-action {
+    align-items: stretch;
+    grid-template-columns: 1fr;
   }
 
   /* PM surfaces: comfortable touch targets */
