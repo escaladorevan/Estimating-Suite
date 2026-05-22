@@ -21,9 +21,10 @@ import {
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import type { ChangeEvent, ElementType, FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase, getCurrentUserProfile } from "@/lib/supabase-client";
 import { BidWorkbook } from "@/components/BidWorkbook";
+import { JobDetailPage } from "@/components/job-detail/JobDetailPage";
 import { useJobsPersistence } from "@/hooks/useJobsPersistence";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "@/lib/change-order-workflow";
 import { calculateEstimateTotals } from "@/lib/estimate-math";
@@ -49,7 +50,7 @@ import {
 } from "@/lib/contact-repository";
 import { applyChangeOrderStatusToJobDetail, applyChangeOrderToJobDetail, applyFileToJobDetail, applyPurchaseOrderToJobDetail, applySubmittalToJobDetail, getJobDetailData } from "@/lib/job-detail-data";
 import { resolvePersistedJobForPMNote } from "@/lib/job-persistence-reconciliation";
-import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
+import { buildJobRouteHash, parseJobRouteHash, resolveJobRoute } from "@/lib/job-route";
 import {
   currentContractValue,
   grossMarginPercent,
@@ -171,6 +172,7 @@ export default function Home() {
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
   const [mainNavCollapsed, setMainNavCollapsed] = useState(false);
+  const [currentHash, setCurrentHash] = useState("");
   const [query, setQuery] = useState("");
   const [opportunityPersistenceStatus, setOpportunityPersistenceStatus] = useState("Checking Supabase...");
   const [estimatePersistenceStatus, setEstimatePersistenceStatus] = useState("Workbook snapshots save after sign-in.");
@@ -203,6 +205,7 @@ export default function Home() {
       createdAt: "2026-05-09"
     }
   ]);
+  const navCollapsedBeforeJobRoute = useRef<boolean | null>(null);
   const {
     jobPersistenceStatus,
     loadPersistedJobDetail,
@@ -232,8 +235,10 @@ export default function Home() {
 
   const selectedEstimate = estimates.find((estimate) => estimate.id === activeEstimateId) ?? estimates[0];
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? jobs[0];
-  const detailJobData = getJobDetailData({ jobs, pmNotes, jobId: detailJobId });
-  const detailJob = detailJobData?.job ?? null;
+  const routedJob = resolveJobRoute(currentHash, jobs);
+  const isJobRoute = Boolean(parseJobRouteHash(currentHash));
+  const detailJobData = getJobDetailData({ jobs, pmNotes, jobId: routedJob?.id ?? detailJobId });
+  const detailJob = routedJob ?? detailJobData?.job ?? null;
   const selectedOpportunity = opportunities.find((opportunity) => opportunity.id === selectedOpportunityId) ?? null;
   const totals = calculateEstimateTotals(selectedEstimate);
   const pipelineOpportunities = opportunities.filter((opportunity) =>
@@ -402,9 +407,16 @@ export default function Home() {
 
   useEffect(() => {
     function syncViewFromHash() {
-      const hash = window.location.hash.replace("#", "") as View;
+      const rawHash = window.location.hash || "#dashboard";
+      setCurrentHash(rawHash);
+      if (parseJobRouteHash(rawHash)) {
+        setView("jobs");
+        return;
+      }
+      const hash = rawHash.replace("#", "") as View;
       if (viewIds.includes(hash)) {
         setView(hash);
+        setDetailJobId(null);
       }
     }
 
@@ -418,6 +430,29 @@ export default function Home() {
       window.removeEventListener("hashchange", syncViewFromHash);
     };
   }, []);
+
+  useEffect(() => {
+    if (routedJob) {
+      setDetailJobId(routedJob.id);
+    }
+  }, [routedJob?.id]);
+
+  useEffect(() => {
+    if (!hasMounted) return;
+
+    if (isJobRoute) {
+      if (navCollapsedBeforeJobRoute.current === null) {
+        navCollapsedBeforeJobRoute.current = mainNavCollapsed;
+      }
+      setMainNavCollapsed(true);
+      return;
+    }
+
+    if (navCollapsedBeforeJobRoute.current !== null) {
+      setMainNavCollapsed(navCollapsedBeforeJobRoute.current);
+      navCollapsedBeforeJobRoute.current = null;
+    }
+  }, [hasMounted, isJobRoute, mainNavCollapsed]);
 
   async function persistOpportunity(next: Opportunity) {
     const localId = next.id;
@@ -641,6 +676,26 @@ export default function Home() {
       setEstimatePersistenceStatus(`Saved workbook and snapshot for ${persistedEstimate.proposalNumber || persistedEstimate.projectName}.`);
     } catch {
       setEstimatePersistenceStatus("Workbook is local only. Sign in and use persisted opportunity/job ids before saving.");
+    }
+  }
+
+  function openJobRoute(jobId: string) {
+    const job = jobs.find((candidate) => candidate.id === jobId || candidate.jobNumber === jobId);
+    if (!job) return;
+    setDetailJobId(job.id);
+    const hash = buildJobRouteHash(job);
+    setCurrentHash(hash);
+    if (typeof window !== "undefined") {
+      window.location.hash = hash;
+    }
+  }
+
+  function backToJobsView() {
+    setDetailJobId(null);
+    setView("jobs");
+    setCurrentHash("#jobs");
+    if (typeof window !== "undefined") {
+      window.location.hash = "#jobs";
     }
   }
 
@@ -1365,8 +1420,8 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <h1>{nav.find((item) => item.id === renderedView)?.label}</h1>
-            <p>Manual-first Supabase-ready rebuild of the FS bid, estimate, proposal, and job workflow.</p>
+            <h1>{isJobRoute && detailJob ? detailJob.jobNumber : nav.find((item) => item.id === renderedView)?.label}</h1>
+            <p>{isJobRoute && detailJob ? `${detailJob.projectName} PM cockpit` : "Manual-first Supabase-ready rebuild of the FS bid, estimate, proposal, and job workflow."}</p>
           </div>
           <div className="topbar-actions">
             {sessionEmail ? (
@@ -1461,7 +1516,36 @@ export default function Home() {
           </div>
         )}
 
-        {renderedView === "dashboard" && (
+        {isJobRoute && detailJob ? (
+          <JobDetailPage
+            canEditHeader={canWrite("pm")}
+            contacts={contacts}
+            job={detailJob}
+            onAddContact={(jobId, contactId) => void linkContactToJob(jobId, contactId)}
+            onApproveCos={approveSubmittedCo}
+            onBackToJobs={backToJobsView}
+            onCreatePmNote={createPmNote}
+            onCreatePurchaseOrder={createPurchaseOrder}
+            onCreateSubmittal={createJobSubmittal}
+            onDeletePmNote={deletePmNote}
+            onEditPurchaseOrder={editPurchaseOrder}
+            onEditSubmittal={editJobSubmittal}
+            onJobFile={attachJobFile}
+            onPurchaseOrderFile={attachPurchaseOrderFile}
+            onRemoveContact={(jobId, joinId) => void unlinkContactFromJob(jobId, joinId)}
+            onStartChangeOrder={startChangeOrderFromJob}
+            onSubmittalAction={updateSubmittal}
+            onSubmittalChecklist={updateSubmittalChecklist}
+            onSubmittalFile={attachSubmittalFile}
+            onUpdateCoStatus={updateChangeOrderStatus}
+            onUpdateJob={updateJobHeader}
+            onUpdatePmNoteStatus={updatePmNoteStatus}
+            onUpdatePmNoteText={updatePmNoteText}
+            pmNotes={detailJobData?.notes ?? pmNotes.filter((note) => note.jobId === detailJob.id)}
+          />
+        ) : null}
+
+        {!isJobRoute && renderedView === "dashboard" && (
           <HomeDashboard
             analytics={analytics}
             canSwitchHomeRole={currentUser?.role === "admin"}
@@ -1471,7 +1555,7 @@ export default function Home() {
             onCreateOpportunity={createNewOpportunity}
             onCreatePmNote={createPmNote}
             onDeletePmNote={deletePmNote}
-            onOpenJob={setDetailJobId}
+            onOpenJob={openJobRoute}
             onOpenOpportunity={setSelectedOpportunityId}
             onUpdatePmNoteText={updatePmNoteText}
             onUpdatePmNoteStatus={updatePmNoteStatus}
@@ -1480,7 +1564,7 @@ export default function Home() {
             pmNotes={pmNotes}
           />
         )}
-        {renderedView === "opportunities" && (
+        {!isJobRoute && renderedView === "opportunities" && (
           <OpportunityRegister
             opportunities={opportunities}
             query={query}
@@ -1488,8 +1572,8 @@ export default function Home() {
             onOpenOpportunity={setSelectedOpportunityId}
           />
         )}
-        {renderedView === "kanban" && <PipelineKanban opportunities={pipelineOpportunities} onOpenOpportunity={setSelectedOpportunityId} />}
-        {renderedView === "estimator" && (
+        {!isJobRoute && renderedView === "kanban" && <PipelineKanban opportunities={pipelineOpportunities} onOpenOpportunity={setSelectedOpportunityId} />}
+        {!isJobRoute && renderedView === "estimator" && (
           <BidWorkbook
             estimate={selectedEstimate}
             onChange={(next) => setEstimates((current) => current.map((estimate) => (estimate.id === next.id ? next : estimate)))}
@@ -1499,7 +1583,7 @@ export default function Home() {
             onSubmitChangeOrder={submitEstimateAsChangeOrder}
           />
         )}
-        {renderedView === "jobs" && (
+        {!isJobRoute && renderedView === "jobs" && (
           <JobsView
             jobs={jobs}
             onApproveCos={approveSubmittedCo}
@@ -1514,17 +1598,17 @@ export default function Home() {
             onUpdatePmNoteStatus={updatePmNoteStatus}
             onUpdatePmNoteText={updatePmNoteText}
             pmNotes={pmNotes}
-            onOpenJob={setDetailJobId}
+            onOpenJob={openJobRoute}
             onSubmittalChecklist={updateSubmittalChecklist}
             onSubmittalAction={updateSubmittal}
             onSubmittalFile={attachSubmittalFile}
             saveStatus={jobPersistenceStatus}
           />
         )}
-        {renderedView === "calendar" && <CalendarCapacityView jobs={jobs} onOpenJob={setDetailJobId} />}
-        {renderedView === "service" && <ServiceView jobs={jobs} onCreateServiceJob={createServiceJob} />}
-        {renderedView === "files" && <FilesView jobs={jobs} opportunities={opportunities} />}
-        {renderedView === "directory" && (
+        {!isJobRoute && renderedView === "calendar" && <CalendarCapacityView jobs={jobs} onOpenJob={openJobRoute} />}
+        {!isJobRoute && renderedView === "service" && <ServiceView jobs={jobs} onCreateServiceJob={createServiceJob} />}
+        {!isJobRoute && renderedView === "files" && <FilesView jobs={jobs} opportunities={opportunities} />}
+        {!isJobRoute && renderedView === "directory" && (
           <DirectoryView
             companies={companies}
             contacts={contacts}
@@ -1533,36 +1617,8 @@ export default function Home() {
             persistenceStatus={contactPersistenceStatus}
           />
         )}
-        {renderedView === "analytics" && <AnalyticsView analytics={analytics} jobs={jobs} opportunities={opportunities} />}
+        {!isJobRoute && renderedView === "analytics" && <AnalyticsView analytics={analytics} jobs={jobs} opportunities={opportunities} />}
       </section>
-      {detailJob ? (
-        <JobDetailModal
-          job={detailJob}
-          onApproveCos={approveSubmittedCo}
-          onUpdateCoStatus={updateChangeOrderStatus}
-          onClose={() => setDetailJobId(null)}
-          onCreatePurchaseOrder={createPurchaseOrder}
-          onCreatePmNote={createPmNote}
-          onCreateSubmittal={createJobSubmittal}
-          onEditPurchaseOrder={editPurchaseOrder}
-          onEditSubmittal={editJobSubmittal}
-          onJobFile={attachJobFile}
-          onPurchaseOrderFile={attachPurchaseOrderFile}
-          onStartChangeOrder={startChangeOrderFromJob}
-          onUpdateJob={updateJobHeader}
-          onDeletePmNote={deletePmNote}
-          onUpdatePmNoteStatus={updatePmNoteStatus}
-          onUpdatePmNoteText={updatePmNoteText}
-          pmNotes={detailJobData?.notes ?? []}
-          onSubmittalChecklist={updateSubmittalChecklist}
-          onSubmittalFile={attachSubmittalFile}
-          onSubmittalAction={updateSubmittal}
-          contacts={contacts}
-          onAddContact={(jobId, contactId) => void linkContactToJob(jobId, contactId)}
-          onRemoveContact={(jobId, joinId) => void unlinkContactFromJob(jobId, joinId)}
-          canEditHeader={canWrite("pm")}
-        />
-      ) : null}
       {selectedOpportunity ? (
         <OpportunityModal
           opportunity={selectedOpportunity}
@@ -2600,655 +2656,6 @@ function InstallDayModal({
   );
 }
 
-function JobDetailModal({
-  job,
-  onApproveCos,
-  onUpdateCoStatus,
-  onClose,
-  onCreatePurchaseOrder,
-  onCreatePmNote,
-  onCreateSubmittal,
-  onEditPurchaseOrder,
-  onEditSubmittal,
-  onJobFile,
-  onPurchaseOrderFile,
-  onStartChangeOrder,
-  onUpdateJob,
-  onDeletePmNote,
-  onUpdatePmNoteStatus,
-  onUpdatePmNoteText,
-  pmNotes,
-  onSubmittalChecklist,
-  onSubmittalFile,
-  onSubmittalAction,
-  contacts,
-  onAddContact,
-  onRemoveContact,
-  canEditHeader = true
-}: {
-  job: Job;
-  onApproveCos: (id: string) => void;
-  onUpdateCoStatus: (jobId: string, coId: string, status: ChangeOrderStatus) => void;
-  onClose: () => void;
-  onCreatePurchaseOrder: (jobId: string, input: Omit<PurchaseOrder, "id" | "jobId">) => void;
-  onCreatePmNote: (text: string, jobId?: string) => void;
-  onCreateSubmittal: (jobId: string, input: Omit<SubmittalPackage, "id" | "jobId" | "status" | "revision">) => void;
-  onEditPurchaseOrder: (jobId: string, poId: string, updates: Partial<PurchaseOrder>) => void;
-  onEditSubmittal: (jobId: string, submittalId: string, updates: UpdateSubmittalInput) => void;
-  onJobFile: (jobId: string, slot: string, file: File | undefined) => void;
-  onPurchaseOrderFile: (jobId: string, poId: string, file: File | undefined) => void;
-  onStartChangeOrder: (jobId: string) => void;
-  onUpdateJob: (jobId: string, updates: Partial<Job>) => void;
-  onDeletePmNote: (noteId: string) => void;
-  onUpdatePmNoteStatus: (noteId: string, status: PMNote["status"]) => void;
-  onUpdatePmNoteText: (noteId: string, text: string) => void;
-  pmNotes: PMNote[];
-  onSubmittalChecklist: (jobId: string, submittalId: string, updates: Parameters<typeof setSubmittalChecklistState>[1]) => void;
-  onSubmittalFile: (jobId: string, submittalId: string, file: File | undefined) => void;
-  onSubmittalAction: (jobId: string, submittalId: string, action: SubmittalAction) => void;
-  contacts: Contact[];
-  onAddContact: (jobId: string, contactId: string) => void;
-  onRemoveContact: (jobId: string, joinId: string) => void;
-  canEditHeader?: boolean;
-}) {
-  const coSummary = summarizeChangeOrders(job.changeOrders);
-  const currentValue = currentContractValue(job.baseContract, job.changeOrders);
-  const poSummary = summarizePurchaseOrders(job.purchaseOrders, today);
-  const costSummary = jobCostSummary(job, today);
-  const margin = costSummary.projectedMarginPct;
-  const submittalSummary = summarizeSubmittals(job.submittals, today);
-  const jobActions = buildPmActionItems({
-    jobs: [job],
-    notes: pmNotes.filter((note) => note.jobId === job.id),
-    today
-  }).slice(0, 8);
-  const [activeTab, setActiveTab] = useState<JobDetailTabId>("actions");
-  const [submittalDraft, setSubmittalDraft] = useState({
-    name: "",
-    type: "Shop Drawings" as SubmittalPackage["type"],
-    dueDate: "",
-    owner: job.pm,
-    releaseBlocker: true,
-    notes: ""
-  });
-  const [poDraft, setPoDraft] = useState({
-    poNumber: `PO-${job.jobNumber}-${String((job.purchaseOrders?.length ?? 0) + 1).padStart(3, "0")}`,
-    vendor: "",
-    scope: "Stone / Quartz" as PurchaseOrderScope,
-    description: "",
-    status: "Draft" as PurchaseOrderStatus,
-    committedAmount: "",
-    neededBy: "",
-    promisedDate: "",
-    owner: job.pm,
-    notes: ""
-  });
-  const [contactPickerId, setContactPickerId] = useState("");
-  const linkedContactIds = new Set((job.contacts ?? []).map((contact) => contact.contactId));
-  const availableContacts = contacts.filter((contact) => !linkedContactIds.has(contact.id));
-
-  function addSubmittal(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!submittalDraft.name.trim()) return;
-
-    onCreateSubmittal(job.id, {
-      name: submittalDraft.name,
-      type: submittalDraft.type,
-      dueDate: submittalDraft.dueDate,
-      owner: submittalDraft.owner,
-      releaseBlocker: submittalDraft.releaseBlocker,
-      notes: submittalDraft.notes
-    });
-    setSubmittalDraft((current) => ({ ...current, name: "", dueDate: "", notes: "" }));
-  }
-
-  function addPurchaseOrder(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!poDraft.vendor.trim() || !poDraft.poNumber.trim()) return;
-
-    onCreatePurchaseOrder(job.id, {
-      poNumber: poDraft.poNumber,
-      vendor: poDraft.vendor,
-      scope: poDraft.scope,
-      description: poDraft.description,
-      status: poDraft.status,
-      committedAmount: Number(poDraft.committedAmount) || 0,
-      neededBy: poDraft.neededBy,
-      promisedDate: poDraft.promisedDate,
-      owner: poDraft.owner,
-      notes: poDraft.notes
-    });
-    setPoDraft((current) => ({
-      ...current,
-      poNumber: `PO-${job.jobNumber}-${String((job.purchaseOrders.length ?? 0) + 2).padStart(3, "0")}`,
-      vendor: "",
-      description: "",
-      committedAmount: "",
-      neededBy: "",
-      promisedDate: "",
-      notes: ""
-    }));
-  }
-  const primaryDocumentSlots = ["drawings", "specs", "schedule", "contract", "proposal", "submittals"];
-  const shopDrawingPackage = job.submittals.find((item) => item.type === "Shop Drawings" || item.name.toLowerCase().includes("shop"));
-  const materialStatus = job.purchaseOrders.length === 0
-    ? "Needs PO review"
-    : job.purchaseOrders.some((po) => po.status === "Draft")
-      ? "PO needs issue"
-      : "Ordered / tracking";
-  const documentCount = primaryDocumentSlots.filter((slot) => job.files.some((file) => file.slot === slot)).length;
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <section className="opportunity-modal job-modal" onClick={(event) => event.stopPropagation()}>
-        <header className="modal-head">
-          <div>
-            <span className="eyebrow">{job.jobNumber} - {job.pm}</span>
-            <h2>{job.projectName}</h2>
-            <p>{job.client} - GC {job.gc} - Bid ref {job.bidRef}</p>
-          </div>
-          <button className="modal-close" onClick={onClose}>x</button>
-        </header>
-        <div className="modal-body job-modal-body">
-          <div className="job-detail-main">
-          <section className="modal-section overview-card pm-command-card">
-            <div className="modal-section-head">
-              <h3>PM Command</h3>
-              <Status value={job.backlogStatus} />
-            </div>
-            <div className="pm-critical-strip">
-              <article>
-                <span>Materials</span>
-                <strong>{materialStatus}</strong>
-                <small>{poSummary.count ? `${poSummary.count} purchase order${poSummary.count === 1 ? "" : "s"}` : "No POs created"}</small>
-              </article>
-              <article>
-                <span>Install</span>
-                <strong>{job.installStart || "TBD"}</strong>
-                <small>{installDuration(job.installStart, job.installEnd)} - {job.crewSize} crew</small>
-              </article>
-              <article>
-                <span>Shop drawings</span>
-                <strong>{shopDrawingPackage?.status ?? "No package"}</strong>
-                <small>{shopDrawingPackage?.dueDate ? `Due ${shopDrawingPackage.dueDate}` : submittalSummary.releaseState}</small>
-              </article>
-              <article>
-                <span>Documents</span>
-                <strong>{documentCount} / {primaryDocumentSlots.length}</strong>
-                <small>{documentCount === primaryDocumentSlots.length ? "Core docs attached" : "Core docs missing"}</small>
-              </article>
-            </div>
-            <div className="pm-summary-grid">
-              <div>
-                <span>Project manager</span>
-                <strong>{job.pm}</strong>
-              </div>
-              <div>
-                <span>Job number</span>
-                <strong>{job.jobNumber}</strong>
-              </div>
-              <div>
-                <span>Contract value</span>
-                <strong>{money.format(currentValue)}</strong>
-              </div>
-              <div>
-                <span>Install start</span>
-                <strong>{job.installStart || "TBD"}</strong>
-              </div>
-              <div>
-                <span>Install end</span>
-                <strong>{job.installEnd || "TBD"}</strong>
-              </div>
-              <div>
-                <span>Duration & crew</span>
-                <strong>{installDuration(job.installStart, job.installEnd)} - {job.crewSize} crew</strong>
-              </div>
-              <div>
-                <span>GC / contractor</span>
-                <strong>{job.gc || "-"}</strong>
-              </div>
-              <div>
-                <span>Margin</span>
-                <strong>{margin == null ? "TBD" : `${margin}%`}</strong>
-              </div>
-            </div>
-            <div className="pm-command-lines">
-              <p><ClipboardList size={15} /> Submittals {submittalSummary.label} - {submittalSummary.releaseState}</p>
-              <p><BriefcaseBusiness size={15} /> Approved COs {money.format(coSummary.approved)} - Pending {money.format(coSummary.submitted)}</p>
-              <p><CalendarDays size={15} /> Fab {job.expectedFabStart || "TBD"} - Complete {job.expectedCompletion || "TBD"}</p>
-            </div>
-            {canEditHeader ? (
-              <div className="pm-quick-schedule">
-                <label>
-                  <span>Install start</span>
-                  <input onChange={(e) => onUpdateJob(job.id, { installStart: e.target.value })} type="date" value={job.installStart} />
-                </label>
-                <label>
-                  <span>Install end</span>
-                  <input onChange={(e) => onUpdateJob(job.id, { installEnd: e.target.value })} type="date" value={job.installEnd} />
-                </label>
-                <label>
-                  <span>Crew</span>
-                  <input min="0" onChange={(e) => onUpdateJob(job.id, { crewSize: Number(e.target.value) || 0 })} type="number" value={job.crewSize} />
-                </label>
-              </div>
-            ) : null}
-            <div className="pm-document-strip">
-              <span className="eyebrow">Job documents</span>
-              {primaryDocumentSlots.map((slot) => {
-                const file = job.files.find((candidate) => candidate.slot === slot);
-                return <span className={file ? "filled" : ""} key={slot}>{slot}{file ? <> - <FileLink file={file} /></> : " - missing"}</span>;
-              })}
-            </div>
-            <div className="project-contact-strip">
-              <div>
-                <span className="eyebrow">Project contacts</span>
-                <strong>{(job.contacts ?? []).length ? `${(job.contacts ?? []).length} linked` : "No contacts linked"}</strong>
-              </div>
-              {(job.contacts ?? []).map((item) => (
-                <span className="contact-pill" key={item.id}>
-                  {item.contact?.name ?? item.contactId}
-                  <small>{item.role}</small>
-                  {canEditHeader ? <button onClick={() => onRemoveContact(job.id, item.id)} type="button">x</button> : null}
-                </span>
-              ))}
-              {canEditHeader && availableContacts.length ? (
-                <label className="contact-picker">
-                  <select value={contactPickerId} onChange={(event) => setContactPickerId(event.target.value)}>
-                    <option value="">Attach contact</option>
-                    {availableContacts.map((contact) => (
-                      <option key={contact.id} value={contact.id}>{contact.name}</option>
-                    ))}
-                  </select>
-                  <button
-                    className="ghost-button compact"
-                    disabled={!contactPickerId}
-                    onClick={() => {
-                      onAddContact(job.id, contactPickerId);
-                      setContactPickerId("");
-                    }}
-                    type="button"
-                  >
-                    Add
-                  </button>
-                </label>
-              ) : null}
-            </div>
-            <p>{job.notes}</p>
-            {canEditHeader && <details className="job-header-edit-panel">
-              <summary>Edit job header</summary>
-              <div className="job-header-edit-grid">
-                <label>
-                  <span>Backlog status</span>
-                  <select onChange={(e) => onUpdateJob(job.id, { backlogStatus: e.target.value as Job["backlogStatus"] })} value={job.backlogStatus}>
-                    {["Awarded / Waiting", "Submittals", "Release Pending", "In Fabrication", "Ready to Install", "Installing", "Installed", "Closeout", "Complete", "Void"].map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span>Fab status</span>
-                  <select onChange={(e) => onUpdateJob(job.id, { fabStatus: e.target.value as Job["fabStatus"] })} value={job.fabStatus}>
-                    {["Not Started", "In Fabrication", "Ready", "Complete"].map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span>Install status</span>
-                  <select onChange={(e) => onUpdateJob(job.id, { installStatus: e.target.value as Job["installStatus"] })} value={job.installStatus}>
-                    {["Ready", "Active", "Completed", "Installed", "Void"].map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span>Invoice status</span>
-                  <select onChange={(e) => onUpdateJob(job.id, { invoiceStatus: e.target.value as Job["invoiceStatus"] })} value={job.invoiceStatus}>
-                    {["Not Billed", "Partial", "Billed", "Paid"].map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span>Install start</span>
-                  <input onBlur={(e) => onUpdateJob(job.id, { installStart: e.target.value })} defaultValue={job.installStart} type="date" />
-                </label>
-                <label>
-                  <span>Install end</span>
-                  <input onBlur={(e) => onUpdateJob(job.id, { installEnd: e.target.value })} defaultValue={job.installEnd} type="date" />
-                </label>
-                <label>
-                  <span>Crew size</span>
-                  <input min="0" onBlur={(e) => onUpdateJob(job.id, { crewSize: Number(e.target.value) || 0 })} defaultValue={job.crewSize} type="number" />
-                </label>
-                <label>
-                  <span>PM</span>
-                  <input onBlur={(e) => onUpdateJob(job.id, { pm: e.target.value })} defaultValue={job.pm} type="text" />
-                </label>
-              </div>
-            </details>}
-          </section>
-          <nav className="job-detail-nav" aria-label="Job detail tabs">
-            {jobDetailTabs.map((tab) => (
-              <button className={activeTab === tab.id ? "active" : ""} key={tab.id} onClick={() => setActiveTab(tab.id)}>
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-          {activeTab === "actions" ? (
-          <PMActionBoard
-            actions={jobActions}
-            compact
-            jobs={[job]}
-            onCreateNote={(text) => onCreatePmNote(text, job.id)}
-            onDeleteNote={onDeletePmNote}
-            onUpdateNoteText={onUpdatePmNoteText}
-            onUpdateNoteStatus={onUpdatePmNoteStatus}
-            title="Actions / Notes"
-          />
-          ) : null}
-          {activeTab === "submittals" ? (
-          <section className="modal-section" id="job-submittals">
-            <div className="modal-section-head">
-              <h3>Shop Drawings & Submittals</h3>
-              <span className={`submittal-signal ${submittalSummary.severity}`}>{submittalSummary.label}</span>
-            </div>
-            <form className="submittal-create" onSubmit={addSubmittal}>
-              <input
-                aria-label="Package name"
-                onChange={(event) => setSubmittalDraft((current) => ({ ...current, name: event.target.value }))}
-                placeholder="Package name"
-                value={submittalDraft.name}
-              />
-              <select
-                aria-label="Package type"
-                onChange={(event) =>
-                  setSubmittalDraft((current) => ({ ...current, type: event.target.value as SubmittalPackage["type"] }))
-                }
-                value={submittalDraft.type}
-              >
-                {submittalTypes.map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              <input
-                aria-label="Due date"
-                onChange={(event) => setSubmittalDraft((current) => ({ ...current, dueDate: event.target.value }))}
-                type="date"
-                value={submittalDraft.dueDate}
-              />
-              <input
-                aria-label="Owner"
-                onChange={(event) => setSubmittalDraft((current) => ({ ...current, owner: event.target.value }))}
-                placeholder="Owner"
-                value={submittalDraft.owner}
-              />
-              <label className="tiny-check">
-                <input
-                  checked={submittalDraft.releaseBlocker}
-                  onChange={(event) => setSubmittalDraft((current) => ({ ...current, releaseBlocker: event.target.checked }))}
-                  type="checkbox"
-                />
-                Blocks release
-              </label>
-              <input
-                aria-label="Package notes"
-                onChange={(event) => setSubmittalDraft((current) => ({ ...current, notes: event.target.value }))}
-                placeholder="Notes"
-                value={submittalDraft.notes}
-              />
-              <button className="primary" type="submit">Add package</button>
-            </form>
-            <div className="submittal-card-grid">
-              {job.submittals.map((item) => {
-                const packageFiles = job.files.filter((file) => file.ownerType === "submittal" && file.ownerId === item.id);
-                const isApproved = ["Approved", "Approved as Noted"].includes(item.status);
-                const isSubmitted = ["Submitted", "Approved", "Approved as Noted", "Rejected / Revise and Resubmit", "Resubmitted"].includes(item.status);
-                const needsRevision = item.status === "Rejected / Revise and Resubmit";
-                return (
-                  <article className={`submittal-card ${isApproved ? "approved" : needsRevision ? "revise" : item.releaseBlocker ? "blocked" : ""}`} key={item.id}>
-                    <div className="submittal-card-head">
-                      <div>
-                        <span>{item.type}</span>
-                        <h4>{item.name}</h4>
-                      </div>
-                      <Status value={item.status} />
-                    </div>
-                    <div className="submittal-card-meta">
-                      <div><span>Due</span><strong>{item.dueDate || "TBD"}</strong></div>
-                      <div><span>Owner</span><strong>{item.owner || "TBD"}</strong></div>
-                      <div><span>Release</span><strong>{item.releaseBlocker ? "Blocks release" : "Not blocking"}</strong></div>
-                      <div><span>Revision</span><strong>{item.revision ? `Rev ${item.revision}` : "Original"}</strong></div>
-                    </div>
-                    <p>{item.notes || "No notes yet."}</p>
-                    <div className="submittal-chip-row">
-                      <button className={isSubmitted ? "active" : ""} onClick={() => onSubmittalChecklist(job.id, item.id, { submitted: !isSubmitted })}>Submitted</button>
-                      <button className={isApproved ? "active" : ""} onClick={() => onSubmittalChecklist(job.id, item.id, { approved: !isApproved })}>Approved</button>
-                      <button className={needsRevision ? "active warn" : ""} onClick={() => onSubmittalChecklist(job.id, item.id, { revise: !needsRevision })}>Revise</button>
-                      <button className={item.releaseBlocker ? "active" : ""} onClick={() => onEditSubmittal(job.id, item.id, { releaseBlocker: !item.releaseBlocker })}>Blocks</button>
-                      {!["Approved", "Approved as Noted", "Void / Not Required"].includes(item.status) ? (
-                        <button onClick={() => onSubmittalAction(job.id, item.id, "notRequired")}>N/R</button>
-                      ) : null}
-                      {item.status === "Void / Not Required" ? (
-                        <button onClick={() => onEditSubmittal(job.id, item.id, { status: "Not Started", releaseBlocker: true })}>Restore</button>
-                      ) : null}
-                    </div>
-                    <details className="submittal-edit-panel">
-                      <summary>Edit package</summary>
-                      <div className="submittal-edit-grid">
-                          <input
-                            aria-label={`${item.name} name`}
-                            className="inline-cell-input strong"
-                            onChange={(event) => onEditSubmittal(job.id, item.id, { name: event.target.value })}
-                            value={item.name}
-                          />
-                          <select
-                            aria-label={`${item.name} type`}
-                            className="inline-cell-input"
-                            onChange={(event) =>
-                              onEditSubmittal(job.id, item.id, { type: event.target.value as SubmittalPackage["type"] })
-                            }
-                            value={item.type}
-                          >
-                            {submittalTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-                          </select>
-                          <input
-                            aria-label={`${item.name} due date`}
-                            className="inline-cell-input"
-                            onChange={(event) => onEditSubmittal(job.id, item.id, { dueDate: event.target.value })}
-                            type="date"
-                            value={item.dueDate ?? ""}
-                          />
-                          <input
-                            aria-label={`${item.name} owner`}
-                            className="inline-cell-input"
-                            onChange={(event) => onEditSubmittal(job.id, item.id, { owner: event.target.value })}
-                            value={item.owner ?? ""}
-                          />
-                          <input
-                            aria-label={`${item.name} resubmitted date`}
-                            className="inline-cell-input"
-                            disabled={item.status !== "Rejected / Revise and Resubmit" && item.status !== "Resubmitted"}
-                            onChange={(event) => onSubmittalChecklist(job.id, item.id, { resubmittedDate: event.target.value })}
-                            type="date"
-                            value={item.status === "Rejected / Revise and Resubmit" ? "" : item.status === "Resubmitted" ? item.submittedDate ?? "" : ""}
-                          />
-                          <input
-                            aria-label={`${item.name} notes`}
-                            className="inline-cell-input"
-                            onChange={(event) => onEditSubmittal(job.id, item.id, { notes: event.target.value })}
-                            placeholder="Notes"
-                            value={item.notes ?? ""}
-                          />
-                      </div>
-                    </details>
-                    <div className="package-files">
-                      {packageFiles.map((file) => <span key={file.id}><FileLink file={file} /></span>)}
-                      <label>
-                        Upload file
-                        <input onChange={(event) => onSubmittalFile(job.id, item.id, event.target.files?.[0])} type="file" />
-                      </label>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-          ) : null}
-          {activeTab === "financials" ? (
-          <>
-          <section className="modal-section" id="job-pos">
-            <div className="modal-section-head">
-              <h3>Subcontracts / POs</h3>
-              <span className={poSummary.lateCount ? "submittal-signal bad" : "submittal-signal neutral"}>
-                {poSummary.lateCount ? `${poSummary.lateCount} late` : `${money.format(poSummary.committed)} committed`}
-              </span>
-            </div>
-            <form className="po-create" onSubmit={addPurchaseOrder}>
-              <input aria-label="PO number" onChange={(event) => setPoDraft((current) => ({ ...current, poNumber: event.target.value }))} placeholder="PO #" value={poDraft.poNumber} />
-              <input aria-label="PO vendor" onChange={(event) => setPoDraft((current) => ({ ...current, vendor: event.target.value }))} placeholder="Vendor" value={poDraft.vendor} />
-              <select aria-label="PO scope" onChange={(event) => setPoDraft((current) => ({ ...current, scope: event.target.value as PurchaseOrderScope }))} value={poDraft.scope}>
-                {purchaseOrderScopes.map((scope) => <option key={scope} value={scope}>{scope}</option>)}
-              </select>
-              <select aria-label="PO status" onChange={(event) => setPoDraft((current) => ({ ...current, status: event.target.value as PurchaseOrderStatus }))} value={poDraft.status}>
-                {purchaseOrderStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
-              </select>
-              <input aria-label="PO amount" onChange={(event) => setPoDraft((current) => ({ ...current, committedAmount: event.target.value }))} placeholder="Committed" type="number" value={poDraft.committedAmount} />
-              <input aria-label="PO needed by" onChange={(event) => setPoDraft((current) => ({ ...current, neededBy: event.target.value }))} type="date" value={poDraft.neededBy} />
-              <input aria-label="PO promised date" onChange={(event) => setPoDraft((current) => ({ ...current, promisedDate: event.target.value }))} type="date" value={poDraft.promisedDate} />
-              <input aria-label="PO description" onChange={(event) => setPoDraft((current) => ({ ...current, description: event.target.value }))} placeholder="Scope / description" value={poDraft.description} />
-              <button className="primary" type="submit">Add PO</button>
-            </form>
-            <div className="financial-card-grid">
-              {job.purchaseOrders.length ? job.purchaseOrders.map((po) => {
-                const committed = po.committedAmount + (po.approvedChangeAmount ?? 0);
-                const open = Math.max(committed - (po.invoicedAmount ?? 0), 0);
-                const poFiles = job.files.filter((file) => file.ownerType === "purchase_order" && file.ownerId === po.id);
-                return (
-                  <article className={`financial-card ${po.status === "Draft" ? "warn" : ["Complete", "Closed"].includes(po.status) ? "approved" : ""}`} key={po.id}>
-                    <div className="financial-card-head">
-                      <div>
-                        <span>{po.scope}</span>
-                        <h4>{po.poNumber}</h4>
-                        <small>{po.vendor}</small>
-                      </div>
-                      <Status value={po.status} />
-                    </div>
-                    <p>{po.description}</p>
-                    <div className="financial-card-meta">
-                      <div><span>Committed</span><strong>{money.format(committed)}</strong></div>
-                      <div><span>Invoiced</span><strong>{money.format(po.invoicedAmount ?? 0)}</strong></div>
-                      <div><span>Paid</span><strong>{money.format(po.paidAmount ?? 0)}</strong></div>
-                      <div><span>Open</span><strong>{money.format(open)}</strong></div>
-                      <div><span>Needed</span><strong>{po.neededBy || "TBD"}</strong></div>
-                      <div><span>Promised</span><strong>{po.promisedDate || "TBD"}</strong></div>
-                    </div>
-                    <details className="submittal-edit-panel">
-                      <summary>Edit PO</summary>
-                      <div className="submittal-edit-grid">
-                          <input className="inline-cell-input strong" onChange={(event) => onEditPurchaseOrder(job.id, po.id, { poNumber: event.target.value })} value={po.poNumber} />
-                          <input className="inline-cell-input" onChange={(event) => onEditPurchaseOrder(job.id, po.id, { vendor: event.target.value })} value={po.vendor} />
-                          <select className="inline-cell-input" onChange={(event) => onEditPurchaseOrder(job.id, po.id, { scope: event.target.value as PurchaseOrderScope })} value={po.scope}>
-                            {purchaseOrderScopes.map((scope) => <option key={scope} value={scope}>{scope}</option>)}
-                          </select>
-                          <input className="inline-cell-input" onChange={(event) => onEditPurchaseOrder(job.id, po.id, { description: event.target.value })} value={po.description} />
-                          <select className="inline-cell-input" onChange={(event) => onEditPurchaseOrder(job.id, po.id, { status: event.target.value as PurchaseOrderStatus })} value={po.status}>
-                            {purchaseOrderStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
-                          </select>
-                          <input className="inline-cell-input" onChange={(event) => onEditPurchaseOrder(job.id, po.id, { committedAmount: Number(event.target.value) })} type="number" value={po.committedAmount} />
-                          <input className="inline-cell-input" onChange={(event) => onEditPurchaseOrder(job.id, po.id, { invoicedAmount: Number(event.target.value) })} type="number" value={po.invoicedAmount ?? 0} />
-                          <input className="inline-cell-input" onChange={(event) => onEditPurchaseOrder(job.id, po.id, { paidAmount: Number(event.target.value) })} type="number" value={po.paidAmount ?? 0} />
-                          <input className="inline-cell-input" onChange={(event) => onEditPurchaseOrder(job.id, po.id, { neededBy: event.target.value })} type="date" value={po.neededBy ?? ""} />
-                          <input className="inline-cell-input" onChange={(event) => onEditPurchaseOrder(job.id, po.id, { promisedDate: event.target.value })} type="date" value={po.promisedDate ?? ""} />
-                      </div>
-                    </details>
-                    <div className="package-files">
-                      {poFiles.map((file) => <span key={file.id}><FileLink file={file} /></span>)}
-                      <label>
-                        Upload file
-                        <input onChange={(event) => onPurchaseOrderFile(job.id, po.id, event.target.files?.[0])} type="file" />
-                      </label>
-                    </div>
-                  </article>
-                );
-              }) : <div className="empty-card">No purchase orders or subcontracts yet.</div>}
-            </div>
-          </section>
-          <section className="modal-section" id="job-financials">
-            <div className="modal-section-head">
-              <div>
-                <h3>Change Orders</h3>
-                <p>Price added scope in the workbook, then track GC approval here.</p>
-              </div>
-              <div className="modal-section-actions">
-                <button className="primary muted-action" onClick={() => onStartChangeOrder(job.id)}>New CO in Workbook</button>
-                <button className="primary" onClick={() => onApproveCos(job.id)}><CheckCircle2 size={16} /> Approve submitted COs</button>
-              </div>
-            </div>
-            <div className="financial-card-grid">
-              {job.changeOrders.length ? job.changeOrders.map((co) => (
-                <article className={`financial-card ${co.status === "approved" ? "approved" : co.status === "submitted" ? "warn" : ""}`} key={co.id}>
-                  <div className="financial-card-head">
-                    <div>
-                      <span>Change order</span>
-                      <h4>{co.number}</h4>
-                      <small>{co.dateSubmitted}</small>
-                    </div>
-                    <Status value={co.status} />
-                  </div>
-                  <p>{co.description}</p>
-                  <div className="financial-card-meta">
-                    <div><span>Amount</span><strong>{money.format(co.amount)}</strong></div>
-                    <div><span>Status</span><strong>{co.status}</strong></div>
-                    <div><span>Submitted</span><strong>{co.dateSubmitted}</strong></div>
-                    <div><span>Approved</span><strong>{co.approvedDate || "-"}</strong></div>
-                  </div>
-                  {co.status === "submitted" ? (
-                    <div className="financial-card-actions">
-                      <button className="primary" onClick={() => onUpdateCoStatus(job.id, co.id, "approved")}>Approve</button>
-                      <button className="primary muted-action" onClick={() => onUpdateCoStatus(job.id, co.id, "rejected")}>Reject</button>
-                      <button className="primary muted-action" onClick={() => onUpdateCoStatus(job.id, co.id, "void")}>Void</button>
-                    </div>
-                  ) : null}
-                </article>
-              )) : <div className="empty-card">No change orders yet.</div>}
-            </div>
-          </section>
-          </>
-          ) : null}
-          {activeTab === "files" ? (
-          <section className="modal-section" id="job-files">
-            <h3>Files</h3>
-            {!canEditHeader ? <p className="permission-note">PM or admin role required to attach job files.</p> : null}
-            <div className="file-slots">
-              {fileSlots.map((slot) => {
-                const file = job.files.find((candidate) => candidate.ownerType === "job" && candidate.slot === slot);
-                return (
-                  <label className={file ? "file-slot filled" : "file-slot"} key={slot}>
-                    <span>{slot}</span>
-                    <strong>{file ? <FileLink file={file} /> : "Missing"}</strong>
-                    <input
-                      disabled={!canEditHeader}
-                      onChange={(event) => {
-                        onJobFile(job.id, slot, event.currentTarget.files?.[0]);
-                        event.currentTarget.value = "";
-                      }}
-                      type="file"
-                    />
-                  </label>
-                );
-              })}
-            </div>
-          </section>
-          ) : null}
-          {activeTab === "activity" ? (
-          <section className="modal-section" id="job-activity">
-            <h3>Activity</h3>
-            {job.activity.map((event) => (
-              <p className="activity" key={event.id}><strong>{event.author}</strong> {event.message} <span>{event.createdAt}</span></p>
-            ))}
-          </section>
-          ) : null}
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function ServiceView({
   jobs,
   onCreateServiceJob
@@ -3962,3 +3369,4 @@ function FileLink({ file }: { file: ProjectFile }) {
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
+

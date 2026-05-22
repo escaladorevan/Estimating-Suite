@@ -1821,6 +1821,244 @@ td strong {
   overflow: auto;
 }
 
+.job-page {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.job-breadcrumb {
+  align-items: center;
+  color: var(--ink-3);
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.job-breadcrumb button {
+  background: transparent;
+  border: 0;
+  color: var(--accent-2);
+  cursor: pointer;
+  font-weight: 850;
+  padding: 0;
+}
+
+.job-command-header {
+  align-items: stretch;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(260px, 1.4fr) minmax(360px, 1fr) auto;
+  padding: 14px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.job-command-title {
+  min-width: 0;
+}
+
+.job-command-title h2 {
+  font-size: 22px;
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-command-title p {
+  color: var(--ink-3);
+  margin: 4px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-command-facts,
+.job-overview-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.job-command-facts article,
+.job-overview-grid article {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.job-command-facts span,
+.job-overview-grid span {
+  color: var(--ink-3);
+  display: block;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.job-command-facts strong,
+.job-overview-grid strong {
+  color: var(--ink);
+  display: block;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-command-facts small,
+.job-overview-grid small {
+  color: var(--ink-3);
+  display: block;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.job-command-actions {
+  align-content: center;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(88px, 1fr));
+}
+
+.job-alert-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.job-alert-strip button {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 7px 10px;
+}
+
+.job-dewey-tabs {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  padding: 7px;
+  position: sticky;
+  top: 96px;
+  z-index: 18;
+}
+
+.job-dewey-tabs button {
+  background: var(--panel);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px;
+  text-align: left;
+}
+
+.job-dewey-tabs button span {
+  color: var(--accent-2);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.job-dewey-tabs button strong {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-dewey-tabs button.active {
+  background: var(--jun-soft);
+  border-color: var(--jun);
+  color: var(--ink);
+}
+
+.job-page-section {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-soft);
+  min-width: 0;
+  padding: 14px;
+}
+
+.job-page-note {
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  font-size: 13px;
+  margin: 12px 0 0;
+  padding: 10px;
+}
+
+.job-schedule-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.job-schedule-grid label,
+.compact-check {
+  color: var(--ink-3);
+  display: grid;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 5px;
+  text-transform: uppercase;
+}
+
+.submittal-quick-actions,
+.submittal-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.submittal-quick-actions button,
+.submittal-checks label {
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 8px;
+}
+
+.pm-action-list.compact {
+  display: grid;
+  gap: 8px;
+}
+
+.pm-action-list.compact .pm-action {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 92px minmax(0, 1fr) 100px auto;
+}
+
 .job-detail-main {
   display: grid;
   gap: 14px;

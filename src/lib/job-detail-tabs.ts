@@ -1,8 +1,10 @@
 export type JobDetailTabId =
   | "overview"
+  | "actions"
   | "schedule"
   | "submittals"
   | "change-orders"
+  | "financials"
   | "purchase-orders"
   | "files"
   | "notes"
