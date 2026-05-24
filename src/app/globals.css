@@ -2591,6 +2591,11 @@ td strong {
   gap: 12px;
 }
 
+.purchase-orders-workspace {
+  display: grid;
+  gap: 12px;
+}
+
 .submittals-head {
   align-items: flex-start;
 }
@@ -2625,6 +2630,16 @@ td strong {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   grid-template-columns: 150px minmax(160px, 1.3fr) 130px 128px 96px 132px auto;
+  margin: 0;
+  padding: 8px;
+}
+
+.purchase-order-command-row {
+  align-items: center;
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  grid-template-columns: 160px 118px minmax(150px, 1.1fr) 140px 120px 128px auto;
   margin: 0;
   padding: 8px;
 }
@@ -2816,6 +2831,20 @@ td strong {
   box-shadow: inset 4px 0 0 var(--ok), var(--sh-sm);
 }
 
+.financial-card.late {
+  box-shadow: inset 4px 0 0 var(--bad), var(--sh-sm);
+}
+
+.po-card {
+  gap: 10px;
+}
+
+.po-card .financial-card-head p {
+  color: var(--ink-3);
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
 .financial-card-head {
   align-items: flex-start;
   display: flex;
@@ -2856,6 +2885,10 @@ td strong {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.po-card-meta {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .financial-card-meta div {
   background: var(--panel-alt);
   border: 1px solid var(--line);
@@ -2876,6 +2909,7 @@ td strong {
 
 .financial-card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -2885,6 +2919,36 @@ td strong {
   justify-content: center;
   min-height: 28px;
   padding: 0 8px;
+}
+
+.financial-card-actions .good-action {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+
+.financial-card-actions select {
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-size: 12px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.attached-file-pill {
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  display: inline-flex;
+  font-size: 10.5px;
+  max-width: 160px;
+  overflow: hidden;
+  padding: 5px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .empty-card {

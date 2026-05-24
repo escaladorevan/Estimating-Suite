@@ -541,39 +541,78 @@ function PurchaseOrdersSection({
   setDraft: Dispatch<SetStateAction<PurchaseOrderDraft>>;
 }) {
   const poSummary = summarizePurchaseOrders(job.purchaseOrders, today);
+  const draftCount = job.purchaseOrders.filter((po) => po.status === "Draft").length;
+  const openCount = job.purchaseOrders.filter((po) => !["Complete", "Closed", "Void"].includes(po.status)).length;
   return (
-    <section className="job-page-section">
-      <div className="modal-section-head"><h3>40 POs</h3><p>{poSummary.count} total - {money.format(poSummary.openCommitment)} open commitment</p></div>
-      <form className="submittal-create" onSubmit={onSubmit}>
-        <input onChange={(event) => setDraft((current) => ({ ...current, poNumber: event.target.value }))} placeholder="PO number" value={draft.poNumber} />
-        <input onChange={(event) => setDraft((current) => ({ ...current, vendor: event.target.value }))} placeholder="Vendor" value={draft.vendor} />
-        <select onChange={(event) => setDraft((current) => ({ ...current, scope: event.target.value as PurchaseOrderScope }))} value={draft.scope}>
+    <section className="job-page-section purchase-orders-workspace">
+      <div className="modal-section-head submittals-head">
+        <div>
+          <h3>40 POs</h3>
+          <p>{poSummary.count} total - {money.format(poSummary.openCommitment)} open commitment</p>
+        </div>
+        <div className="submittal-summary-pills" aria-label="Purchase order summary">
+          <span>{money.format(poSummary.committed)} committed</span>
+          <span>{openCount} open</span>
+          <span className={poSummary.lateCount ? "attention" : ""}>{poSummary.lateCount} late</span>
+          <span className={draftCount ? "attention" : ""}>{draftCount} draft</span>
+        </div>
+      </div>
+      <form className="submittal-create purchase-order-command-row" onSubmit={onSubmit}>
+        <div className="submittal-command-title">
+          <span>New PO</span>
+          <strong>Track a vendor commitment</strong>
+        </div>
+        <input aria-label="PO number" onChange={(event) => setDraft((current) => ({ ...current, poNumber: event.target.value }))} placeholder="PO number" value={draft.poNumber} />
+        <input aria-label="Vendor" onChange={(event) => setDraft((current) => ({ ...current, vendor: event.target.value }))} placeholder="Vendor" value={draft.vendor} />
+        <select aria-label="Scope" onChange={(event) => setDraft((current) => ({ ...current, scope: event.target.value as PurchaseOrderScope }))} value={draft.scope}>
           {purchaseOrderScopes.map((scope) => <option key={scope}>{scope}</option>)}
         </select>
-        <input onChange={(event) => setDraft((current) => ({ ...current, committedAmount: event.target.value }))} placeholder="Committed $" value={draft.committedAmount} />
-        <input onChange={(event) => setDraft((current) => ({ ...current, neededBy: event.target.value }))} type="date" value={draft.neededBy} />
-        <button className="primary" type="submit">Add PO</button>
+        <input aria-label="Committed amount" onChange={(event) => setDraft((current) => ({ ...current, committedAmount: event.target.value }))} placeholder="Committed $" value={draft.committedAmount} />
+        <input aria-label="Needed by" onChange={(event) => setDraft((current) => ({ ...current, neededBy: event.target.value }))} type="date" value={draft.neededBy} />
+        <button className="primary" type="submit">Add</button>
       </form>
-      <div className="financial-card-grid">
-        {job.purchaseOrders.map((po) => (
-          <article className={`financial-card ${po.status === "Draft" ? "warn" : ["Complete", "Closed"].includes(po.status) ? "approved" : ""}`} key={po.id}>
-            <div className="financial-card-head"><div><span>{po.poNumber}</span><h4>{po.vendor}</h4></div><Status value={po.status} /></div>
-            <p>{po.description || po.scope}</p>
-            <div className="financial-card-meta">
+      <div className="financial-card-grid po-card-grid">
+        {job.purchaseOrders.map((po) => {
+          const isClosed = ["Complete", "Closed"].includes(po.status);
+          const isLate = Boolean(po.promisedDate && po.promisedDate < today && !["Complete", "Closed", "Void"].includes(po.status));
+          const attachedFiles = job.files.filter((file) => file.ownerType === "purchase_order" && file.ownerId === po.id);
+          const nextStatuses = purchaseOrderNextStatuses(po.status);
+          return (
+          <article className={`financial-card po-card ${po.status === "Draft" ? "warn" : isClosed ? "approved" : isLate ? "late" : ""}`} key={po.id}>
+            <div className="financial-card-head">
+              <div>
+                <span>{po.poNumber}</span>
+                <h4>{po.vendor}</h4>
+                <p>{po.description || po.scope}</p>
+              </div>
+              <div className="submittal-card-state">
+                <Status value={po.status} />
+                <span className={isLate ? "release-pill blocker" : "release-pill"}>{isLate ? "Late" : po.scope}</span>
+              </div>
+            </div>
+            <div className="financial-card-meta po-card-meta">
               <div><span>Committed</span><strong>{money.format(po.committedAmount)}</strong></div>
-              <div><span>Needed</span><strong>{po.neededBy || "TBD"}</strong></div>
-              <div><span>Promised</span><strong>{po.promisedDate || "TBD"}</strong></div>
+              <div><span>Needed</span><strong>{po.neededBy ? formatDate(po.neededBy) : "TBD"}</strong></div>
+              <div><span>Promised</span><strong>{po.promisedDate ? formatDate(po.promisedDate) : "TBD"}</strong></div>
+              <div><span>Files</span><strong>{attachedFiles.length ? `${attachedFiles.length} attached` : "None"}</strong></div>
             </div>
             <div className="financial-card-actions">
+              {nextStatuses.map((status) => (
+                <button className={["Complete", "Closed"].includes(status) ? "primary good-action" : status === "Void" ? "primary muted-action" : "primary"} key={status} onClick={() => onEditPurchaseOrder(job.id, po.id, { status })} type="button">
+                  {purchaseOrderActionLabel(status)}
+                </button>
+              ))}
               <select onChange={(event) => onEditPurchaseOrder(job.id, po.id, { status: event.target.value as PurchaseOrderStatus })} value={po.status}>
                 {PURCHASE_ORDER_STATUSES.map((status) => <option key={status}>{status}</option>)}
               </select>
               <label className="ghost-button compact">Attach file
                 <input onChange={(event) => handleFileInput(event, (file) => onPurchaseOrderFile(job.id, po.id, file))} type="file" />
               </label>
+              {attachedFiles.map((file) => <span className="attached-file-pill" key={file.id}><FileLink file={file} /></span>)}
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -709,6 +748,28 @@ function submittalActionsFor(status: SubmittalPackage["status"]): SubmittalActio
   if (status === "Resubmitted") return ["approve", "approveAsNoted", "revise"];
   if (status === "Void / Not Required") return ["submit"];
   return ["revise"];
+}
+
+function purchaseOrderNextStatuses(status: PurchaseOrderStatus): PurchaseOrderStatus[] {
+  if (status === "Draft") return ["Issued", "Void"];
+  if (status === "Issued") return ["Acknowledged", "Void"];
+  if (status === "Acknowledged") return ["In Progress", "Complete", "Void"];
+  if (status === "In Progress") return ["Complete", "Void"];
+  if (status === "Complete") return ["Closed"];
+  if (status === "Void") return ["Draft"];
+  return [];
+}
+
+function purchaseOrderActionLabel(status: PurchaseOrderStatus): string {
+  return {
+    Acknowledged: "Acknowledge",
+    Closed: "Close",
+    Complete: "Complete",
+    Draft: "Reopen",
+    "In Progress": "Start",
+    Issued: "Issue",
+    Void: "Void"
+  }[status];
 }
 
 function formatSubmittalAction(action: SubmittalAction): string {
