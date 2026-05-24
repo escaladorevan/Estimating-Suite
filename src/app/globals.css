@@ -2586,9 +2586,74 @@ td strong {
   margin: 10px 0 12px;
 }
 
+.submittals-workspace {
+  display: grid;
+  gap: 12px;
+}
+
+.submittals-head {
+  align-items: flex-start;
+}
+
+.submittal-summary-pills {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.submittal-summary-pills span {
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 850;
+  padding: 5px 8px;
+}
+
+.submittal-summary-pills span.attention {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
+  color: var(--ink);
+}
+
+.submittal-command-row {
+  align-items: center;
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  grid-template-columns: 150px minmax(160px, 1.3fr) 130px 128px 96px 132px auto;
+  margin: 0;
+  padding: 8px;
+}
+
+.submittal-command-title {
+  display: grid;
+  gap: 1px;
+}
+
+.submittal-command-title span {
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.submittal-command-title strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
 .submittal-create input,
 .submittal-create select {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink);
   min-height: 34px;
+  padding: 0 9px;
   width: 100%;
 }
 
@@ -2627,6 +2692,13 @@ td strong {
   justify-content: space-between;
 }
 
+.submittal-card-state {
+  align-items: flex-end;
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
 .submittal-card-head span,
 .submittal-card-meta span {
   color: var(--mute);
@@ -2639,7 +2711,29 @@ td strong {
 
 .submittal-card-head h4 {
   font-size: 16px;
-  margin-top: 3px;
+  margin: 3px 0 0;
+}
+
+.submittal-card-head p {
+  color: var(--ink-3);
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
+.release-pill {
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 850;
+  padding: 4px 7px;
+}
+
+.release-pill.blocker {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 42%, var(--line));
+  color: var(--ink);
 }
 
 .submittal-card-meta {
@@ -2668,6 +2762,33 @@ td strong {
 .submittal-card p {
   color: var(--ink-3);
   margin: 0;
+}
+
+.submittal-quick-actions {
+  align-items: center;
+}
+
+.submittal-quick-actions button {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 850;
+  min-height: 29px;
+  padding: 5px 9px;
+}
+
+.submittal-quick-actions button.good-action {
+  background: var(--ok-soft);
+  border-color: color-mix(in srgb, var(--ok) 38%, var(--line));
+  color: var(--ok);
+}
+
+.submittal-quick-actions button.muted-danger {
+  background: var(--panel-alt);
+  border-color: var(--line);
+  color: var(--ink-3);
 }
 
 .financial-card-grid {

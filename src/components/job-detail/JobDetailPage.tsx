@@ -384,43 +384,68 @@ function SubmittalsSection({
   setDraft: Dispatch<SetStateAction<SubmittalDraft>>;
 }) {
   const summary = summarizeSubmittals(job.submittals, today);
+  const blockingCount = job.submittals.filter((item) => item.releaseBlocker && !["Approved", "Approved as Noted", "Void / Not Required"].includes(item.status)).length;
+  const waitingCount = job.submittals.filter((item) => ["Submitted", "Resubmitted"].includes(item.status)).length;
+  const approvedCount = job.submittals.filter((item) => ["Approved", "Approved as Noted", "Void / Not Required"].includes(item.status)).length;
   return (
-    <section className="job-page-section">
-      <div className="modal-section-head">
-        <h3>20 Submittals</h3>
-        <p>{summary.label} - {summary.releaseState}</p>
+    <section className="job-page-section submittals-workspace">
+      <div className="modal-section-head submittals-head">
+        <div>
+          <h3>20 Submittals</h3>
+          <p>{summary.label} - {summary.releaseState}</p>
+        </div>
+        <div className="submittal-summary-pills" aria-label="Submittal summary">
+          <span className={blockingCount ? "attention" : ""}>{blockingCount} blocking</span>
+          <span>{waitingCount} waiting</span>
+          <span>{approvedCount} ready</span>
+        </div>
       </div>
-      <form className="submittal-create" onSubmit={onSubmit}>
-        <input onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Package name" value={draft.name} />
-        <select onChange={(event) => setDraft((current) => ({ ...current, type: event.target.value as SubmittalPackage["type"] }))} value={draft.type}>
+      <form className="submittal-create submittal-command-row" onSubmit={onSubmit}>
+        <div className="submittal-command-title">
+          <span>New package</span>
+          <strong>Add a submittal tracker</strong>
+        </div>
+        <input aria-label="Package name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Package name" value={draft.name} />
+        <select aria-label="Package type" onChange={(event) => setDraft((current) => ({ ...current, type: event.target.value as SubmittalPackage["type"] }))} value={draft.type}>
           {submittalTypes.map((type) => <option key={type}>{type}</option>)}
         </select>
-        <input onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} type="date" value={draft.dueDate} />
-        <input onChange={(event) => setDraft((current) => ({ ...current, owner: event.target.value }))} placeholder="Owner" value={draft.owner} />
+        <input aria-label="Due date" onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} type="date" value={draft.dueDate} />
+        <input aria-label="Owner" onChange={(event) => setDraft((current) => ({ ...current, owner: event.target.value }))} placeholder="Owner" value={draft.owner} />
         <label className="compact-check">
           <input checked={draft.releaseBlocker} onChange={(event) => setDraft((current) => ({ ...current, releaseBlocker: event.target.checked }))} type="checkbox" />
-          Blocks release
+          Release blocker
         </label>
-        <button className="primary" type="submit">Add package</button>
+        <button className="primary" type="submit">Add</button>
       </form>
       <div className="submittal-card-grid">
         {job.submittals.map((item) => {
           const isApproved = ["Approved", "Approved as Noted"].includes(item.status);
           const needsRevision = item.status === "Rejected / Revise and Resubmit";
+          const isNotRequired = item.status === "Void / Not Required";
+          const attachedFiles = job.files.filter((file) => file.ownerType === "submittal" && file.ownerId === item.id);
+          const nextActions = submittalActionsFor(item.status);
           return (
-            <article className={`submittal-card ${isApproved ? "approved" : needsRevision ? "revise" : item.releaseBlocker ? "blocked" : ""}`} key={item.id}>
+            <article className={`submittal-card ${isApproved || isNotRequired ? "approved" : needsRevision ? "revise" : item.releaseBlocker ? "blocked" : ""}`} key={item.id}>
               <div className="submittal-card-head">
-                <div><span>{item.type}</span><h4>{item.name}</h4></div>
-                <Status value={item.status} />
+                <div>
+                  <span>{item.type}</span>
+                  <h4>{item.name}</h4>
+                  <p>{item.releaseBlocker ? "Blocks release until ready" : "Tracking only"}</p>
+                </div>
+                <div className="submittal-card-state">
+                  <Status value={item.status} />
+                  <span className={item.releaseBlocker ? "release-pill blocker" : "release-pill"}>{item.releaseBlocker ? "Release blocker" : "Non-blocking"}</span>
+                </div>
               </div>
               <div className="submittal-card-meta">
-                <div><span>Due</span><strong>{item.dueDate || "TBD"}</strong></div>
+                <div><span>Due</span><strong>{item.dueDate ? formatDate(item.dueDate) : "TBD"}</strong></div>
                 <div><span>Owner</span><strong>{item.owner || job.pm}</strong></div>
                 <div><span>Revision</span><strong>Rev {item.revision}</strong></div>
+                <div><span>Files</span><strong>{attachedFiles.length ? `${attachedFiles.length} attached` : "None"}</strong></div>
               </div>
               <div className="submittal-quick-actions">
-                {(["submit", "approve", "approveAsNoted", "revise", "resubmit", "notRequired"] as SubmittalAction[]).map((action) => (
-                  <button key={action} onClick={() => onSubmittalAction(job.id, item.id, action)} type="button">{formatSubmittalAction(action)}</button>
+                {nextActions.map((action) => (
+                  <button className={action === "notRequired" ? "muted-danger" : action === "approve" || action === "approveAsNoted" ? "good-action" : ""} key={action} onClick={() => onSubmittalAction(job.id, item.id, action)} type="button">{formatSubmittalAction(action)}</button>
                 ))}
               </div>
               <div className="submittal-checks">
@@ -442,6 +467,7 @@ function SubmittalsSection({
                   Attach package file
                   <input onChange={(event) => handleFileInput(event, (file) => onSubmittalFile(job.id, item.id, file))} type="file" />
                 </label>
+                {attachedFiles.map((file) => <span key={file.id}><FileLink file={file} /></span>)}
                 <select onChange={(event) => onEditSubmittal(job.id, item.id, { status: event.target.value as SubmittalPackage["status"] })} value={item.status}>
                   {SUBMITTAL_STATUSES.map((status) => <option key={status}>{status}</option>)}
                 </select>
@@ -674,6 +700,15 @@ function formatDate(value: string) {
 
 function nextPoNumber(job: Job) {
   return `PO-${job.jobNumber}-${String((job.purchaseOrders?.length ?? 0) + 1).padStart(3, "0")}`;
+}
+
+function submittalActionsFor(status: SubmittalPackage["status"]): SubmittalAction[] {
+  if (status === "Not Started" || status === "In Progress") return ["submit", "notRequired"];
+  if (status === "Submitted") return ["approve", "approveAsNoted", "revise"];
+  if (status === "Rejected / Revise and Resubmit") return ["resubmit", "notRequired"];
+  if (status === "Resubmitted") return ["approve", "approveAsNoted", "revise"];
+  if (status === "Void / Not Required") return ["submit"];
+  return ["revise"];
 }
 
 function formatSubmittalAction(action: SubmittalAction): string {
