@@ -18,6 +18,7 @@ export type JobDetailPageProps = {
   canEditHeader?: boolean;
   onBackToJobs: () => void;
   onApproveCos: (id: string) => void;
+  onExportChangeOrderPdf: (jobId: string, coId: string) => void;
   onUpdateCoStatus: (jobId: string, coId: string, status: ChangeOrderStatus) => void;
   onCreatePurchaseOrder: (jobId: string, input: Omit<PurchaseOrder, "id" | "jobId">) => void;
   onCreatePmNote: (text: string, jobId?: string) => void;

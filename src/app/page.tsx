@@ -26,7 +26,7 @@ import { supabase, getCurrentUserProfile } from "@/lib/supabase-client";
 import { BidWorkbook } from "@/components/BidWorkbook";
 import { JobDetailPage } from "@/components/job-detail/JobDetailPage";
 import { useJobsPersistence } from "@/hooks/useJobsPersistence";
-import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "@/lib/change-order-workflow";
+import { createChangeOrderEstimateForPdf, createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "@/lib/change-order-workflow";
 import { calculateEstimateTotals } from "@/lib/estimate-math";
 import { reconcilePersistedEstimateIdentity } from "@/lib/estimate-persistence-reconciliation";
 import {
@@ -877,6 +877,27 @@ export default function Home() {
     doc.save(`${selectedEstimate.projectName.replace(/[^a-z0-9]+/gi, "-")}-proposal.pdf`);
   }
 
+  function exportChangeOrderPdf(jobId: string, coId: string) {
+    const job = jobs.find((candidate) => candidate.id === jobId);
+    const changeOrder = job?.changeOrders.find((candidate) => candidate.id === coId);
+    if (!job || !changeOrder) return;
+
+    const sourceEstimate = estimates.find((estimate) =>
+      estimate.documentType === "Change Order" &&
+      estimate.jobId === job.id &&
+      estimate.proposalNumber?.toLowerCase() === changeOrder.number.toLowerCase()
+    );
+    const printableEstimate = createChangeOrderEstimateForPdf({
+      changeOrder,
+      date: today,
+      job,
+      sourceEstimate
+    });
+    const doc = new jsPDF();
+    buildProposalPdf(doc, printableEstimate);
+    doc.save(`${job.jobNumber}-${changeOrder.number}-change-order.pdf`.replace(/[^a-z0-9.-]+/gi, "-"));
+  }
+
   function startChangeOrderFromJob(jobId: string) {
     const job = jobs.find((candidate) => candidate.id === jobId);
     if (!job) return;
@@ -1534,6 +1555,7 @@ export default function Home() {
             onDeletePmNote={deletePmNote}
             onEditPurchaseOrder={editPurchaseOrder}
             onEditSubmittal={editJobSubmittal}
+            onExportChangeOrderPdf={exportChangeOrderPdf}
             onJobFile={attachJobFile}
             onPurchaseOrderFile={attachPurchaseOrderFile}
             onRemoveContact={(jobId, joinId) => void unlinkContactFromJob(jobId, joinId)}

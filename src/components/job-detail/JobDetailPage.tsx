@@ -205,6 +205,7 @@ export function JobDetailPage(props: JobDetailPageProps) {
         <ChangeOrdersSection
           job={job}
           onApproveCos={props.onApproveCos}
+          onExportChangeOrderPdf={props.onExportChangeOrderPdf}
           onStartChangeOrder={props.onStartChangeOrder}
           onUpdateCoStatus={props.onUpdateCoStatus}
         />
@@ -483,11 +484,13 @@ function SubmittalsSection({
 function ChangeOrdersSection({
   job,
   onApproveCos,
+  onExportChangeOrderPdf,
   onStartChangeOrder,
   onUpdateCoStatus
 }: {
   job: Job;
   onApproveCos: JobDetailPageProps["onApproveCos"];
+  onExportChangeOrderPdf: JobDetailPageProps["onExportChangeOrderPdf"];
   onStartChangeOrder: JobDetailPageProps["onStartChangeOrder"];
   onUpdateCoStatus: JobDetailPageProps["onUpdateCoStatus"];
 }) {
@@ -559,6 +562,7 @@ function ChangeOrdersSection({
                     {changeOrderActionLabel(status)}
                   </button>
                 ))}
+                <button className="primary" onClick={() => onExportChangeOrderPdf(job.id, co.id)} type="button">Generate PDF</button>
                 <button className="primary muted-action" onClick={() => onStartChangeOrder(job.id)} type="button">Price revision</button>
               </div>
             </article>

@@ -112,3 +112,86 @@ export function createChangeOrderEstimateFromJob(job: Job, date: string): Estima
     clarifications: ["This change order is priced as an additive change to the current contract value."]
   };
 }
+
+export function createChangeOrderEstimateForPdf({
+  changeOrder,
+  date,
+  job,
+  sourceEstimate
+}: {
+  changeOrder: ChangeOrder;
+  date: string;
+  job: Job;
+  sourceEstimate?: Estimate;
+}): Estimate {
+  const coSummary = summarizeChangeOrders(job.changeOrders);
+  const context = {
+    sourceJobId: job.id,
+    jobNumber: job.jobNumber,
+    projectName: job.projectName,
+    baseContract: job.baseContract,
+    approvedCoTotal: coSummary.approved,
+    pendingCoTotal: coSummary.submitted + coSummary.pending + coSummary.sent + coSummary.priced,
+    currentContract: currentContractValue(job.baseContract, job.changeOrders)
+  };
+
+  if (sourceEstimate) {
+    return {
+      ...sourceEstimate,
+      jobId: job.id,
+      documentType: "Change Order",
+      proposalNumber: changeOrder.number,
+      projectId: job.jobNumber,
+      bidDate: sourceEstimate.bidDate || date,
+      changeOrderContext: context
+    };
+  }
+
+  return {
+    id: `est-${job.jobNumber.toLowerCase()}-${changeOrder.number.toLowerCase()}-pdf`,
+    jobId: job.id,
+    documentType: "Change Order",
+    proposalNumber: changeOrder.number,
+    revision: "0",
+    projectName: job.projectName,
+    client: job.gc || job.client,
+    estimator: job.pm,
+    bidDate: changeOrder.dateSubmitted || date,
+    projectId: job.jobNumber,
+    scopeSummary: changeOrder.description,
+    pricingMode: "itemized",
+    ohPct: 0,
+    delPct: 0,
+    insPct: 0,
+    changeOrderContext: context,
+    areas: [
+      {
+        id: `area-${changeOrder.id}`,
+        name: "Change Order Scope",
+        qty: 1,
+        sections: [
+          {
+            id: `section-${changeOrder.id}`,
+            name: "Added scope",
+            items: [
+              {
+                id: `item-${changeOrder.id}`,
+                name: changeOrder.description,
+                qty: 1,
+                unit: "LS",
+                unitCost: changeOrder.amount
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    subItems: [],
+    alternates: [],
+    exclusions: ["Work not specifically listed above is excluded."],
+    clarifications: [
+      "This change order is priced as an additive change to the current contract value.",
+      ...(changeOrder.notes ? [changeOrder.notes] : [])
+    ]
+  };
+}

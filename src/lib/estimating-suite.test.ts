@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "./change-order-workflow";
+import { createChangeOrderEstimateForPdf, createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "./change-order-workflow";
 import { changeOrderActionLabel, changeOrderContractImpactLabel, changeOrderNextStatuses } from "./change-order-actions";
 import {
   addJobContact,
@@ -2086,6 +2086,132 @@ describe("change order workflow", () => {
     expect(changeOrderContractImpactLabel({ amount: 4200, status: "submitted" })).toBe("$4,200 exposure until approved");
     expect(changeOrderContractImpactLabel({ amount: 4200, status: "rejected" })).toBe("No contract impact");
     expect(changeOrderContractImpactLabel({ amount: 4200, status: "void" })).toBe("No contract impact");
+  });
+
+  it("builds a printable fallback change order estimate from a job CO", () => {
+    const job = {
+      id: "job-g042",
+      jobNumber: "G26-042",
+      workType: "Bid / ITB" as const,
+      pm: "Geoff",
+      client: "DPR",
+      projectName: "Tempe Student Union",
+      baseContract: 326000,
+      bidRef: "Q-26-042",
+      awardDate: "2026-03-18",
+      ntpDate: "2026-03-18",
+      backlogStatus: "Installed" as const,
+      forecastStart: "",
+      forecastEnd: "",
+      forecastQuarter: "",
+      expectedFabStart: "",
+      expectedCompletion: "",
+      fabStatus: "In Fabrication" as const,
+      installStart: "",
+      installEnd: "",
+      installStatus: "Ready" as const,
+      invoiceStatus: "Partial" as const,
+      crewSize: 5,
+      gc: "DPR",
+      notes: "",
+      changeOrders: [
+        { id: "co-1", jobId: "job-g042", number: "CO-001", description: "Add mailroom cabinets", amount: 12400, status: "approved" as const, dateSubmitted: "2026-04-15", approvedDate: "2026-04-21" },
+        { id: "co-2", jobId: "job-g042", number: "CO-002", description: "Revise reception finish", amount: 5800, status: "submitted" as const, dateSubmitted: "2026-05-02" }
+      ],
+      purchaseOrders: [],
+      submittals: [],
+      files: [],
+      activity: []
+    };
+
+    const estimate = createChangeOrderEstimateForPdf({
+      changeOrder: job.changeOrders[1],
+      date: "2026-05-25",
+      job
+    });
+
+    expect(estimate).toMatchObject({
+      jobId: "job-g042",
+      documentType: "Change Order",
+      proposalNumber: "CO-002",
+      projectId: "G26-042",
+      projectName: "Tempe Student Union",
+      client: "DPR",
+      scopeSummary: "Revise reception finish",
+      ohPct: 0,
+      delPct: 0,
+      insPct: 0
+    });
+    expect(estimate.changeOrderContext).toMatchObject({
+      baseContract: 326000,
+      approvedCoTotal: 12400,
+      pendingCoTotal: 5800,
+      currentContract: 338400
+    });
+    expect(estimate.areas[0].sections[0].items[0]).toMatchObject({
+      name: "Revise reception finish",
+      qty: 1,
+      unit: "LS",
+      unitCost: 5800
+    });
+  });
+
+  it("reuses workbook CO estimate details while refreshing job contract context for PDF", () => {
+    const job = {
+      id: "job-g042",
+      jobNumber: "G26-042",
+      workType: "Bid / ITB" as const,
+      pm: "Geoff",
+      client: "DPR",
+      projectName: "Tempe Student Union",
+      baseContract: 326000,
+      bidRef: "Q-26-042",
+      awardDate: "2026-03-18",
+      ntpDate: "2026-03-18",
+      backlogStatus: "Installed" as const,
+      forecastStart: "",
+      forecastEnd: "",
+      forecastQuarter: "",
+      expectedFabStart: "",
+      expectedCompletion: "",
+      fabStatus: "In Fabrication" as const,
+      installStart: "",
+      installEnd: "",
+      installStatus: "Ready" as const,
+      invoiceStatus: "Partial" as const,
+      crewSize: 5,
+      gc: "DPR",
+      notes: "",
+      changeOrders: [
+        { id: "co-2", jobId: "job-g042", number: "CO-002", description: "Revise reception finish", amount: 5800, status: "submitted" as const, dateSubmitted: "2026-05-02" }
+      ],
+      purchaseOrders: [],
+      submittals: [],
+      files: [],
+      activity: []
+    };
+    const workbookEstimate = createChangeOrderEstimateFromJob(job, "2026-05-20");
+    workbookEstimate.proposalNumber = "CO-002";
+    workbookEstimate.scopeSummary = "Reception finish revision per ASI-04";
+    workbookEstimate.areas[0].sections[0].items = [
+      { id: "item-co", name: "Reception finish revision", qty: 1, unit: "LS", unitCost: 5800 }
+    ];
+
+    const estimate = createChangeOrderEstimateForPdf({
+      changeOrder: job.changeOrders[0],
+      date: "2026-05-25",
+      job,
+      sourceEstimate: workbookEstimate
+    });
+
+    expect(estimate.id).toBe(workbookEstimate.id);
+    expect(estimate.scopeSummary).toBe("Reception finish revision per ASI-04");
+    expect(estimate.areas[0].sections[0].items[0].name).toBe("Reception finish revision");
+    expect(estimate.changeOrderContext).toMatchObject({
+      jobNumber: "G26-042",
+      pendingCoTotal: 5800,
+      currentContract: 326000
+    });
   });
 
   it("suggests the next CO number from an existing job log", () => {
