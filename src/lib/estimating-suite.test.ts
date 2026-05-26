@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createChangeOrderEstimateFromJob, nextChangeOrderNumber, validateChangeOrderSubmission } from "./change-order-workflow";
+import { changeOrderActionLabel, changeOrderContractImpactLabel, changeOrderNextStatuses } from "./change-order-actions";
 import {
   addJobContact,
   addOpportunityContact,
@@ -2061,6 +2062,32 @@ describe("job detail data boundary", () => {
 });
 
 describe("change order workflow", () => {
+  it("offers focused next actions for each change order status", () => {
+    expect(changeOrderNextStatuses("draft")).toEqual(["priced", "void"]);
+    expect(changeOrderNextStatuses("priced")).toEqual(["sent", "submitted", "void"]);
+    expect(changeOrderNextStatuses("sent")).toEqual(["submitted", "pending", "void"]);
+    expect(changeOrderNextStatuses("submitted")).toEqual(["approved", "rejected", "void"]);
+    expect(changeOrderNextStatuses("pending")).toEqual(["approved", "rejected", "void"]);
+    expect(changeOrderNextStatuses("approved")).toEqual(["void"]);
+    expect(changeOrderNextStatuses("rejected")).toEqual(["draft"]);
+    expect(changeOrderNextStatuses("void")).toEqual(["draft"]);
+  });
+
+  it("labels change order actions for PM-facing cards", () => {
+    expect(changeOrderActionLabel("priced")).toBe("Mark priced");
+    expect(changeOrderActionLabel("submitted")).toBe("Submit");
+    expect(changeOrderActionLabel("approved")).toBe("Approve");
+    expect(changeOrderActionLabel("rejected")).toBe("Reject");
+    expect(changeOrderActionLabel("void")).toBe("Void");
+  });
+
+  it("explains contract impact based on change order status", () => {
+    expect(changeOrderContractImpactLabel({ amount: 4200, status: "approved" })).toBe("Adds $4,200 to current contract");
+    expect(changeOrderContractImpactLabel({ amount: 4200, status: "submitted" })).toBe("$4,200 exposure until approved");
+    expect(changeOrderContractImpactLabel({ amount: 4200, status: "rejected" })).toBe("No contract impact");
+    expect(changeOrderContractImpactLabel({ amount: 4200, status: "void" })).toBe("No contract impact");
+  });
+
   it("suggests the next CO number from an existing job log", () => {
     expect(nextChangeOrderNumber([{ number: "CO-001" }, { number: "CO-009" }, { number: "COR draft" }])).toBe("CO-010");
   });

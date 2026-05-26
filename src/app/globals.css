@@ -2596,6 +2596,72 @@ td strong {
   gap: 12px;
 }
 
+.change-orders-workspace {
+  display: grid;
+  gap: 12px;
+}
+
+.co-command-row {
+  align-items: center;
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  padding: 8px;
+}
+
+.co-contract-strip {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.co-contract-strip article {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  min-width: 0;
+  padding: 10px;
+}
+
+.co-contract-strip article.attention {
+  background: color-mix(in srgb, var(--warn-soft) 52%, var(--panel));
+  border-color: color-mix(in srgb, var(--warn) 36%, var(--line));
+}
+
+.co-contract-strip article.current {
+  background: color-mix(in srgb, var(--jun-soft) 58%, var(--panel));
+  border-color: color-mix(in srgb, var(--jun) 32%, var(--line));
+}
+
+.co-contract-strip span {
+  color: var(--mute);
+  display: block;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.co-contract-strip strong {
+  color: var(--ink);
+  display: block;
+  font-size: 17px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.co-contract-strip small {
+  color: var(--ink-3);
+  display: block;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
 .submittals-head {
   align-items: flex-start;
 }
@@ -2831,8 +2897,40 @@ td strong {
   box-shadow: inset 4px 0 0 var(--ok), var(--sh-sm);
 }
 
+.financial-card.inactive {
+  opacity: 0.78;
+}
+
 .financial-card.late {
   box-shadow: inset 4px 0 0 var(--bad), var(--sh-sm);
+}
+
+.co-card {
+  gap: 10px;
+}
+
+.co-card-grid {
+  align-items: start;
+}
+
+.co-card-meta {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.co-card-note {
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  font-size: 12px;
+  margin: 0;
+  padding: 8px;
+}
+
+.release-pill.approved {
+  background: var(--ok-soft);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+  color: var(--ok);
 }
 
 .po-card {
@@ -4765,6 +4863,8 @@ td strong {
   .pm-summary-grid,
   .pm-document-strip,
   .co-impact-bar,
+  .co-command-row,
+  .co-contract-strip,
   .submittal-card-grid,
   .submittal-card-meta,
   .financial-card-grid,

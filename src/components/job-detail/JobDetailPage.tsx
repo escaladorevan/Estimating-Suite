@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction } from "react";
+import { changeOrderActionLabel, changeOrderContractImpactLabel, changeOrderNextStatuses } from "@/lib/change-order-actions";
 import { jobDetailTabs, type JobDetailTabId } from "@/lib/job-detail-tabs";
 import { currentContractValue, jobCostSummary, summarizeChangeOrders, summarizePurchaseOrders } from "@/lib/job-financials";
 import { buildPmActionItems } from "@/lib/pm-actions";
@@ -8,7 +9,6 @@ import { fileSlots } from "@/lib/sample-data";
 import { setSubmittalChecklistState, summarizeSubmittals, type SubmittalAction } from "@/lib/submittals";
 import {
   BACKLOG_STATUSES,
-  CHANGE_ORDER_STATUSES,
   PURCHASE_ORDER_STATUSES,
   SUBMITTAL_STATUSES
 } from "@/lib/status-constants";
@@ -492,37 +492,110 @@ function ChangeOrdersSection({
   onUpdateCoStatus: JobDetailPageProps["onUpdateCoStatus"];
 }) {
   const coSummary = summarizeChangeOrders(job.changeOrders);
+  const activeExposure = coSummary.priced + coSummary.sent + coSummary.submitted + coSummary.pending;
+  const rejectedOrVoid = coSummary.rejected + coSummary.void;
+  const submittedCount = job.changeOrders.filter((co) => co.status === "submitted" || co.status === "pending").length;
   return (
-    <section className="job-page-section">
-      <div className="modal-section-head">
-        <h3>30 COs</h3>
+    <section className="job-page-section change-orders-workspace">
+      <div className="modal-section-head submittals-head">
+        <div>
+          <h3>30 COs</h3>
+          <p>{job.changeOrders.length} total - {money.format(activeExposure)} open exposure</p>
+        </div>
+        <div className="submittal-summary-pills" aria-label="Change order summary">
+          <span>{money.format(coSummary.approved)} approved</span>
+          <span className={activeExposure ? "attention" : ""}>{money.format(activeExposure)} open</span>
+          <span>{submittedCount} awaiting GC</span>
+          <span>{money.format(rejectedOrVoid)} inactive</span>
+        </div>
+      </div>
+
+      <div className="co-command-row">
+        <div className="submittal-command-title">
+          <span>Pricing source</span>
+          <strong>Build or revise CO scope in Bid Workbook</strong>
+        </div>
         <button className="primary" onClick={() => onStartChangeOrder(job.id)} type="button">Build CO in Workbook</button>
+        {job.changeOrders.some((co) => co.status === "submitted") ? (
+          <button className="ghost-button compact" onClick={() => onApproveCos(job.id)} type="button">Approve submitted COs</button>
+        ) : null}
       </div>
-      <div className="job-overview-grid">
-        <article><span>Approved</span><strong>{money.format(coSummary.approved)}</strong></article>
-        <article><span>Submitted</span><strong>{money.format(coSummary.submitted)}</strong></article>
-        <article><span>Current contract</span><strong>{money.format(currentContractValue(job.baseContract, job.changeOrders))}</strong></article>
+
+      <div className="co-contract-strip">
+        <article><span>Base contract</span><strong>{money.format(job.baseContract)}</strong><small>Original award</small></article>
+        <article><span>Approved COs</span><strong>{money.format(coSummary.approved)}</strong><small>Added to contract</small></article>
+        <article className={activeExposure ? "attention" : ""}><span>Open exposure</span><strong>{money.format(activeExposure)}</strong><small>Priced / sent / submitted / pending</small></article>
+        <article className="current"><span>Current contract</span><strong>{money.format(currentContractValue(job.baseContract, job.changeOrders))}</strong><small>Base plus approved COs</small></article>
       </div>
-      {job.changeOrders.some((co) => co.status === "submitted") ? <button className="ghost-button compact" onClick={() => onApproveCos(job.id)} type="button">Approve all submitted</button> : null}
-      <div className="financial-card-grid">
-        {job.changeOrders.map((co) => (
-          <article className={`financial-card ${co.status === "approved" ? "approved" : co.status === "submitted" ? "warn" : ""}`} key={co.id}>
-            <div className="financial-card-head"><div><span>{co.number}</span><h4>{co.description}</h4></div><Status value={co.status} /></div>
-            <div className="financial-card-meta">
-              <div><span>Amount</span><strong>{money.format(co.amount)}</strong></div>
-              <div><span>Submitted</span><strong>{co.dateSubmitted || "TBD"}</strong></div>
-              <div><span>Approved</span><strong>{co.approvedDate || "-"}</strong></div>
-            </div>
-            <div className="financial-card-actions">
-              {CHANGE_ORDER_STATUSES.map((status) => (
-                <button className="primary muted-action" disabled={co.status === status} key={status} onClick={() => onUpdateCoStatus(job.id, co.id, status as ChangeOrderStatus)} type="button">{status}</button>
-              ))}
-            </div>
-          </article>
-        ))}
-      </div>
+
+      {job.changeOrders.length ? (
+        <div className="financial-card-grid co-card-grid">
+          {job.changeOrders.map((co) => {
+            const nextStatuses = changeOrderNextStatuses(co.status);
+            const attachedFiles = job.files.filter((file) => file.ownerType === "change_order" && file.ownerId === co.id);
+            return (
+            <article className={`financial-card co-card ${changeOrderCardClass(co.status)}`} key={co.id}>
+              <div className="financial-card-head">
+                <div>
+                  <span>{co.number}</span>
+                  <h4>{co.description}</h4>
+                  <p>{changeOrderContractImpactLabel(co)}</p>
+                </div>
+                <div className="submittal-card-state">
+                  <Status value={co.status} />
+                  <span className={co.status === "approved" ? "release-pill approved" : activeChangeOrderStatuses.includes(co.status) ? "release-pill blocker" : "release-pill"}>{changeOrderStageLabel(co.status)}</span>
+                </div>
+              </div>
+              <div className="financial-card-meta co-card-meta">
+                <div><span>Amount</span><strong>{money.format(co.amount)}</strong></div>
+                <div><span>Submitted</span><strong>{co.dateSubmitted ? formatDate(co.dateSubmitted) : "TBD"}</strong></div>
+                <div><span>Approved</span><strong>{co.approvedDate ? formatDate(co.approvedDate) : "-"}</strong></div>
+                <div><span>Files</span><strong>{attachedFiles.length ? `${attachedFiles.length} attached` : "None"}</strong></div>
+              </div>
+              {co.notes ? <p className="co-card-note">{co.notes}</p> : null}
+              <div className="financial-card-actions">
+                {nextStatuses.map((status) => (
+                  <button className={changeOrderActionClass(status)} key={status} onClick={() => onUpdateCoStatus(job.id, co.id, status)} type="button">
+                    {changeOrderActionLabel(status)}
+                  </button>
+                ))}
+                <button className="primary muted-action" onClick={() => onStartChangeOrder(job.id)} type="button">Price revision</button>
+              </div>
+            </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="empty-card">
+          <strong>No change orders yet.</strong>
+          <span>Use the Bid Workbook to price added scope, then submit it back to this job.</span>
+          <button className="primary" onClick={() => onStartChangeOrder(job.id)} type="button">Build first CO</button>
+        </div>
+      )}
     </section>
   );
+}
+
+const activeChangeOrderStatuses: ChangeOrderStatus[] = ["priced", "sent", "submitted", "pending"];
+
+function changeOrderStageLabel(status: ChangeOrderStatus): string {
+  if (status === "approved") return "In contract";
+  if (status === "rejected" || status === "void") return "Inactive";
+  if (status === "draft") return "Internal";
+  return "Open";
+}
+
+function changeOrderCardClass(status: ChangeOrderStatus): string {
+  if (status === "approved") return "approved";
+  if (status === "rejected" || status === "void") return "inactive";
+  if (activeChangeOrderStatuses.includes(status)) return "warn";
+  return "";
+}
+
+function changeOrderActionClass(status: ChangeOrderStatus): string {
+  if (status === "approved") return "primary good-action";
+  if (status === "rejected" || status === "void") return "primary muted-action";
+  return "primary";
 }
 
 function PurchaseOrdersSection({
