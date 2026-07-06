@@ -2792,6 +2792,37 @@ describe("opportunity import", () => {
     });
   });
 
+  it("maps the physical workbook's vocabulary: checkmark wins, Sent status, Excel serial dates", () => {
+    const opportunity = mapEstimatingMasterRow({
+      "Job ID": "Q-26-004",
+      Client: "Brian Kasler",
+      "Project Name": "Kitchen & Bath Cabinets",
+      "Bid Due Date": 46041,
+      "Sent Date": "01/19/2026",
+      Status: "Sent",
+      "Win?": "✔",
+      "Est. Bid Value": 58551
+    });
+
+    expect(opportunity.winLoss).toBe("Won");
+    expect(opportunity.status).toBe("Won");
+    expect(opportunity.bidDueDate).toBe("2026-01-19");
+    expect(opportunity.sentDate).toBe("2026-01-19");
+    expect(opportunity.initialContractValue).toBe(58551);
+  });
+
+  it("maps workbook-only statuses into the app vocabulary", () => {
+    const rowFor = (status: string) => mapEstimatingMasterRow({ "Job ID": "Q-1", "Project Name": "P", Status: status, "Win?": "" });
+    expect(rowFor("Sent").status).toBe("Submitted");
+    expect(rowFor("Pending").status).toBe("Submitted");
+    expect(rowFor("On Hold").status).toBe("Cold");
+    expect(rowFor("Client Lost")).toMatchObject({ status: "Lost", winLoss: "Lost" });
+    expect(rowFor("Client Backed Out")).toMatchObject({ status: "Lost", winLoss: "Lost" });
+    expect(rowFor("Declined").status).toBe("Archived");
+    expect(rowFor("No Bid").status).toBe("Archived");
+    expect(rowFor("Something Odd").status).toBe("New");
+  });
+
   it("flags submitted opportunities as stale after the follow-up window", () => {
     expect(
       shouldFlagStaleFollowUp({
