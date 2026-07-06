@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run --root . --dir src/lib --globals --environment node",
+    "smoke": "vitest run --root . --dir scripts --globals --environment node",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
