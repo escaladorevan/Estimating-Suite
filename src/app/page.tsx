@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  BarChart3,
   BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
@@ -37,7 +36,15 @@ import {
   saveEstimateSnapshot,
   saveEstimateSubItems
 } from "@/lib/estimate-repository";
-import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
+import { saveProjectFileMetadata, signProjectFileUrl, uploadProjectFile } from "@/lib/file-repository";
+import {
+  buildHandoffActivityMessage,
+  buildHandoffEmail,
+  buildMailtoUrl,
+  HANDOFF_LINK_EXPIRY_SECONDS,
+  pickHandoffFiles,
+  type HandoffLink
+} from "@/lib/job-handoff";
 import {
   addJobContact,
   addOpportunityContact,
@@ -110,12 +117,12 @@ const nav: { id: View; label: string; icon: ElementType }[] = [
   { id: "estimator", label: "Bid Workbook", icon: WalletCards },
   { id: "jobs", label: "Jobs", icon: BriefcaseBusiness },
   { id: "calendar", label: "Calendar / Capacity", icon: CalendarDays },
-  { id: "service", label: "Service", icon: Wrench },
   { id: "files", label: "Files", icon: Files },
-  { id: "directory", label: "Directory", icon: Users },
-  { id: "analytics", label: "Analytics", icon: BarChart3 }
+  { id: "directory", label: "Directory", icon: Users }
 ];
-const viewIds = nav.map((item) => item.id);
+// Cut from V1 (docs/v1-gameplan.md): Service and Analytics stay routable by
+// hash for anyone with a bookmark, but leave the nav until they return.
+const viewIds: View[] = [...nav.map((item) => item.id), "service", "analytics"];
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const today = "2026-05-09";
@@ -868,7 +875,31 @@ export default function Home() {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[bidSheetName], { defval: "" });
     const mapped = rows.map(mapEstimatingMasterRow).filter((opportunity) => opportunity.jobId || opportunity.projectName);
     setOpportunities(mapped);
-    setOpportunityPersistenceStatus(`Imported ${mapped.length} opportunities locally. Bulk Supabase import comes after auth.`);
+
+    if (!supabase || !sessionEmail) {
+      setOpportunityPersistenceStatus(`Imported ${mapped.length} opportunities locally. Sign in to save them to Supabase.`);
+      return;
+    }
+
+    // Bulk persist. saveOpportunity upserts on opportunity_number, so
+    // re-running the import updates rows instead of duplicating them.
+    let savedCount = 0;
+    let failedCount = 0;
+    for (const opportunity of mapped) {
+      setOpportunityPersistenceStatus(`Importing ${savedCount + failedCount + 1} of ${mapped.length} to Supabase...`);
+      try {
+        await saveOpportunity(opportunity);
+        savedCount += 1;
+      } catch {
+        failedCount += 1;
+      }
+    }
+    await loadPersistedOpportunities();
+    setOpportunityPersistenceStatus(
+      failedCount
+        ? `Imported ${savedCount} of ${mapped.length} opportunities; ${failedCount} failed and stayed local.`
+        : `Imported ${savedCount} opportunities to Supabase.`
+    );
   }
 
   async function exportProposalPdf() {
@@ -907,6 +938,46 @@ export default function Home() {
     setActiveEstimateId(estimate.id);
     setDetailJobId(null);
     goToView("estimator");
+  }
+
+  async function sendHandoffToPm(jobId: string) {
+    const job = jobs.find((candidate) => candidate.id === jobId);
+    if (!job) return;
+
+    const { files, missingSlots } = pickHandoffFiles(job.files);
+
+    // Re-sign with the 30-day handoff expiry; the URLs loaded with the job
+    // only last an hour. In local/no-Supabase mode, fall back to whatever
+    // URL the file already carries.
+    const links: HandoffLink[] = [];
+    for (const file of files) {
+      const signed = supabase ? await signProjectFileUrl(file, supabase, HANDOFF_LINK_EXPIRY_SECONDS) : file;
+      if (signed.url) links.push({ slot: file.slot, name: file.name, url: signed.url });
+    }
+
+    const email = buildHandoffEmail({
+      job,
+      links,
+      missingSlots,
+      currentContract: currentContractValue(job.baseContract, job.changeOrders)
+    });
+
+    const activity: ActivityEvent = {
+      id: makeLocalId("act"),
+      ownerType: "job",
+      ownerId: job.id,
+      author: sessionEmail || "System",
+      message: buildHandoffActivityMessage(job, links),
+      createdAt: today
+    };
+    setJobs((current) =>
+      current.map((candidate) =>
+        candidate.id === job.id ? { ...candidate, activity: [activity, ...candidate.activity] } : candidate
+      )
+    );
+    void persistActivity(activity);
+
+    window.location.href = buildMailtoUrl(email);
   }
 
   function commitChangeOrder(estimate: Estimate, amount: number, sourceJob: Job) {
@@ -1559,6 +1630,7 @@ export default function Home() {
             onJobFile={attachJobFile}
             onPurchaseOrderFile={attachPurchaseOrderFile}
             onRemoveContact={(jobId, joinId) => void unlinkContactFromJob(jobId, joinId)}
+            onSendHandoff={(jobId) => void sendHandoffToPm(jobId)}
             onStartChangeOrder={startChangeOrderFromJob}
             onSubmittalAction={updateSubmittal}
             onSubmittalChecklist={updateSubmittalChecklist}

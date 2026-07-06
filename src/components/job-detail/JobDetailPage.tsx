@@ -148,6 +148,7 @@ export function JobDetailPage(props: JobDetailPageProps) {
           <article className={releaseBlockers.length ? "fact-alert" : "fact-good"}><span>PM attention</span><strong>{releaseBlockers.length || "Clear"}</strong><small>{releaseBlockers[0] || "No immediate blockers"}</small></article>
         </div>
         <div className="job-command-actions">
+          <button className="primary" onClick={() => props.onSendHandoff(job.id)} type="button">Send to PM</button>
           <button className="primary" onClick={() => onStartChangeOrder(job.id)} type="button">New CO</button>
           <button className="primary muted-action" onClick={() => setActiveTab("purchase-orders")} type="button">Add PO</button>
           <button className="primary muted-action" onClick={() => setActiveTab("files")} type="button">Upload File</button>

@@ -27,6 +27,7 @@ export type JobDetailPageProps = {
   onEditSubmittal: (jobId: string, submittalId: string, updates: UpdateSubmittalInput) => void;
   onJobFile: (jobId: string, slot: string, file: File | undefined) => void;
   onPurchaseOrderFile: (jobId: string, poId: string, file: File | undefined) => void;
+  onSendHandoff: (jobId: string) => void;
   onStartChangeOrder: (jobId: string) => void;
   onUpdateJob: (jobId: string, updates: Partial<Job>) => void;
   onDeletePmNote: (noteId: string) => void;
