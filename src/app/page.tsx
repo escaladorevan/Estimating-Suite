@@ -37,7 +37,15 @@ import {
   saveEstimateSnapshot,
   saveEstimateSubItems
 } from "@/lib/estimate-repository";
-import { saveProjectFileMetadata, uploadProjectFile } from "@/lib/file-repository";
+import { saveProjectFileMetadata, signProjectFileUrl, uploadProjectFile } from "@/lib/file-repository";
+import {
+  buildHandoffActivityMessage,
+  buildHandoffEmail,
+  buildMailtoUrl,
+  HANDOFF_LINK_EXPIRY_SECONDS,
+  pickHandoffFiles,
+  type HandoffLink
+} from "@/lib/job-handoff";
 import {
   addJobContact,
   addOpportunityContact,
@@ -909,6 +917,46 @@ export default function Home() {
     goToView("estimator");
   }
 
+  async function sendHandoffToPm(jobId: string) {
+    const job = jobs.find((candidate) => candidate.id === jobId);
+    if (!job) return;
+
+    const { files, missingSlots } = pickHandoffFiles(job.files);
+
+    // Re-sign with the 30-day handoff expiry; the URLs loaded with the job
+    // only last an hour. In local/no-Supabase mode, fall back to whatever
+    // URL the file already carries.
+    const links: HandoffLink[] = [];
+    for (const file of files) {
+      const signed = supabase ? await signProjectFileUrl(file, supabase, HANDOFF_LINK_EXPIRY_SECONDS) : file;
+      if (signed.url) links.push({ slot: file.slot, name: file.name, url: signed.url });
+    }
+
+    const email = buildHandoffEmail({
+      job,
+      links,
+      missingSlots,
+      currentContract: currentContractValue(job.baseContract, job.changeOrders)
+    });
+
+    const activity: ActivityEvent = {
+      id: makeLocalId("act"),
+      ownerType: "job",
+      ownerId: job.id,
+      author: sessionEmail || "System",
+      message: buildHandoffActivityMessage(job, links),
+      createdAt: today
+    };
+    setJobs((current) =>
+      current.map((candidate) =>
+        candidate.id === job.id ? { ...candidate, activity: [activity, ...candidate.activity] } : candidate
+      )
+    );
+    void persistActivity(activity);
+
+    window.location.href = buildMailtoUrl(email);
+  }
+
   function commitChangeOrder(estimate: Estimate, amount: number, sourceJob: Job) {
     const number = estimate.proposalNumber || nextChangeOrderNumber(sourceJob.changeOrders);
     const changeOrder: ChangeOrder = {
@@ -1559,6 +1607,7 @@ export default function Home() {
             onJobFile={attachJobFile}
             onPurchaseOrderFile={attachPurchaseOrderFile}
             onRemoveContact={(jobId, joinId) => void unlinkContactFromJob(jobId, joinId)}
+            onSendHandoff={(jobId) => void sendHandoffToPm(jobId)}
             onStartChangeOrder={startChangeOrderFromJob}
             onSubmittalAction={updateSubmittal}
             onSubmittalChecklist={updateSubmittalChecklist}
