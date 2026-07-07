@@ -5,9 +5,9 @@
 // plus one synthetic approved CO per job carrying the sheet's approved-CO
 // total so current-contract math survives the import).
 
-import { saveOpportunity } from "../repos/opportunities";
+import { listOpportunities, saveOpportunity } from "../repos/opportunities";
 import { listChangeOrders, saveChangeOrder, saveJob } from "../repos/jobs";
-import { parseMasterWorkbookSheets, type ParsedMasterWorkbook } from "./master-workbook";
+import { assignOpportunityNumbers, parseMasterWorkbookSheets, type ParsedMasterWorkbook } from "./master-workbook";
 import type { ChangeOrder } from "../types";
 
 export async function readMasterWorkbook(buffer: ArrayBuffer): Promise<ParsedMasterWorkbook> {
@@ -35,7 +35,10 @@ export async function runMasterImport(parsed: ParsedMasterWorkbook, author: stri
   const result: ImportResult = { opportunities: 0, jobs: 0, changeOrders: 0, failures: [] };
   const opportunityIdByNumber = new Map<string, string>();
 
-  for (const opp of parsed.opportunities) {
+  const existing = await listOpportunities().catch(() => []);
+  const numbered = assignOpportunityNumbers(parsed.opportunities, existing);
+
+  for (const opp of numbered) {
     try {
       const saved = await saveOpportunity(opp);
       opportunityIdByNumber.set(saved.opportunityNumber, saved.id);

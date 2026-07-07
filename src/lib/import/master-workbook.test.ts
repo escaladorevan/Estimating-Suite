@@ -2,12 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import {
+  assignOpportunityNumbers,
   mapBidTrackerRow,
   mapChangeOrderRow,
   mapCurrentJobsRow,
   normalizeWorkbookDate,
   parseMasterWorkbookSheets
 } from "./master-workbook";
+import type { Opportunity } from "../types";
 
 describe("normalizeWorkbookDate", () => {
   it("converts Excel serials, US dates, and passes ISO through", () => {
@@ -54,6 +56,33 @@ describe("mapBidTrackerRow (real workbook vocabulary)", () => {
 
   it("drops rows with no id and no project", () => {
     expect(mapBidTrackerRow({ "Job ID": "", "Project Name": "" })).toBeNull();
+  });
+
+  it("never uses the project name as the bid number", () => {
+    const opp = mapBidTrackerRow({ "Job ID": "", "Project Name": "Some Project", Client: "GC" })!;
+    expect(opp.opportunityNumber).toBe("");
+  });
+});
+
+describe("assignOpportunityNumbers", () => {
+  const opp = (fields: Partial<Opportunity>) =>
+    ({ opportunityNumber: "", client: "", projectName: "", year: 2026, ...fields }) as Opportunity;
+
+  it("hands out the next sequential Q-YY-NNN after existing rows", () => {
+    const existing = [opp({ opportunityNumber: "Q-26-186" }), opp({ opportunityNumber: "Q-26-010" })];
+    const assigned = assignOpportunityNumbers(
+      [opp({ projectName: "A" }), opp({ projectName: "B" }), opp({ opportunityNumber: "Q-26-190" })],
+      existing
+    );
+    expect(assigned[0].opportunityNumber).toBe("Q-26-191"); // seeded by the parsed Q-26-190 too
+    expect(assigned[1].opportunityNumber).toBe("Q-26-192");
+    expect(assigned[2].opportunityNumber).toBe("Q-26-190"); // real ids untouched
+  });
+
+  it("reuses an existing record's number for the same client + project (idempotent re-import)", () => {
+    const existing = [opp({ opportunityNumber: "Q-26-187", client: "GC", projectName: "Lobby Reno" })];
+    const assigned = assignOpportunityNumbers([opp({ client: "gc", projectName: "LOBBY RENO" })], existing);
+    expect(assigned[0].opportunityNumber).toBe("Q-26-187");
   });
 });
 

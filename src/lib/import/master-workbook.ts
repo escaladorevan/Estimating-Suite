@@ -67,7 +67,9 @@ export function mapBidTrackerRow(row: Row): Opportunity | null {
 
   return {
     id: "",
-    opportunityNumber: opportunityNumber || projectName.slice(0, 40),
+    // Blank Job IDs stay blank here; assignOpportunityNumbers hands out the
+    // next Q-YY-NNN before persisting (never the project name).
+    opportunityNumber,
     month: text(row.Month),
     year: yearMatch ? 2000 + Number(yearMatch[1]) : bidDueDate ? Number(bidDueDate.slice(0, 4)) : null,
     client: text(row.Client),
@@ -164,6 +166,36 @@ export function mapChangeOrderRow(row: Row): ImportedChangeOrder | null {
     approvedDate: normalizeWorkbookDate(row["Approved Date"]),
     notes: text(row.Notes)
   };
+}
+
+const Q_NUMBER = /^Q-(\d{2})-(\d{3})$/;
+
+/**
+ * Rows without a Job ID get the next sequential Q-YY-NNN. When an existing
+ * record matches on client + project name, its number is reused so
+ * re-importing the same workbook stays idempotent.
+ */
+export function assignOpportunityNumbers(
+  opportunities: Opportunity[],
+  existing: Pick<Opportunity, "opportunityNumber" | "client" | "projectName">[] = []
+): Opportunity[] {
+  const maxByYear = new Map<string, number>();
+  for (const opp of [...existing, ...opportunities]) {
+    const match = opp.opportunityNumber.match(Q_NUMBER);
+    if (match) maxByYear.set(match[1], Math.max(maxByYear.get(match[1]) ?? 0, Number(match[2])));
+  }
+  const byIdentity = new Map(existing.map((opp) => [`${opp.client}|${opp.projectName}`.toLowerCase(), opp.opportunityNumber]));
+  const fallbackYear = String((opportunities.find((opp) => opp.year)?.year ?? new Date().getFullYear())).slice(-2);
+
+  return opportunities.map((opp) => {
+    if (opp.opportunityNumber) return opp;
+    const reused = byIdentity.get(`${opp.client}|${opp.projectName}`.toLowerCase());
+    if (reused) return { ...opp, opportunityNumber: reused };
+    const year = opp.year ? String(opp.year).slice(-2) : fallbackYear;
+    const next = (maxByYear.get(year) ?? 0) + 1;
+    maxByYear.set(year, next);
+    return { ...opp, opportunityNumber: `Q-${year}-${String(next).padStart(3, "0")}` };
+  });
 }
 
 // ── Whole-workbook parse ─────────────────────────────────────────────────────
