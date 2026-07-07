@@ -412,3 +412,8 @@ button.primary:disabled { opacity: 0.6; cursor: default; }
 .avatar { width: 28px; height: 28px; border-radius: 50%; background: #e0e7ff; color: #3730a3; display: grid; place-items: center; font-size: 10.5px; font-weight: 800; flex-shrink: 0; }
 .activity-add { display: flex; gap: 8px; margin-top: 10px; align-items: start; }
 .activity-add textarea { flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+
+/* ── Award strip ── */
+.award-strip { display: flex; gap: 8px; align-items: center; padding: 10px 20px; border-top: 1px solid var(--line); background: #f0fdf4; flex-wrap: wrap; }
+.award-strip select, .award-strip input { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.award-strip input { width: 90px; font-family: ui-monospace, monospace; font-weight: 600; }

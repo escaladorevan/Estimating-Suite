@@ -96,7 +96,21 @@ export function Workspace() {
     ]);
     const pdf = new jsPDF({ unit: "mm", format: "letter" });
     renderProposal(pdf, doc);
-    pdf.save(proposalFilename(doc));
+    const filename = proposalFilename(doc);
+    pdf.save(filename);
+
+    // Auto-attach the proposal to the linked bid's Proposal slot — the
+    // tracker, the award carry-over, and Send to PM all read from there.
+    if (opportunityId) {
+      try {
+        const { uploadSlotFile } = await import("@/lib/repos/files");
+        const file = new File([pdf.output("blob")], filename, { type: "application/pdf" });
+        await uploadSlotFile({ ownerType: "opportunity", ownerId: opportunityId, slot: "proposal", file, uploadedBy: doc.info.estimator });
+        setSaveState(`Exported and attached ${filename} to the bid's Proposal slot.`);
+      } catch {
+        setSaveState(`Exported ${filename}; attaching to the bid failed.`);
+      }
+    }
   }
 
   // Autosave: 4s after the last edit.

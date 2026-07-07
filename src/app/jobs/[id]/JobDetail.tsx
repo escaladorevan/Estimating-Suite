@@ -46,6 +46,29 @@ export function JobDetail() {
     }
   }, []);
 
+  async function sendToPm() {
+    if (!job) return;
+    const { buildHandoffEmail, buildMailtoUrl, HANDOFF_LINK_EXPIRY_SECONDS, HANDOFF_SLOTS } = await import("@/lib/jobs/handoff");
+    const { signFileUrl } = await import("@/lib/repos/files");
+    const { addActivity } = await import("@/lib/repos/jobs");
+
+    const links: { slot: (typeof HANDOFF_SLOTS)[number]; url: string }[] = [];
+    const missingSlots: (typeof HANDOFF_SLOTS)[number][] = [];
+    for (const slot of HANDOFF_SLOTS) {
+      const file = files.find((f) => f.slot === slot);
+      if (!file) { missingSlots.push(slot); continue; }
+      const signed = await signFileUrl(file, HANDOFF_LINK_EXPIRY_SECONDS).catch(() => file);
+      if (signed.url) links.push({ slot, url: signed.url });
+      else missingSlots.push(slot);
+    }
+
+    const email = buildHandoffEmail({ job, changeOrders, links, missingSlots });
+    const sent = links.length ? links.map((link) => link.slot).join(", ") : "no documents";
+    const event = await addActivity(job.id, author, `Handoff sent to ${job.pm || "PM"}: ${sent}.`).catch(() => null);
+    if (event) setActivity((current) => [event, ...current]);
+    window.location.href = buildMailtoUrl(email);
+  }
+
   if (!job) return <p className="muted">{notice || "Loading…"}</p>;
 
   const currentValue = currentContractValue(job, changeOrders);
@@ -65,6 +88,7 @@ export function JobDetail() {
           <h1>{job.jobNumber} — {job.client}</h1>
           <p>{job.projectName}</p>
         </div>
+        <button className="primary" onClick={() => void sendToPm()} type="button">Send to PM</button>
       </header>
 
       <section className="panel overview-grid">

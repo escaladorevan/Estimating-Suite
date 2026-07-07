@@ -1,19 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { listOpportunities, saveOpportunity } from "@/lib/repos/opportunities";
+import { listJobs, saveJob } from "@/lib/repos/jobs";
+import { carryFilesToJob } from "@/lib/repos/files";
+import { listEstimates } from "@/lib/repos/estimates";
+import { buildJobFromAward, suggestJobNumber } from "@/lib/jobs/handoff";
 import { readMasterWorkbook, runMasterImport } from "@/lib/import/run-import";
 import { OPPORTUNITY_STATUSES } from "@/lib/import/master-workbook";
-import type { Opportunity } from "@/lib/types";
+import type { Job, Opportunity } from "@/lib/types";
 import { OpportunityEditor, blankOpportunity } from "./OpportunityEditor";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 export function TrackerView() {
   const { profile } = useAuth();
+  const router = useRouter();
   const canEdit = profile?.role === "admin" || profile?.role === "estimator";
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Open");
@@ -26,8 +33,31 @@ export function TrackerView() {
       .then((rows) => { if (mounted) setOpportunities(rows); })
       .catch(() => { if (mounted) setNotice("Could not load opportunities."); })
       .finally(() => { if (mounted) setLoading(false); });
+    listJobs().then((rows) => { if (mounted) setJobs(rows); }).catch(() => {});
     return () => { mounted = false; };
   }, []);
+
+  async function openEstimate(opp: Opportunity) {
+    const params = new URLSearchParams({ project: opp.projectName, client: opp.client, number: opp.opportunityNumber });
+    if (opp.id) params.set("opportunity", opp.id);
+    const existing = opp.id
+      ? (await listEstimates().catch(() => [])).find((estimate) => estimate.opportunityId === opp.id)
+      : undefined;
+    router.push(existing ? `/estimator/${existing.id}` : `/estimator/new?${params.toString()}`);
+  }
+
+  async function award(opp: Opportunity, details: { pm: string; jobNumber: string; contractValue: number }) {
+    setNotice(`Awarding ${opp.opportunityNumber}…`);
+    try {
+      const awardedOpp = await saveOpportunity({ ...opp, status: "Won", winLoss: "Won" });
+      const job = await saveJob(buildJobFromAward({ opportunity: awardedOpp, ...details }));
+      const carried = await carryFilesToJob(awardedOpp.id, job.id, profile?.fullName ?? "").catch(() => 0);
+      setNotice(`Created ${job.jobNumber}${carried ? ` with ${carried} file${carried === 1 ? "" : "s"} carried over` : ""}.`);
+      router.push(`/jobs/${job.id}`);
+    } catch {
+      setNotice("Award failed — the bid was not converted.");
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -162,9 +192,12 @@ export function TrackerView() {
 
       {editing ? (
         <OpportunityEditor
+          onAward={(opp, details) => void award(opp, details)}
           onClose={() => setEditing(null)}
+          onOpenEstimate={(opp) => void openEstimate(opp)}
           onSave={(opp) => void persist(opp)}
           opportunity={editing}
+          suggestJobNumber={(pm) => suggestJobNumber(pm, jobs)}
         />
       ) : null}
     </div>

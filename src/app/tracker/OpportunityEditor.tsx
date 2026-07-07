@@ -34,13 +34,21 @@ export function blankOpportunity(opportunityNumber: string): Opportunity {
 export function OpportunityEditor({
   opportunity,
   onClose,
-  onSave
+  onSave,
+  onOpenEstimate,
+  onAward,
+  suggestJobNumber
 }: {
   opportunity: Opportunity;
   onClose: () => void;
   onSave: (opp: Opportunity) => void;
+  onOpenEstimate: (opp: Opportunity) => void;
+  onAward: (opp: Opportunity, award: { pm: string; jobNumber: string; contractValue: number }) => void;
+  suggestJobNumber: (pm: string) => string;
 }) {
   const [draft, setDraft] = useState(opportunity);
+  const [awardPm, setAwardPm] = useState("Geoff");
+  const [awardNumber, setAwardNumber] = useState(() => suggestJobNumber("Geoff"));
   const set = <K extends keyof Opportunity>(key: K, value: Opportunity[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
@@ -90,8 +98,28 @@ export function OpportunityEditor({
           <label className="span-2">Bid feedback<textarea onChange={(e) => set("bidFeedback", e.target.value)} rows={2} value={draft.bidFeedback} /></label>
         </div>
 
+        {draft.id && draft.winLoss !== "Lost" ? (
+          <div className="award-strip">
+            <strong>Award to Job</strong>
+            <select onChange={(e) => { setAwardPm(e.target.value); setAwardNumber(suggestJobNumber(e.target.value)); }} value={awardPm}>
+              {["Geoff", "Pat", "Joe", "Evan"].map((pm) => <option key={pm}>{pm}</option>)}
+            </select>
+            <input onChange={(e) => setAwardNumber(e.target.value)} value={awardNumber} />
+            <button
+              className="primary"
+              disabled={!awardNumber.trim()}
+              onClick={() => onAward(draft, { pm: awardPm, jobNumber: awardNumber, contractValue: draft.estValue })}
+              type="button"
+            >
+              Award
+            </button>
+            <small className="muted">Marks the bid Won, creates the job, and carries attached files over.</small>
+          </div>
+        ) : null}
+
         <footer className="modal-foot">
           <button onClick={onClose} type="button">Cancel</button>
+          <button className="ghost-button" onClick={() => onOpenEstimate(draft)} type="button">Open Estimate</button>
           <button
             className="primary"
             disabled={!draft.opportunityNumber.trim() || !draft.projectName.trim()}
