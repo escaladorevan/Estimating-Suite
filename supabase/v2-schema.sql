@@ -36,6 +36,10 @@ drop schema if exists app_private cascade;
 
 -- ── Helpers ──────────────────────────────────────────────────────────────────
 create schema app_private;
+-- The API roles must be able to resolve the RLS helper functions; without
+-- USAGE every policy call fails with 42501 and the app sees nothing.
+grant usage on schema app_private to authenticated, anon;
+alter default privileges in schema app_private grant execute on functions to authenticated, anon;
 
 create or replace function app_private.set_updated_at()
 returns trigger language plpgsql as $$
