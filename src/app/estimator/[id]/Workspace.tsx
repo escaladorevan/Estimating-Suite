@@ -87,6 +87,18 @@ export function Workspace() {
     }
   }, [doc, recordId, opportunityId, router]);
 
+  async function exportPdf() {
+    if (!doc) return;
+    const [{ jsPDF }, { renderProposal }, { proposalFilename }] = await Promise.all([
+      import("jspdf"),
+      import("@/lib/estimator/proposal-pdf"),
+      import("@/lib/estimator/proposal-rows")
+    ]);
+    const pdf = new jsPDF({ unit: "mm", format: "letter" });
+    renderProposal(pdf, doc);
+    pdf.save(proposalFilename(doc));
+  }
+
   // Autosave: 4s after the last edit.
   useEffect(() => {
     if (!doc || !dirtyRef.current) return;
@@ -119,6 +131,7 @@ export function Workspace() {
             </select>
           </label>
           <button className="ghost-button" onClick={() => setImportOpen(true)} type="button">Import Takeoff</button>
+          <button className="ghost-button" onClick={() => void exportPdf()} type="button">Export PDF</button>
           <button className="primary" onClick={() => void save()} type="button">Save</button>
         </div>
         <span className="muted save-state">{saveState}</span>
