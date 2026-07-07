@@ -24,7 +24,7 @@ Source: `project/uploads/FS_Estimator_v2_1.html` (single-file app; jsPDF + Sheet
 `{desc, qty:1, unit:'lump sum', price}` — total = qty × price. **Never added to the base bid.**
 
 ### 1.6 Terms collections
-Arrays of `{text, active:true, sub:boolean}` (sub = indented child line): `exclusions` (16 defaults), `clarifications` (3), `generalTerms` (6), `warranty` (4), `finishTerms` (4), `hardwareTerms` (6), `fabNote` (3). Default texts live in the source HTML lines 685–739 and are reproduced verbatim on the real PDFs' page 2. Each supports toggle/edit/delete/add/All On/All Off/Reset.
+Arrays of `{text, active:true, sub:boolean}` (sub = indented child line): `exclusions` (15 defaults), `clarifications` (3), `generalTerms` (6), `warranty` (4), `finishTerms` (4), `hardwareTerms` (6), `fabNote` (3). Default texts live in the source HTML lines 685–739 and are reproduced verbatim on the real PDFs' page 2. Each supports toggle/edit/delete/add/All On/All Off/Reset.
 
 ### 1.7 Contacts (address book)
 `{company (required), attention, address, phone, email}` — picking one fills `info.client/attention/address`.
