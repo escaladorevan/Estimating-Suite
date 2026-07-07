@@ -58,6 +58,17 @@ export type AltItem = { desc: string; qty: number; unit: string; price: number }
 
 export type PricingMode = "lumpsum" | "byarea" | "itemized";
 
+// Ship Via options per Evan (replaces v2.1's free-text 'Truck' default).
+export const SHIP_VIA_OPTIONS = [
+  "Installed by F&S",
+  "Union Install",
+  "P.W. Install",
+  "Delivery Only",
+  "Shop Pick-up"
+] as const;
+
+export const DOC_TYPES = ["Proposal", "Quote", "Bid", "Budget", "Change Order"] as const;
+
 export type EstimateDocument = {
   info: EstimateInfo;
   areas: EstimateArea[];
@@ -156,7 +167,7 @@ export function defaultDocument(): EstimateDocument {
       architect: "",
       gc: "",
       attention: "",
-      shipVia: "Truck",
+      shipVia: "Installed by F&S",
       terms: "Net 30",
       deliveryDate: "",
       estimator: "Evan Ramsey",

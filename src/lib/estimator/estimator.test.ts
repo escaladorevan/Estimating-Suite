@@ -86,7 +86,7 @@ describe("document defaults", () => {
     expect(doc.hardwareTerms).toHaveLength(6);
     expect(doc.fabNote).toHaveLength(3);
     expect(doc).toMatchObject({ ohPct: 15, delPct: 5, insPct: 20, pricingMode: "byarea" });
-    expect(doc.info).toMatchObject({ shipVia: "Truck", terms: "Net 30", estimator: "Evan Ramsey", docType: "Proposal" });
+    expect(doc.info).toMatchObject({ shipVia: "Installed by F&S", terms: "Net 30", estimator: "Evan Ramsey", docType: "Proposal" });
   });
 
   it("hands out monotonically increasing uids", () => {
