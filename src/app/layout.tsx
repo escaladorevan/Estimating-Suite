@@ -1,15 +1,22 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import { AuthProvider } from "@/lib/auth";
+import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Estimating Suite",
-  description: "FS bid tracking, estimating, job tracking, file storage, and historical margin analysis."
+  title: "Estimating Suite — Form & Structure",
+  description: "Bid tracking, estimating, proposals, and job management."
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
+      </body>
     </html>
   );
 }
